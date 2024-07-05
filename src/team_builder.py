@@ -12,6 +12,79 @@ class TeamBuilder:
         self.optim = torch.optim.Adam(berteam.parameters())
         self.MASK = berteam.MASK
 
+    def _preprocess_generators(self,input_embeddings,teams):
+        """
+        preprocesses these into tensors to feed into learning step
+        Args:
+            input_embeddings: iterable of input embeddings, the ith one is size (1, S_i,E) (S_i can be 0)
+            teams: iterable of corresponding winning, each sized (1,T)
+        Returns:
+
+        """
+        input_embeddings=torch.cat(list(input_embeddings),dim=0)
+        print(input_embeddings.storage())
+        quit()
+
+    def learn_step(self, input_embeddings, winning_teams, mask_prob=.5, replacement_props=(.8, .1, .1)):
+        """
+        Args:
+            input_embeddings: iterable of input embeddings, the ith one is size (S_i,E) (S_i can be 0)
+            winning_teams: iterable of corresponding winning, each sized (1,T)
+            mask_prob: proportion of elements to mask (note that we will always mask at least one per batch
+            replacement_props: proportion of ([MASK], random element, same element) to replace masked elements with
+                default (.8, .1, .1) because BERT
+        """
+        self._preprocess_generators(input_embeddings,winning_teams)
+        print(list(input_embeddings))
+        torch.cat(list(input_embeddings),dim=0)
+
+        out_teams = torch.cat(tuple(winning_teams), dim=0)
+
+        N, T = out_teams.shape
+        in_teams = self._randomly_mask_teams(teams=out_teams,
+                                             mask_prob=mask_prob,
+                                             replacement_props=replacement_props,
+                                             )
+        quit()
+
+    def _randomly_mask_teams(self, teams, mask_prob, replacement_props):
+        """
+        Args:
+            teams: size (N,T) tensor to randomly mask
+            mask_prob: proportion of elements to mask (note that we will always mask at least one per batch)
+            replacement_props: proportion of ([MASK], random element, same element) to replace masked elements with
+                tuple of three floats
+        """
+        masked_teams = teams.clone()
+
+        which_to_mask = torch.bernoulli(torch.ones_like(teams)*mask_prob)
+        forced_mask = torch.randint(0, T, (N,))
+        which_to_mask[torch.arange(N), forced_mask] = 1
+
+        mask_indices = torch.where(which_to_mask == 1)
+        num_masks = len(mask_indices[0])
+        what_to_replace_with = torch.multinomial(torch.tensor([replacement_props for _ in range(num_masks)]),
+                                                 1).flatten()
+        # this will be a tensor of 0s, 1s, and 2s, indicating whether to replace each mask with
+        #   [MASK], a random element, or not to replace it
+
+        # map this to -1,-2,-3 respectively
+        what_to_replace_with = -1 - what_to_replace_with
+        # now map to the actual values to replace with in the array
+        what_to_replace_with = torch.masked_fill(what_to_replace_with,
+                                                 mask=(what_to_replace_with == -1),
+                                                 value=self.MASK,
+                                                 )
+        rand_rep = torch.where(what_to_replace_with == -2)
+        what_to_replace_with[rand_rep] = self.berteam.random_member_tensor((len(rand_rep[0]),))
+
+        unchange = torch.where(what_to_replace_with == -3)
+        # grab the correct team members from the original array
+        what_to_replace_with[unchange] = masked_teams[[dim_idx[unchange] for dim_idx in mask_indices]]
+
+        masked_teams[mask_indices] = what_to_replace_with
+        return masked_teams
+
     def create_masked_teams(self, T, N=1):
         """
         Args:
@@ -146,14 +219,21 @@ class BERTeam(nn.Module):
 
         return output
 
+    def random_member_tensor(self, shape):
+        return torch.randint(0, self.num_agents, shape)
+
 
 if __name__ == '__main__':
-    N = 1
+    N = 2
     S = 10
     T = 3
     torch.random.manual_seed(69)
 
     test = TeamBuilder(num_agents=69)
+    init_team = torch.tensor([[1, 2, 3]])
+    test.learn_step(input_embeddings=(torch.tensor([[[]]]) for _ in range(N)),
+                    winning_teams=(init_team.clone() for _ in range(N)))
+
     init_team = test.create_masked_teams(T=T)
     print('initial', init_team)
     for _ in range(3):
