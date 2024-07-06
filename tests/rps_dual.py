@@ -1,46 +1,44 @@
 import torch
+from src.team_trainer import DiscreteInputTrainer
+from src.replay_buffer_dataset import ReplayBufferDiskStorage
+from torch.utils.data import DataLoader
+import numpy as np
+import itertools
 
 ROCK = 0
 PAPER = 1
 SCISOR = 2
 
 
-def tie_games(playersA, playersB):
-    """
-    Returns the tying agents, as well as the opponent
-    Args:
-        playersA: (N,2) array of ROCK, PAPER, or SCISORS
-        playersB: (N,2) array of ROCK, PAPER, or SCISORS
-    Returns:
-        tyers: (N',2) array of tying teams
-        observations: (N',2) array of opponent tying teams
-        indices: which games had tyers, in the order returned
-    """
-    N, _ = playersA.shape
-    indices = []
-    for i in range(N):
-        if torch.all(playersA[i] == playersB[i]) or torch.all(playersA[i].__reversed__() == playersB[i]):
-            indices.append(i)
-    return playersA[indices, :], playersB[indices, :], indices
-
-
-def winners(playersA, playersB):
+def outcomes(playersA, playersB):
     """
     Returns the winning agents, as well as the opponent
     Args:
         playersA: (N,2) array of ROCK, PAPER, or SCISORS
         playersB: (N,2) array of ROCK, PAPER, or SCISORS
     Returns:
+        (
         winners: (N',2) array of winning teams
-        observations: (N',2) array of winning teams
+        observations: (N',2) array of losing teams
         indices: which games had winners, in the order returned
+        ),
+        (
+        tiedA: (N'',2) array of playrs from A that tied
+        tiedB: (N'',2) array of playrs from B that tied
+        tied_games: indices that tied
+        )
     """
     N, _ = playersA.shape
     indices = []
+    tied_games = []
     for i in range(N):
-        if not (torch.all(playersA[i] == playersB[i]) or
-                torch.all(playersA[i].__reversed__() == playersB[i])):
+        if (torch.all(playersA[i] == playersB[i]) or torch.all(playersA[i].__reversed__() == playersB[i])):
+            tied_games.append(i)
+        else:
             indices.append(i)
+
+    tiedA, tiedB = playersA[tied_games], playersB[tied_games]
+
     playersA = playersA[indices, :]
     playersB = playersB[indices, :]
     N_p = len(indices)
@@ -61,16 +59,135 @@ def winners(playersA, playersB):
     # both[0,:,:] is playersA, and both[:,:,:] is B
     winners = both[B_wins, torch.arange(N_p), :]
     losers = both[1 - B_wins, torch.arange(N_p), :]
-    return winners, losers, indices
+    return (winners, losers, indices), (tiedA, tiedB, tied_games)
+
+
+def dist_from_trainer(trainer: DiscreteInputTrainer,
+                      input_preembedding=None,
+                      input_mask=None,
+                      num_agents=3,
+                      keyorder=None
+                      ):
+    trainer.team_builder.eval()
+    dic = dict()
+    keys = []
+    for choice in itertools.chain(itertools.combinations(range(num_agents), 1),
+                                  itertools.combinations(range(num_agents), 2)):
+        if len(choice) == 1:
+            choice = choice + choice
+            perms = [choice]
+        else:
+            perms = itertools.permutations(choice)
+        keys.append(choice)
+        prob = 0
+        for perm in perms:
+            orders = list(itertools.permutations(range(2)))
+            for order in orders:
+                this_prob = 1.
+                target_team = trainer.create_masked_teams(T=2, N=1)
+
+                for idx in order:
+                    full_dist = trainer.team_builder.forward(input_preembedding, target_team, input_mask)
+                    dist = full_dist[0, idx]
+                    this_prob *= dist[perm[idx]].item()
+                    target_team[0, idx] = perm[idx]
+                prob += this_prob/len(orders)
+        dic[choice] = prob
+
+    trainer.team_builder.train()
+    if keyorder is None:
+        keyorder = keys
+    return np.array([dic[key] for key in keyorder])
 
 
 if __name__ == '__main__':
+    import os, sys
+    from tests.rps_basic import plot_dist_evolution
+
     torch.random.manual_seed(69)
-    N = 3
-    # playersA = torch.randint(0, 3, (N, 2))
-    # playersB = torch.randint(0, 3, (N, 2))
-    playersA = torch.tensor([[0, 0]])
-    playersB = torch.tensor([[0, 1]])
-    print(playersA)
-    print(playersB)
-    print(winners(playersA, playersB))
+
+    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+    plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps2')
+    if not os.path.exists((plot_dir)):
+        os.makedirs(plot_dir)
+    trainer = DiscreteInputTrainer(num_agents=3,
+                                   num_input_tokens=3,
+                                   embedding_dim=64,
+                                   pos_encode_input=False,
+                                   )
+
+    N = 100
+    capacity = int(1e5)
+    buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2"), capacity=capacity)
+
+    minibatch = 64
+    init_dists = []
+    cond_dists = []
+    strat_labels = ['RR', 'PP', 'SS', 'RP', 'RS', 'PS']
+    for i in range(100):
+        noise = trainer.create_nose_model_towards_uniform(.1)
+        players, opponents = (trainer.create_teams(T=2, N=100, noise_model=noise),
+                              trainer.create_teams(T=2, N=100, noise_model=noise))
+        (winners, losers, indices), _ = outcomes(players, opponents)
+
+        against_winners = trainer.create_teams(T=2,
+                                               N=len(winners),
+                                               input_preembedding=winners.view((-1, 2)),
+                                               noise_model=noise,
+                                               )
+        (winners2, losers2, indices2), _ = outcomes(winners.view((-1, 2)), against_winners)
+
+        buffer.extend(zip(winners, losers))
+        buffer.extend(zip(winners2, losers2))
+        buffer.extend(zip(winners, (torch.nan for _ in losers)))
+
+
+        init_distribution = dist_from_trainer(trainer=trainer,
+                                              input_preembedding=None,
+                                              input_mask=None,
+                                              )
+        init_dists.append(init_distribution)
+        conditional_dists = []
+        for opponent_choice in itertools.chain(itertools.combinations(range(3), 1),
+                                               itertools.combinations(range(3), 2)):
+            if len(opponent_choice) == 1:
+                opponent_choice = opponent_choice + opponent_choice
+            dist = dist_from_trainer(trainer=trainer,
+                                     input_preembedding=torch.tensor([opponent_choice]),
+                                     input_mask=None,
+                                     )
+            conditional_dists.append(dist)
+        print('distributions', strat_labels)
+        print('initial distribution', np.round(init_distribution, 2))
+        for k, name in enumerate(strat_labels):
+            print('\tdistribution against', name + ':', np.round(conditional_dists[k], 2))
+        print()
+        cond_dists.append(conditional_dists)
+        print('buffer size', len(buffer))
+
+        sample = buffer.sample(batch=minibatch)
+        # data is in (context, winning team, mask)
+        # N=1 T=2
+        # dataloaders want shape of (T,)
+
+        masked = lambda loser: (not torch.is_tensor(loser)) or torch.all(torch.isnan(loser))
+
+        data = (((torch.tensor([0, 0]) if masked(loser) else loser.view(2),
+                  winner.view(2),
+                  torch.tensor([True, True]) if masked(loser) else torch.tensor([False, False]),
+                  )
+                 for winner, loser in sample))
+        loader = DataLoader(list(data), shuffle=True, batch_size=16)
+        trainer.epoch(loader=loader, minibatch=False)
+
+        if not (i + 1)%10:
+            plot_dist_evolution(init_dists,
+                                save_dir=os.path.join(plot_dir, 'init_dist.png'),
+                                labels=strat_labels
+                                )
+            for k, name in enumerate(strat_labels):
+                plot_dist_evolution([dist[k] for dist in cond_dists],
+                                    save_dir=os.path.join(plot_dir, 'dist_against' + name + '.png'),
+                                    title='Distribution against ' + name,
+                                    labels=strat_labels,
+                                    )

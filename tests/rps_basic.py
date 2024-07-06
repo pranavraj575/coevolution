@@ -26,7 +26,7 @@ def outcomes(playersA, playersB):
         (
         tiedA: (N'',1) array of playrs from A that tied
         tiedB: (N'',1) array of playrs from B that tied
-        tied_indices: indices that tied
+        tied_games: indices that tied
         )
     """
     indices = torch.where(playersA != playersB)[0]
@@ -82,6 +82,8 @@ if __name__ == '__main__':
         os.makedirs(plot_dir)
     trainer = DiscreteInputTrainer(num_agents=3,
                                    num_input_tokens=3,
+                                   embedding_dim=32,
+                                   pos_encode_input=False,
                                    )
 
     N = 100
@@ -91,13 +93,23 @@ if __name__ == '__main__':
     minibatch = 64
     init_dists = []
     cond_dists = []
-    for i in range(1000):
-        noise = trainer.create_nose_model_towards_uniform(.05)
+    for i in range(100):
+        noise = trainer.create_nose_model_towards_uniform(.1)
         players, opponents = (trainer.create_teams(T=1, N=100, noise_model=noise),
                               trainer.create_teams(T=1, N=100, noise_model=noise))
         (winners, losers, indices), _ = outcomes(players, opponents)
+
+        against_winners = trainer.create_teams(T=1,
+                                               N=len(winners),
+                                               input_preembedding=winners.view((-1, 1)),
+                                               noise_model=noise,
+                                               )
+        (winners2, losers2, indices2), _ = outcomes(winners.view((-1, 1)), against_winners)
+
         buffer.extend(zip(winners, losers))
-        # buffer.extend(zip(winners, (torch.nan for _ in losers)))
+        buffer.extend(zip(winners2, losers2))
+        buffer.extend(zip(winners, (torch.nan for _ in losers)))
+
         init_distribution = trainer.team_builder.forward(input_preembedding=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
                                                          input_mask=None,

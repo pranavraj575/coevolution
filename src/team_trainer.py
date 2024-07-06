@@ -3,6 +3,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from networks.team_builder import TeamBuilder, BERTeam
+from networks.positional_encoder import PositionalEncoding
 
 
 class TeamTrainer:
@@ -54,7 +55,7 @@ class TeamTrainer:
             all_losses.append(losses)
         if not minibatch:
             self.optim.step()
-        return all_losses
+        return torch.mean(torch.tensor(all_losses))
 
     def mask_and_learn(self, input_preembedding, teams, input_mask, mask_probs=None, replacement_probs=(.8, .1, .1)):
         """
@@ -83,7 +84,7 @@ class TeamTrainer:
                                    replacement_probs=replacement_probs,
                                    )
             losses.append(loss)
-        return losses
+        return torch.mean(torch.tensor(losses))
 
     def learn_step(self, input_preembedding, teams, input_mask, mask_prob=.5, replacement_probs=(.8, .1, .1)):
         """
@@ -287,6 +288,40 @@ class TeamTrainer:
         return initial_teams
 
 
+class DiscreteInputPosEmbedder(nn.Module):
+    def __init__(self, num_embeddings, embedding_dim, dropout=.1):
+        super().__init__()
+        self.embed = nn.Embedding(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+        )
+        self.pos_enc = PositionalEncoding(d_model=embedding_dim, dropout=dropout)
+
+    def forward(self, X):
+        return self.pos_enc(self.embed(X))
+
+
+class DiscreteInputPosAppender(nn.Module):
+    """
+    instead of adding positional encoding, just appends it, and also has a linear layer to match dimensions
+    """
+
+    def __init__(self, num_embeddings, embedding_dim, dropout=.1):
+        super().__init__()
+        self.embed = nn.Embedding(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+        )
+        self.pos_enc = PositionalEncoding(d_model=embedding_dim, dropout=dropout)
+        self.linear = nn.Linear(2*embedding_dim, embedding_dim)
+
+    def forward(self, X):
+        embedding = self.embed(X)
+        positional = self.pos_enc(torch.zeros_like(embedding))
+        cat = torch.cat((embedding, positional), dim=-1)
+        return self.linear(cat)
+
+
 class DiscreteInputTrainer(TeamTrainer):
     def __init__(self,
                  num_agents,
@@ -297,6 +332,8 @@ class DiscreteInputTrainer(TeamTrainer):
                  num_decoder_layers=16,
                  dim_feedforward=None,
                  dropout=.1,
+                 pos_encode_input=True,
+                 append_pos_encode=False,
                  ):
         berteam = BERTeam(num_agents=num_agents,
                           embedding_dim=embedding_dim,
@@ -306,26 +343,40 @@ class DiscreteInputTrainer(TeamTrainer):
                           dim_feedforward=dim_feedforward,
                           dropout=dropout,
                           )
+        if pos_encode_input:
+            if append_pos_encode:
+                Constructor = DiscreteInputPosAppender
+            else:
+                Constructor = DiscreteInputPosEmbedder
+            input_embedder = Constructor(num_embeddings=num_input_tokens,
+                                         embedding_dim=embedding_dim,
+                                         dropout=dropout,
+                                         )
+        else:
+            input_embedder = nn.Embedding(num_embeddings=num_input_tokens,
+                                          embedding_dim=embedding_dim,
+                                          )
+
         super().__init__(
             team_builder=TeamBuilder(
                 berteam=berteam,
-                input_embedder=nn.Embedding(
-                    num_embeddings=num_input_tokens,
-                    embedding_dim=embedding_dim),
-
-            ))
+                input_embedder=input_embedder,
+            )
+        )
 
 
 if __name__ == '__main__':
-    N = 64
+    from matplotlib import pyplot as plt
+
+    N = 32
     S = 1
-    T = 1
+    T = 3
     epochs = 100
     torch.random.manual_seed(69)
 
-    E = 512
+    E = 64
 
-    num_inputs = 2
+    num_inputs = 4
     test = DiscreteInputTrainer(num_agents=69,
                                 num_input_tokens=num_inputs,
                                 embedding_dim=E,
@@ -338,7 +389,8 @@ if __name__ == '__main__':
         return init_team[torch.randperm(len(init_team))]
 
 
-    for _ in range(epochs):
+    losses = []
+    for epoch in range(epochs):
         # input_preembedding_gen = (torch.randint(0, num_inputs, (i%S,)) if i > 0 else None for i in range(N))
         # input_embedding_gen = (None for i in range(N))
 
@@ -357,14 +409,13 @@ if __name__ == '__main__':
                             shuffle=True,
                             batch_size=64,
                             )
-        losses = test.epoch(
+        loss = test.epoch(
             loader=loader,
             minibatch=True
         )
 
-        for loss_set in losses:
-            print(loss_set)
-        print()
+        losses.append(loss)
+        print('epoch', epoch, '\tloss', loss.item())
 
     # print(test.mask_and_learn(input_embedding_gen=input_embeddings,
     #                          winning_team_gen=(init_team.clone() for _ in range(N))))
@@ -377,3 +428,5 @@ if __name__ == '__main__':
         print(init_teams)
     print('target:')
     print(input_pre)
+    plt.plot(range(10, len(losses)), losses[10:])
+    plt.show()
