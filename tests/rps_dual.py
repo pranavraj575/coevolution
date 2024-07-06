@@ -114,10 +114,12 @@ if __name__ == '__main__':
                                    num_input_tokens=3,
                                    embedding_dim=64,
                                    pos_encode_input=False,
+                                   num_decoder_layers=4,
+                                   num_encoder_layers=4,
                                    )
 
-    N = 500
-    capacity = int(1e6)
+    N = 100
+    capacity = int(1e4)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2"), capacity=capacity)
 
     minibatch = 64
@@ -125,7 +127,7 @@ if __name__ == '__main__':
     cond_dists = []
     strat_labels = ['RR', 'PP', 'SS', 'RP', 'RS', 'PS']
     losses = []
-    for epoch in range(100):
+    for epoch in range(200):
         noise = trainer.create_nose_model_towards_uniform(.25)
         players, opponents = (trainer.create_teams(T=2, N=N, noise_model=noise),
                               trainer.create_teams(T=2, N=N, noise_model=noise))

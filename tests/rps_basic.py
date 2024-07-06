@@ -97,9 +97,11 @@ if __name__ == '__main__':
                                    num_input_tokens=3,
                                    embedding_dim=64,
                                    pos_encode_input=False,
+                                   num_decoder_layers=4,
+                                   num_encoder_layers=4,
                                    )
 
-    N = 500
+    N = 100
     capacity = int(1e5)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp"), capacity=capacity)
 
@@ -108,7 +110,7 @@ if __name__ == '__main__':
     cond_dists = []
     losses = []
     for epoch in range(100):
-        noise = trainer.create_nose_model_towards_uniform(.25)
+        noise = trainer.create_nose_model_towards_uniform(.1)
         players, opponents = (trainer.create_teams(T=1, N=N, noise_model=noise),
                               trainer.create_teams(T=1, N=N, noise_model=noise))
         (winners, losers, indices), _ = outcomes(players, opponents)
@@ -122,7 +124,7 @@ if __name__ == '__main__':
 
         buffer.extend(zip(winners, losers))
         buffer.extend(zip(winners2, losers2))
-        #buffer.extend(zip(winners, (torch.nan for _ in losers)))
+        buffer.extend(zip(winners, (torch.nan for _ in losers)))
 
         init_distribution = trainer.team_builder.forward(input_preembedding=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
