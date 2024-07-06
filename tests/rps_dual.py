@@ -102,7 +102,7 @@ def dist_from_trainer(trainer: DiscreteInputTrainer,
 
 if __name__ == '__main__':
     import os, sys
-    from tests.rps_basic import plot_dist_evolution
+    from tests.rps_basic import plot_dist_evolution, loss_plot
 
     torch.random.manual_seed(69)
 
@@ -116,7 +116,7 @@ if __name__ == '__main__':
                                    pos_encode_input=False,
                                    )
 
-    N = 100
+    N = 500
     capacity = int(1e6)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2"), capacity=capacity)
 
@@ -124,10 +124,11 @@ if __name__ == '__main__':
     init_dists = []
     cond_dists = []
     strat_labels = ['RR', 'PP', 'SS', 'RP', 'RS', 'PS']
-    for i in range(100):
-        noise = trainer.create_nose_model_towards_uniform(.1)
-        players, opponents = (trainer.create_teams(T=2, N=100, noise_model=noise),
-                              trainer.create_teams(T=2, N=100, noise_model=noise))
+    losses = []
+    for epoch in range(100):
+        noise = trainer.create_nose_model_towards_uniform(.25)
+        players, opponents = (trainer.create_teams(T=2, N=N, noise_model=noise),
+                              trainer.create_teams(T=2, N=N, noise_model=noise))
         (winners, losers, indices), _ = outcomes(players, opponents)
 
         against_winners = trainer.create_teams(T=2,
@@ -136,10 +137,15 @@ if __name__ == '__main__':
                                                noise_model=noise,
                                                )
         (winners2, losers2, indices2), _ = outcomes(winners.view((-1, 2)), against_winners)
-
-        buffer.extend(zip(winners, losers))
-        buffer.extend(zip(winners2, losers2))
-        buffer.extend(zip(winners, (torch.nan for _ in losers)))
+        for a, b in [(winners, losers),
+                     (winners2, losers2),
+                     ]:
+            for c in [
+                list(torch.tensor([True, True]) for _ in b),
+                list(torch.tensor([True, False]) for _ in b),
+                list(torch.tensor([False, True]) for _ in b),
+                list(torch.tensor([False, False]) for _ in b)]:
+                buffer.extend(zip(a, b, c))
 
         init_distribution = dist_from_trainer(trainer=trainer,
                                               input_preembedding=None,
@@ -156,13 +162,7 @@ if __name__ == '__main__':
                                      input_mask=None,
                                      )
             conditional_dists.append(dist)
-        print('distributions', strat_labels)
-        print('initial distribution', np.round(init_distribution, 2))
-        for k, name in enumerate(strat_labels):
-            print('\tdistribution against', name + ':', np.round(conditional_dists[k], 2))
-        print()
         cond_dists.append(conditional_dists)
-        print('buffer size', len(buffer))
 
         sample = buffer.sample(batch=minibatch)
         # data is in (context, winning team, mask)
@@ -171,15 +171,19 @@ if __name__ == '__main__':
 
         masked = lambda loser: (not torch.is_tensor(loser)) or torch.all(torch.isnan(loser))
 
-        data = (((torch.tensor([0, 0]) if masked(loser) else loser.view(2),
+        data = (((loser.view(2),
                   winner.view(2),
-                  torch.tensor([True, True]) if masked(loser) else torch.tensor([False, False]),
+                  mask,
                   )
-                 for winner, loser in sample))
+                 for winner, loser, mask in sample))
         loader = DataLoader(list(data), shuffle=True, batch_size=16)
-        trainer.epoch(loader=loader, minibatch=False)
+        loss = trainer.epoch(loader=loader, minibatch=False).item()
+        losses.append(loss)
+        print('epoch', epoch, ';\tbuffer size', len(buffer))
+        print('loss', loss)
+        if not (epoch + 1)%10:
+            loss_plot(losses, save_dir=os.path.join(plot_dir, 'loss_plot.png'))
 
-        if not (i + 1)%10:
             plot_dist_evolution(init_dists,
                                 save_dir=os.path.join(plot_dir, 'init_dist.png'),
                                 labels=strat_labels
@@ -190,3 +194,4 @@ if __name__ == '__main__':
                                     title='Distribution against ' + name,
                                     labels=strat_labels,
                                     )
+    buffer.close()

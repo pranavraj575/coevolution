@@ -370,16 +370,18 @@ if __name__ == '__main__':
 
     N = 32
     S = 1
-    T = 3
+    T = 1
     epochs = 100
     torch.random.manual_seed(69)
 
     E = 64
 
-    num_inputs = 4
+    num_inputs = 3
     test = DiscreteInputTrainer(num_agents=69,
                                 num_input_tokens=num_inputs,
                                 embedding_dim=E,
+                                pos_encode_input=True,
+                                append_pos_encode=False,
                                 )
 
     init_team = torch.arange(T, dtype=torch.long)
@@ -400,7 +402,7 @@ if __name__ == '__main__':
         # out_teams = torch.stack([random_shuffle() for _ in range(N)], dim=0)
         out_teams = []
         for i, input_pre in enumerate(input_preembedding):
-            out_teams.append(torch.ones(T, dtype=torch.long)*input_pre[0])
+            out_teams.append(torch.ones(T, dtype=torch.long)*(input_pre[0]+1)%3)
 
         out_teams = torch.stack(out_teams, dim=0)
 
@@ -419,7 +421,7 @@ if __name__ == '__main__':
 
     # print(test.mask_and_learn(input_embedding_gen=input_embeddings,
     #                          winning_team_gen=(init_team.clone() for _ in range(N))))
-    num_teams = 8
+    num_teams = 9
     init_teams = test.create_masked_teams(T=T, N=num_teams)
     print(init_teams)
     input_pre = torch.arange(0, num_teams).view((-1, 1))%num_inputs

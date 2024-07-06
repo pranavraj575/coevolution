@@ -48,6 +48,19 @@ def outcomes(playersA, playersB):
     return (winners, losers, indices), (tiedA, tiedB, tied_games)
 
 
+def loss_plot(losses, save_dir=None, show=False):
+    plt.plot(losses)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+
+    plt.title('CrossEntropy Loss')
+    if save_dir is not None:
+        plt.savefig(save_dir, bbox_inches='tight')
+    if show:
+        plt.show()
+    plt.close()
+
+
 def plot_dist_evolution(plot_dist, save_dir=None, show=False, alpha=1, labels='RPS', title=None):
     num_pops = len(plot_dist[0])
     x = range(len(plot_dist))
@@ -82,21 +95,22 @@ if __name__ == '__main__':
         os.makedirs(plot_dir)
     trainer = DiscreteInputTrainer(num_agents=3,
                                    num_input_tokens=3,
-                                   embedding_dim=32,
+                                   embedding_dim=64,
                                    pos_encode_input=False,
                                    )
 
-    N = 100
+    N = 500
     capacity = int(1e5)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp"), capacity=capacity)
 
     minibatch = 64
     init_dists = []
     cond_dists = []
-    for i in range(100):
-        noise = trainer.create_nose_model_towards_uniform(.1)
-        players, opponents = (trainer.create_teams(T=1, N=100, noise_model=noise),
-                              trainer.create_teams(T=1, N=100, noise_model=noise))
+    losses = []
+    for epoch in range(100):
+        noise = trainer.create_nose_model_towards_uniform(.25)
+        players, opponents = (trainer.create_teams(T=1, N=N, noise_model=noise),
+                              trainer.create_teams(T=1, N=N, noise_model=noise))
         (winners, losers, indices), _ = outcomes(players, opponents)
 
         against_winners = trainer.create_teams(T=1,
@@ -108,7 +122,7 @@ if __name__ == '__main__':
 
         buffer.extend(zip(winners, losers))
         buffer.extend(zip(winners2, losers2))
-        buffer.extend(zip(winners, (torch.nan for _ in losers)))
+        #buffer.extend(zip(winners, (torch.nan for _ in losers)))
 
         init_distribution = trainer.team_builder.forward(input_preembedding=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
@@ -123,12 +137,6 @@ if __name__ == '__main__':
                                                 )
             conditional_dists.append(dist.detach().flatten().numpy())
         cond_dists.append(conditional_dists)
-        print('distributions [R,P,S]')
-        print('initial distribution', np.round(init_distribution, 2))
-        for k, name in enumerate('RPS'):
-            print('\tdistribution against', name + ':', np.round(conditional_dists[k], 2))
-        print()
-        print('buffer size', len(buffer))
         sample = buffer.sample(batch=minibatch)
         # data is in (context, winning team, mask)
         # N=1 T=1
@@ -142,10 +150,15 @@ if __name__ == '__main__':
                   )
                  for winner, loser in sample))
         loader = DataLoader(list(data), shuffle=True, batch_size=16)
-        trainer.epoch(loader=loader, minibatch=False)
-        if not (i + 1)%10:
+        loss = trainer.epoch(loader=loader, minibatch=False).item()
+        losses.append(loss)
+        print('epoch', epoch, ';\tbuffer size', len(buffer))
+        print('loss', loss)
+        if not (epoch + 1)%10:
+            loss_plot(losses=losses, save_dir=os.path.join(plot_dir, 'loss_plot.png'))
             plot_dist_evolution(init_dists, save_dir=os.path.join(plot_dir, 'init_dist.png'))
             for k, name in enumerate('RPS'):
                 plot_dist_evolution([dist[k] for dist in cond_dists],
                                     save_dir=os.path.join(plot_dir, 'dist_against' + name + '.png'),
                                     title='Distribution against ' + name)
+    buffer.close()
