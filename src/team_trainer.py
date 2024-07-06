@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.team_builder import TeamBuilder
+from networks.team_builder import TeamBuilder
 
 
 class TeamTrainer:

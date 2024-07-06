@@ -2,8 +2,7 @@ import torch
 from torch import nn
 from torch.nn import Transformer
 from torch.nn import Embedding
-from src.positional_encoder import PositionalEncoding
-
+from networks.positional_encoder import PositionalEncoding
 
 
 class BERTeam(nn.Module):
@@ -101,9 +100,8 @@ class BERTeam(nn.Module):
         return output
 
 
-
 class TeamBuilder(nn.Module):
-    def __init__(self, input_embedder, berteam:BERTeam=None, num_agents=None):
+    def __init__(self, input_embedder, berteam: BERTeam = None, num_agents=None):
         """
         one of berteam or num_agents must be defined
         Args:
@@ -143,20 +141,22 @@ class TeamBuilder(nn.Module):
                                     pre_softmax=pre_softmax,
                                     )
 
+
 if __name__ == '__main__':
     N = 10
-    S = 4
-    T = 3
+    S = 7
+    T = 5
+    E = 16
 
-    test = Transformer(d_model=16, batch_first=True)
-    s = torch.rand((1, 5, 16))
+    test = Transformer(d_model=E, batch_first=True)
+    s = torch.rand((N, S, E))
     s[0, 0, :] = 100.
 
-    t = torch.rand((1, 2, 16))
-    (test.forward(src=s, tgt=t))
+    t = torch.rand((N, T, E))
+    test.forward(src=s, tgt=t)
 
-    test = BERTeam(num_agents=69, embedding_dim=16, dropout=0)
-    E = test.embedding_dim
+    test = BERTeam(num_agents=69, embedding_dim=E, dropout=0)
+
     team = torch.randint(0, test.num_agents, (N, T))
     team = test.add_cls_tokens(team)
 
