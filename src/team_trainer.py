@@ -2,11 +2,13 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from networks.team_builder import TeamBuilder
+from networks.team_builder import TeamBuilder, BERTeam
 
 
 class TeamTrainer:
-    def __init__(self, team_builder: TeamBuilder):
+    def __init__(self,
+                 team_builder: TeamBuilder,
+                 ):
         """
         Args:
         """
@@ -24,20 +26,19 @@ class TeamTrainer:
               ):
         """
         Args:
+            loader: contains data of type (input_preembedding, teams, input_mask)
+                input_preembedding and input_mask can both be torch.nan, they are ignored if this is true
             minibatch: whether to take a step after each batch
-
         Returns:
 
         """
         if not minibatch:
             self.optim.zero_grad()
         all_losses = []
-        for item in loader:
-            if type(item) == list:
-                input_preembedding, teams, input_mask = item
-            else:
-                teams = item
+        for input_preembedding, teams, input_mask in loader:
+            if torch.is_tensor(input_preembedding) and torch.all(torch.isnan(input_preembedding)):
                 input_preembedding = None
+            if torch.is_tensor(input_mask) and torch.all(torch.isnan(input_mask)):
                 input_mask = None
             if minibatch:
                 self.optim.zero_grad()
@@ -177,6 +178,32 @@ class TeamTrainer:
         """
         return (lambda dist: (1 - t)*dist + (t)*torch.ones_like(dist)/dist.shape[1])
 
+    def create_teams(self,
+                     T,
+                     N=1,
+                     input_preembedding=None,
+                     input_mask=None,
+                     noise_model=None,
+                     ):
+
+        """
+        creates random teams of size (N,T)
+        Args:
+            T: number of team members
+            N: number of teams to make (default 1)
+            input_preembedding: input to give input embedder, size (N,S,*)
+                None if no input
+            input_mask: size (N,S) boolean array of whether to mask each input embedding
+            noise_model: noise to add to probability distribution, if None, doesnt add noise
+        Returns:
+            filled in teams of size (N,T)
+        """
+        return self.fill_in_teams(initial_teams=self.create_masked_teams(T=T, N=N),
+                                  input_preembedding=input_preembedding,
+                                  input_mask=input_mask,
+                                  noise_model=noise_model,
+                                  )
+
     def fill_in_teams(self,
                       initial_teams,
                       input_preembedding=None,
@@ -260,25 +287,49 @@ class TeamTrainer:
         return initial_teams
 
 
+class DiscreteInputTrainer(TeamTrainer):
+    def __init__(self,
+                 num_agents,
+                 num_input_tokens,
+                 embedding_dim=512,
+                 nhead=8,
+                 num_encoder_layers=16,
+                 num_decoder_layers=16,
+                 dim_feedforward=None,
+                 dropout=.1,
+                 ):
+        berteam = BERTeam(num_agents=num_agents,
+                          embedding_dim=embedding_dim,
+                          nhead=nhead,
+                          num_encoder_layers=num_encoder_layers,
+                          num_decoder_layers=num_decoder_layers,
+                          dim_feedforward=dim_feedforward,
+                          dropout=dropout,
+                          )
+        super().__init__(
+            team_builder=TeamBuilder(
+                berteam=berteam,
+                input_embedder=nn.Embedding(
+                    num_embeddings=num_input_tokens,
+                    embedding_dim=embedding_dim),
+
+            ))
+
+
 if __name__ == '__main__':
     N = 64
-    S = 4
-    T = 3
-    epochs = 20
+    S = 1
+    T = 1
+    epochs = 100
     torch.random.manual_seed(69)
 
     E = 512
 
-    num_inputs = 4
-
-    test = TeamTrainer(
-        team_builder=
-        TeamBuilder(
-            num_agents=69,
-            input_embedder=
-            torch.nn.Embedding(num_embeddings=num_inputs,
-                               embedding_dim=E)),
-    )
+    num_inputs = 2
+    test = DiscreteInputTrainer(num_agents=69,
+                                num_input_tokens=num_inputs,
+                                embedding_dim=E,
+                                )
 
     init_team = torch.arange(T, dtype=torch.long)
 
@@ -290,16 +341,18 @@ if __name__ == '__main__':
     for _ in range(epochs):
         # input_preembedding_gen = (torch.randint(0, num_inputs, (i%S,)) if i > 0 else None for i in range(N))
         # input_embedding_gen = (None for i in range(N))
-        # input_preembedding = None
-        # input_mask = None
-        input_preembedding = torch.randint(0, num_inputs, (N, S))
-        input_mask = torch.zeros((N, S), dtype=torch.bool)
-        out_teams = torch.stack([random_shuffle() for _ in range(N)], dim=0)
 
-        if input_preembedding is None:
-            data = list(out_teams)
-        else:
-            data = list(zip(input_preembedding, out_teams, input_mask))
+        input_mask = [torch.nan for _ in range(N)]
+        input_preembedding = torch.randint(0, num_inputs, (N, S))
+        # input_mask = torch.zeros((N, S), dtype=torch.bool)
+        # out_teams = torch.stack([random_shuffle() for _ in range(N)], dim=0)
+        out_teams = []
+        for i, input_pre in enumerate(input_preembedding):
+            out_teams.append(torch.ones(T, dtype=torch.long)*input_pre[0])
+
+        out_teams = torch.stack(out_teams, dim=0)
+
+        data = list(zip(input_preembedding, out_teams, input_mask))
         loader = DataLoader(data,
                             shuffle=True,
                             batch_size=64,
@@ -318,6 +371,9 @@ if __name__ == '__main__':
     num_teams = 8
     init_teams = test.create_masked_teams(T=T, N=num_teams)
     print(init_teams)
+    input_pre = torch.arange(0, num_teams).view((-1, 1))%num_inputs
     for _ in range(T):
-        test.mutate_add_member(initial_teams=init_teams, )
+        test.mutate_add_member(initial_teams=init_teams, input_preembedding=input_pre)
         print(init_teams)
+    print('target:')
+    print(input_pre)

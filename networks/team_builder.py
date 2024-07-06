@@ -10,8 +10,8 @@ class BERTeam(nn.Module):
                  num_agents,
                  embedding_dim=512,
                  nhead=8,
-                 num_encoder_layers=1,
-                 num_decoder_layers=12,
+                 num_encoder_layers=16,
+                 num_decoder_layers=16,
                  dim_feedforward=None,
                  dropout=.1
                  ):
@@ -101,7 +101,10 @@ class BERTeam(nn.Module):
 
 
 class TeamBuilder(nn.Module):
-    def __init__(self, input_embedder, berteam: BERTeam = None, num_agents=None):
+    def __init__(self,
+                 input_embedder,
+                 berteam: BERTeam,
+                 ):
         """
         one of berteam or num_agents must be defined
         Args:
@@ -110,9 +113,6 @@ class TeamBuilder(nn.Module):
             num_agents:
         """
         super().__init__()
-
-        if berteam is None:
-            berteam = BERTeam(num_agents=num_agents)
         self.input_embedder = input_embedder
         self.berteam = berteam
 

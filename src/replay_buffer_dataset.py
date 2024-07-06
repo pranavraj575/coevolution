@@ -48,11 +48,14 @@ class ReplayBufferDiskStorage:
         self.size = 0
         self.storage_dir = storage_dir
         self.capacity = capacity
-        self.clear_storage()
+        self.reset_storage()
 
-    def clear_storage(self):
+    def close(self):
         if os.path.exists(self.storage_dir):
             shutil.rmtree(self.storage_dir)
+
+    def reset_storage(self):
+        self.close()
         os.makedirs(self.storage_dir)
         self.size = 0
         self.idx = 0
