@@ -117,7 +117,7 @@ if __name__ == '__main__':
                                    )
 
     N = 100
-    capacity = int(1e5)
+    capacity = int(1e6)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2"), capacity=capacity)
 
     minibatch = 64
@@ -140,7 +140,6 @@ if __name__ == '__main__':
         buffer.extend(zip(winners, losers))
         buffer.extend(zip(winners2, losers2))
         buffer.extend(zip(winners, (torch.nan for _ in losers)))
-
 
         init_distribution = dist_from_trainer(trainer=trainer,
                                               input_preembedding=None,

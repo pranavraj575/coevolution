@@ -48,7 +48,7 @@ def outcomes(playersA, playersB):
     return (winners, losers, indices), (tiedA, tiedB, tied_games)
 
 
-def plot_dist_evolution(plot_dist, save_dir=None, show=False, alpha=.5, labels='RPS', title=None):
+def plot_dist_evolution(plot_dist, save_dir=None, show=False, alpha=1, labels='RPS', title=None):
     num_pops = len(plot_dist[0])
     x = range(len(plot_dist))
     for i in range(num_pops):
@@ -60,10 +60,10 @@ def plot_dist_evolution(plot_dist, save_dir=None, show=False, alpha=.5, labels='
                          )
     if title is not None:
         plt.title(title)
-    plt.legend()
+    plt.legend(loc='center left', bbox_to_anchor=(-.25, .5))
 
     if save_dir is not None:
-        plt.savefig(save_dir)
+        plt.savefig(save_dir, bbox_inches='tight')
     if show:
         plt.show()
     plt.close()
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     outcomes(torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]])))
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
-    plot_dir = os.path.join(DIR, 'data', 'plots', 'tests')
+    plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps')
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)
     trainer = DiscreteInputTrainer(num_agents=3,
