@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from networks.team_builder import TeamBuilder, BERTeam
 from networks.input_embedding import DiscreteInputEmbedder, DiscreteInputPosEmbedder, DiscreteInputPosAppender
-
+from networks.positional_encoder import IdentityEncoding,ClassicPositionalEncoding,PositionalAppender
 
 class TeamTrainer:
     def __init__(self,
@@ -597,8 +597,17 @@ class DiscreteInputTrainer(TeamTrainer):
                  dim_feedforward=None,
                  dropout=.1,
                  pos_encode_input=True,
-                 append_pos_encode=False,
+                 append_pos_encode_input=False,
+                 pos_encode_teams=True,
+                 append_pos_encode_teams=False,
                  ):
+        if pos_encode_teams:
+            if append_pos_encode_teams:
+                PosEncConstructorTeams = PositionalAppender
+            else:
+                PosEncConstructorTeams = ClassicPositionalEncoding
+        else:
+            PosEncConstructorTeams=IdentityEncoding
         berteam = BERTeam(num_agents=num_agents,
                           embedding_dim=embedding_dim,
                           nhead=nhead,
@@ -606,9 +615,10 @@ class DiscreteInputTrainer(TeamTrainer):
                           num_decoder_layers=num_decoder_layers,
                           dim_feedforward=dim_feedforward,
                           dropout=dropout,
+                          PosEncConstructor=PosEncConstructorTeams,
                           )
         if pos_encode_input:
-            if append_pos_encode:
+            if append_pos_encode_input:
                 Constructor = DiscreteInputPosAppender
             else:
                 Constructor = DiscreteInputPosEmbedder
@@ -645,7 +655,9 @@ if __name__ == '__main__':
                                 num_input_tokens=num_inputs,
                                 embedding_dim=E,
                                 pos_encode_input=False,
-                                append_pos_encode=False,
+                                append_pos_encode_input=False,
+                                pos_encode_teams=True,
+                                append_pos_encode_teams=True,
                                 num_decoder_layers=3,
                                 num_encoder_layers=3,
                                 dropout=0.1,
