@@ -183,7 +183,7 @@ class TeamTrainer:
                             rematch_obs_shape = preembed.shape[2:]
                             rematch_obs_dtype = preembed.dtype
                     else:
-                        yield ( preembed,team_k[global_idx], mask)
+                        yield (preembed, team_k[global_idx], mask)
 
                 if do_rematch and rematches:
                     # keep all matchups the same except the index k
@@ -260,7 +260,6 @@ class TeamTrainer:
         if not minibatch:
             self.optim.step()
         return torch.mean(torch.tensor(all_losses))
-
 
     def training_step(self,
                       data,
@@ -422,6 +421,62 @@ class TeamTrainer:
         """
         return (lambda dist: (1 - t)*dist + (t)*torch.ones_like(dist)/dist.shape[1])
 
+    def add_member_to_team(self,
+                           member,
+                           T=None,
+                           N=1,
+                           init_team=None,
+                           obs_preembed=None,
+                           obs_mask=None,
+                           noise_model=None,
+                           ):
+        """
+        adds the specified member to the team in a random position (sampled from the network distribution)
+        one of T or init_team must be specified
+        Args:
+            member: member to add (index)
+            T: team size
+            N: number of teams to make (default 1)
+            init_team: team to add member team
+                if None, starts with all masks
+            obs_preembed: observation to condition on
+            obs_mask: mask for observations
+            noise_model: noise model that takes T-element multinomial distributions and returns another (with noise)
+                ((N,T) -> (N,T))
+                default None
+        Returns:
+            team with member attached
+        """
+        if init_team is None:
+            init_team = self.create_masked_teams(T=T, N=N)
+
+        # (N, T, num_agents)
+        dist = self.team_builder.forward(obs_preembed=obs_preembed,
+                                         target_team=init_team,
+                                         obs_mask=obs_mask,
+                                         output_probs=True,
+                                         pre_softmax=False,
+                                         )
+        # (N, T)
+        conditional_dist = dist[:, :, member]
+
+        if noise_model is not None:
+            conditional_dist = noise_model(conditional_dist)
+
+        # set all non-masked entries to 0
+        conditional_dist[torch.where(init_team != self.MASK)] = 0
+        valid_indices = torch.where(torch.sum(conditional_dist, axis=1) > 0)[0]
+        print(conditional_dist)
+        if len(valid_indices) == 0:
+            # there are no mask tokens, or the conditional distribution is all zeros
+            return init_team
+
+        # samples from conditional_dist at the valid indices
+        places = torch.multinomial(conditional_dist[valid_indices,], 1).flatten()
+
+        init_team[valid_indices, places] = member
+        return init_team
+
     def create_teams(self,
                      T,
                      N=1,
@@ -579,8 +634,8 @@ if __name__ == '__main__':
 
     N = 32
     S = 1
-    T = 1
-    epochs = 100
+    T = 4
+    epochs = 200
     torch.random.manual_seed(69)
 
     E = 64
@@ -589,15 +644,19 @@ if __name__ == '__main__':
     test = DiscreteInputTrainer(num_agents=69,
                                 num_input_tokens=num_inputs,
                                 embedding_dim=E,
-                                pos_encode_input=True,
+                                pos_encode_input=False,
                                 append_pos_encode=False,
+                                num_decoder_layers=3,
+                                num_encoder_layers=3,
+                                dropout=0.1,
+                                nhead=8,
                                 )
 
-    init_team = torch.arange(T, dtype=torch.long)
+    basic_team = torch.arange(T, dtype=torch.long)
 
 
     def random_shuffle():
-        return init_team[torch.randperm(len(init_team))]
+        return basic_team[torch.randperm(len(basic_team))]
 
 
     losses = []
@@ -611,7 +670,8 @@ if __name__ == '__main__':
         # out_teams = torch.stack([random_shuffle() for _ in range(N)], dim=0)
         out_teams = []
         for i, input_pre in enumerate(input_preembedding):
-            out_teams.append(torch.ones(T, dtype=torch.long)*(input_pre[0] + 1)%3)
+            # out_teams.append(torch.ones(T, dtype=torch.long)*(input_pre[0] + 1)%3)
+            out_teams.append(basic_team)
 
         out_teams = torch.stack(out_teams, dim=0)
 
@@ -634,8 +694,9 @@ if __name__ == '__main__':
     init_teams = test.create_masked_teams(T=T, N=num_teams)
     print(init_teams)
     input_pre = torch.arange(0, num_teams).view((-1, 1))%num_inputs
-    for _ in range(T):
-        test.mutate_add_member(initial_teams=init_teams, obs_preembed=input_pre)
+    for i in range(T):
+        init_teams = test.add_member_to_team(i, init_team=init_teams)
+        # test.mutate_add_member(initial_teams=init_teams, obs_preembed=input_pre)
         print(init_teams)
     print('target:')
     print(input_pre)

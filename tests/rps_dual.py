@@ -1,7 +1,6 @@
 import torch
 from src.team_trainer import DiscreteInputTrainer
 from src.replay_buffer_dataset import ReplayBufferDiskStorage
-from torch.utils.data import DataLoader
 import numpy as np
 import itertools
 

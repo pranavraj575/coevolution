@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import Transformer
 from torch.nn import Embedding
-from networks.positional_encoder import PositionalEncoding
+from networks.positional_encoder import IdentityEncoding, ClassicPositionalEncoding, PositionalAppender
 from networks.input_embedding import InputEmbedder
 
 
@@ -14,7 +14,8 @@ class BERTeam(nn.Module):
                  num_encoder_layers=16,
                  num_decoder_layers=16,
                  dim_feedforward=None,
-                 dropout=.1
+                 dropout=.1,
+                 PosEncConstructor=PositionalAppender,
                  ):
         super().__init__()
         self.embedding_dim = embedding_dim
@@ -29,9 +30,9 @@ class BERTeam(nn.Module):
         self.agent_embedding = Embedding(num_embeddings=self.num_tokens,
                                          embedding_dim=embedding_dim,
                                          )
-        self.pos_encoder = PositionalEncoding(d_model=embedding_dim,
-                                              dropout=dropout,
-                                              )
+        self.pos_encoder = PosEncConstructor(d_model=embedding_dim,
+                                             dropout=dropout,
+                                             )
         self.transform = Transformer(d_model=embedding_dim,
                                      nhead=nhead,
                                      num_encoder_layers=num_encoder_layers,

@@ -1,8 +1,6 @@
 import torch
 from src.team_trainer import DiscreteInputTrainer
 from src.replay_buffer_dataset import ReplayBufferDiskStorage
-from torch.utils.data import DataLoader
-import numpy as np
 from matplotlib import pyplot as plt
 
 ROCK = 0
@@ -147,7 +145,7 @@ if __name__ == '__main__':
                                                                   ):
             buffer.push((preembed, team.unsqueeze(0), mask))
 
-            # buffer.push((None, team.unsqueeze(0), None))
+            buffer.push((None, team.unsqueeze(0), None))
         init_distribution = trainer.team_builder.forward(obs_preembed=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
                                                          obs_mask=None,
