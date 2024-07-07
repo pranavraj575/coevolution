@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import Transformer
 from torch.nn import Embedding
 from networks.positional_encoder import PositionalEncoding
+from networks.input_embedding import InputEmbedder
 
 
 class BERTeam(nn.Module):
@@ -102,7 +103,7 @@ class BERTeam(nn.Module):
 
 class TeamBuilder(nn.Module):
     def __init__(self,
-                 input_embedder,
+                 input_embedder: InputEmbedder,
                  berteam: BERTeam,
                  ):
         """
@@ -116,13 +117,13 @@ class TeamBuilder(nn.Module):
         self.input_embedder = input_embedder
         self.berteam = berteam
 
-    def forward(self, input_preembedding, target_team, input_mask, output_probs=True, pre_softmax=False):
+    def forward(self, obs_preembed, target_team, obs_mask, output_probs=True, pre_softmax=False):
         """
         Args:
-            input_preembedding: (N, S, *) shape tensor of input, or None if no input
+            obs_preembed: (N, S, *) shape tensor of input, or None if no input
             target_team: (N, T) shape tensor of team members
                 EACH TEAM SHOULD END WITH A [CLS] token
-            input_mask: (N, S) tensor of booleans on whether to mask each input
+            obs_mask: (N, S) tensor of booleans on whether to mask each input
             output_probs: whether to output the probability of each team member
                 otherwise just outputs the final embedding
             pre_softmax: if True, does not apply softmax to logits
@@ -130,13 +131,14 @@ class TeamBuilder(nn.Module):
             if output_probs, (N, T, num_agents) probability distribution for each position
             otherwise, (N, T, embedding_dim) output of transformer model
         """
-        if input_preembedding is None:
-            input_embedding = None
+        if obs_preembed is None:
+            obs_embed = None
+            embed_mask = None
         else:
-            input_embedding = self.input_embedder(input_preembedding)
-        return self.berteam.forward(input_embedding=input_embedding,
+            obs_embed, embed_mask = self.input_embedder(obs_preembed, obs_mask)
+        return self.berteam.forward(input_embedding=obs_embed,
                                     target_team=target_team,
-                                    input_mask=input_mask,
+                                    input_mask=embed_mask,
                                     output_probs=output_probs,
                                     pre_softmax=pre_softmax,
                                     )
@@ -160,18 +162,18 @@ if __name__ == '__main__':
     team = torch.randint(0, test.num_agents, (N, T))
     team = test.add_cls_tokens(team)
 
-    input_preembedding = torch.rand((N, S, E))
-    input_mask = torch.ones((N, S), dtype=torch.bool)
-    input_mask[:, 0] = False
+    obs_preembed = torch.rand((N, S, E))
+    obs_mask = torch.ones((N, S), dtype=torch.bool)
+    obs_mask[:, 0] = False
 
-    a = test.forward(input_embedding=input_preembedding,
+    a = test.forward(input_embedding=obs_preembed,
                      target_team=team,
-                     input_mask=input_mask
+                     input_mask=obs_mask
                      )
-    input_preembedding[:, 1] *= 10
-    b = test.forward(input_embedding=input_preembedding,
+    obs_preembed[:, 1] *= 10
+    b = test.forward(input_embedding=obs_preembed,
                      target_team=team,
-                     input_mask=input_mask,
+                     input_mask=obs_mask,
                      )
 
     assert torch.all(a == b)

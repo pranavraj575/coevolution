@@ -10,42 +10,71 @@ PAPER = 1
 SCISOR = 2
 
 
-def outcomes(playersA, playersB):
+def outcomes(teams):
     """
-    Returns the winning agents, as well as the opponent
+    Returns the winning agents, as well as the contexts
+    Returns the winning agents, as well as the contexts
     Args:
-        playersA: (N,1) array of either ROCK, PAPER, or SCISORS
-        playersB: (N,1) array of either ROCK, PAPER, or SCISORS
-
+        teams: K-tuple of (N, 1) arrays of players
     Returns:
         (
-        winners: (N',1) array of either ROCK, PAPER, or SCISORS that the player played
-        observations: (N',1) array of either ROCK, PAPER, or SCISORS that the opponent played
-        indices: which games had winners, in the order returned
+            win_indices: which games had winners (game number list, indices of winning team), both size (N')
+            pre_embedded_observations: (N', 1, 1) array observed by winning team
+            embedding_mask: None
         ),
         (
-        tiedA: (N'',1) array of playrs from A that tied
-        tiedB: (N'',1) array of playrs from B that tied
-        tied_games: indices that tied
+            loss_indices: which games had losers (game number list, indices of winning team), both size (N'')
+            pre_embedded_observations: (N'', 1, 1) array observed by losing team
+            embedding_mask: None
+        ),
+        (
+            tied_indices: indices that tied, (game number list, indices of tied team), both size (N''')
+            pre_embedded_observations: (N''', 1, 1) array observed by tied team
+            embedding_mask: None
         )
     """
-    indices = torch.where(playersA != playersB)[0]
-    tied_games = torch.where(playersA == playersB)[0]
-    tiedA, tiedB = playersA[tied_games], playersB[tied_games]
+    A, B = teams
+    indices = torch.where(A != B)[0]
+    tied_games = torch.where(A == B)[0]
+    tiedA, tiedB = A[tied_games], B[tied_games]
 
-    playersA = playersA[indices]
-    playersB = playersB[indices]
+    A = A[indices]
+    B = B[indices]
 
-    diffs = (playersA - playersB)
-    # if 1 or -2, player A won
-    # if -1 or 2, player B won
-    diffs = (diffs%3).flatten()  # if 1, player A won, if 2, player B won
-    both = torch.cat((playersA, playersB), dim=1)  # first column is A, second is B
+    diffs = (A - B)
+    # if 1 or -2, A won
+    # if -1 or 2, B won
+    win_teams = (diffs%3).flatten() - 1  # if 1, A won, if 2, B won
+
+    both = torch.cat((A, B), dim=1)  # first column is A, second is B
     N_p, _ = both.shape
-    winners = both[torch.arange(N_p), diffs - 1]
-    losers = both[torch.arange(N_p), 2 - diffs]
+    win_obs = both[torch.arange(N_p), 1 - win_teams].view((-1, 1))
+    loss_obs = both[torch.arange(N_p), win_teams].view((-1, 1))
 
-    return (winners, losers, indices), (tiedA, tiedB, tied_games)
+    win_indices = (indices, win_teams)
+    loss_indices = (indices, 1 - win_teams)
+    tied_indices = (torch.cat((tied_games, tied_games)),
+                    torch.cat((torch.zeros_like(tied_games), torch.ones_like(tied_games)))
+                    )
+    tied_obs = torch.cat((tiedB.view((-1, 1)), tiedA.view((-1, 1))), dim=0)
+    return (
+        (win_indices, win_obs, None),
+        (loss_indices, loss_obs, None),
+        (tied_indices, tied_obs, None),
+    )
+
+
+def get_winners_and_losers(teams, outcomes):
+    """
+    for two team uniform team size games, gets winner teams and loser teams
+    Args:
+        teams:
+        outcomes:
+    Returns:
+    """
+    ((indices, win_idxs), _, _), ((indices, lose_idxs), _, _), _ = outcomes(teams)
+    both = torch.stack(teams, dim=0)
+    return both[win_idxs, indices], both[lose_idxs, indices]
 
 
 def loss_plot(losses, save_dir=None, show=False):
@@ -87,7 +116,7 @@ if __name__ == '__main__':
 
     torch.random.manual_seed(69)
 
-    outcomes(torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]])))
+    # print(outcomes((torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]]))))[-1])
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps')
@@ -101,6 +130,15 @@ if __name__ == '__main__':
                                    num_encoder_layers=4,
                                    )
 
+    for item in trainer.collect_training_data(outcome=outcomes,
+                                              num_members=(1, 1),
+                                              N=5,
+                                              number_of_tie_matches=0,
+                                              number_of_loss_rematches=1,
+                                              ):
+        print('return',item)
+    quit()
+
     N = 100
     capacity = int(1e5)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp"), capacity=capacity)
@@ -113,29 +151,29 @@ if __name__ == '__main__':
         noise = trainer.create_nose_model_towards_uniform(.1)
         players, opponents = (trainer.create_teams(T=1, N=N, noise_model=noise),
                               trainer.create_teams(T=1, N=N, noise_model=noise))
-        (winners, losers, indices), _ = outcomes(players, opponents)
+        winners, losers = get_winners_and_losers((players, opponents), outcomes=outcomes)
 
         against_winners = trainer.create_teams(T=1,
                                                N=len(winners),
-                                               input_preembedding=winners.view((-1, 1)),
+                                               obs_preembed=winners.view((-1, 1)),
                                                noise_model=noise,
                                                )
-        (winners2, losers2, indices2), _ = outcomes(winners.view((-1, 1)), against_winners)
+        winners2, losers2 = get_winners_and_losers((winners.view((-1, 1)), against_winners), outcomes=outcomes)
 
         buffer.extend(zip(winners, losers))
         buffer.extend(zip(winners2, losers2))
         buffer.extend(zip(winners, (torch.nan for _ in losers)))
 
-        init_distribution = trainer.team_builder.forward(input_preembedding=None,
+        init_distribution = trainer.team_builder.forward(obs_preembed=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
-                                                         input_mask=None,
+                                                         obs_mask=None,
                                                          ).detach().flatten().numpy()
         init_dists.append(init_distribution)
         conditional_dists = []
         for opponent in range(3):
-            dist = trainer.team_builder.forward(input_preembedding=torch.tensor([[opponent]]),
+            dist = trainer.team_builder.forward(obs_preembed=torch.tensor([[opponent]]),
                                                 target_team=trainer.create_masked_teams(T=1, N=1),
-                                                input_mask=None,
+                                                obs_mask=None,
                                                 )
             conditional_dists.append(dist.detach().flatten().numpy())
         cond_dists.append(conditional_dists)
@@ -152,7 +190,7 @@ if __name__ == '__main__':
                   )
                  for winner, loser in sample))
         loader = DataLoader(list(data), shuffle=True, batch_size=16)
-        loss = trainer.epoch(loader=loader, minibatch=False).item()
+        loss = trainer.training_step(loader=loader, minibatch=False).item()
         losses.append(loss)
         print('epoch', epoch, ';\tbuffer size', len(buffer))
         print('loss', loss)
