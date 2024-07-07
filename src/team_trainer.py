@@ -48,7 +48,7 @@ class TeamTrainer:
             outcome:
                 Returns the winning agents, as well as the contexts
                 Args:
-                    players: K-tuple of (N, T_i) arrays of players, with K being the number of teams (T_1, ..., T_k)
+                    teams: K-tuple of (N, T_i) arrays of players, with K being the number of teams (T_1, ..., T_k)
                 Returns:
                     (
                         win_indices: which games had winners (game number list, indices of winning team), both size (N')
@@ -66,7 +66,7 @@ class TeamTrainer:
                         embedding_mask: None or (N''', S''') boolean array of which items to mask
                     )
         Returns:
-            iterable of (winning team, observation, observation_mask) to push into replay buffer
+            iterable of (observation, winning team, observation_mask) to push into replay buffer
         """
 
         def append_obs(init_obs_preembed,
@@ -91,7 +91,8 @@ class TeamTrainer:
             """
             if combine is None:
                 combine = chain_observations
-            if combine:
+
+            if not combine:
                 return update_obs_preembed, update_mask
 
             if init_obs_preembed is None and update_obs_preembed is None:
@@ -116,9 +117,9 @@ class TeamTrainer:
                 # in this case, one is empty, the other has observations
                 # just return the one that is nonempty
                 if init_obs_preembed is not None:
-                    return update_obs_preembed, update_mask
-                else:
                     return init_obs_preembed, init_mask
+                else:
+                    return update_obs_preembed, update_mask
 
         K = len(num_members)
         if initial_obs_preembeds is None:
@@ -136,15 +137,12 @@ class TeamTrainer:
                                           obs_mask=initial_obs_masks[i],
                                           noise_model=noise_model,
                                           )
-        print('teams')
-        print(teams[0])
-        print(teams[1])
-        print()
         win_stuff, lose_stuff, tie_stuff = outcome(teams)
         for k in range(len(num_members)):
             team_k = teams[k]
             init_obs_preembeds_k = initial_obs_preembeds[k]
             init_obs_masks_k = initial_obs_masks[k]
+
             for ((trials, team_nos), temp_obs, temp_mask), (do_rematch, temp_loss_rematch, temp_tie_rematch) in [
                 (win_stuff, (False, number_of_loss_rematches, number_of_tie_matches)),
                 (lose_stuff, (True, number_of_loss_rematches - 1, number_of_tie_matches)),
@@ -165,6 +163,7 @@ class TeamTrainer:
                     global_idx = trials[trial_idx]
                     temp_init_obs_preembed = (None if init_obs_preembeds_k is None
                                               else init_obs_preembeds_k[(global_idx,)].unsqueeze(0))
+
                     temp_init_obs_mask = (None if init_obs_masks_k is None
                                           else init_obs_masks_k[(global_idx,)].unsqueeze(0))
 
@@ -172,7 +171,6 @@ class TeamTrainer:
                                              else temp_obs[(trial_idx,)].unsqueeze(0))
                     temp_new_obs_mask = (None if temp_mask is None
                                          else temp_mask[(trial_idx,)].unsqueeze(0))
-
                     preembed, mask = append_obs(init_obs_preembed=temp_init_obs_preembed,
                                                 update_obs_preembed=temp_new_obs_preembed,
                                                 init_mask=temp_init_obs_mask,
@@ -185,7 +183,7 @@ class TeamTrainer:
                             rematch_obs_shape = preembed.shape[2:]
                             rematch_obs_dtype = preembed.dtype
                     else:
-                        yield (team_k[global_idx], preembed, mask)
+                        yield ( preembed,team_k[global_idx], mask)
 
                 if do_rematch and rematches:
                     # keep all matchups the same except the index k
@@ -196,16 +194,21 @@ class TeamTrainer:
                         relevant_obs_preembed = None
                         relevant_obs_mask = None
                     else:
-                        temp_shape=[N_p,rematch_obs_dim]
+                        temp_shape = [N_p, rematch_obs_dim]
                         for size in rematch_obs_shape:
                             temp_shape.append(size)
                         relevant_obs_preembed = torch.zeros(temp_shape,
                                                             dtype=rematch_obs_dtype)
                         relevant_obs_mask = torch.ones((N_p, rematch_obs_dim), dtype=torch.bool)
                         for i, (_, preembed, mask) in enumerate(rematches):
-                            relevant_obs_preembed[(i,), :preembed.shape[1]] = preembed
+                            S = preembed.shape[1]
+                            relevant_obs_preembed[(i,), :S] = preembed
                             if mask is not None:
-                                relevant_obs_mask[(i,), :mask.shape[1]] = mask
+                                # in this case, copy mask over
+                                relevant_obs_mask[(i,), :S] = mask
+                            else:
+                                # otherwise, set mask to false here
+                                relevant_obs_mask[(i,), :S] = 0
                     for item in self.collect_training_data(
                             outcome=outcome,
                             num_members=num_members,
@@ -220,12 +223,12 @@ class TeamTrainer:
                     ):
                         yield item
 
-    def training_step(self,
-                      loader: DataLoader,
-                      mask_probs=None,
-                      replacement_probs=(.8, .1, .1),
-                      minibatch=True,
-                      ):
+    def training_step_with_loader(self,
+                                  loader: DataLoader,
+                                  mask_probs=None,
+                                  replacement_probs=(.8, .1, .1),
+                                  minibatch=True,
+                                  ):
         """
         Args:
             loader: contains data of type (obs_preembed, teams, obs_mask)
@@ -238,6 +241,45 @@ class TeamTrainer:
             self.optim.zero_grad()
         all_losses = []
         for obs_preembed, teams, obs_mask in loader:
+            if torch.is_tensor(obs_preembed) and torch.all(torch.isnan(obs_preembed)):
+                obs_preembed = None
+            if torch.is_tensor(obs_mask) and torch.all(torch.isnan(obs_mask)):
+                obs_mask = None
+            if minibatch:
+                self.optim.zero_grad()
+
+            losses = self.mask_and_learn(obs_preembed=obs_preembed,
+                                         teams=teams,
+                                         obs_mask=obs_mask,
+                                         mask_probs=mask_probs,
+                                         replacement_probs=replacement_probs,
+                                         )
+            if minibatch:
+                self.optim.step()
+            all_losses.append(losses)
+        if not minibatch:
+            self.optim.step()
+        return torch.mean(torch.tensor(all_losses))
+
+
+    def training_step(self,
+                      data,
+                      mask_probs=None,
+                      replacement_probs=(.8, .1, .1),
+                      minibatch=True,
+                      ):
+        """
+        Args:
+            data: contains data of type (obs_preembed, teams, obs_mask)
+                obs_preembed and obs_mask can both be torch.nan, they are ignored if this is true
+            minibatch: whether to take a step after each batch
+        Returns:
+
+        """
+        if not minibatch:
+            self.optim.zero_grad()
+        all_losses = []
+        for obs_preembed, teams, obs_mask in data:
             if torch.is_tensor(obs_preembed) and torch.all(torch.isnan(obs_preembed)):
                 obs_preembed = None
             if torch.is_tensor(obs_mask) and torch.all(torch.isnan(obs_mask)):
@@ -578,7 +620,7 @@ if __name__ == '__main__':
                             shuffle=True,
                             batch_size=64,
                             )
-        loss = test.training_step(
+        loss = test.training_step_with_loader(
             loader=loader,
             minibatch=True
         )
