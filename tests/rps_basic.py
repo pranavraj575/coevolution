@@ -147,7 +147,7 @@ if __name__ == '__main__':
                                                                   ):
             buffer.push((preembed, team.unsqueeze(0), mask))
 
-            buffer.push((None, team.unsqueeze(0), None))
+            # buffer.push((None, team.unsqueeze(0), None))
         init_distribution = trainer.team_builder.forward(obs_preembed=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
                                                          obs_mask=None,

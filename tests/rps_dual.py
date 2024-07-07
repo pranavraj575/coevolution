@@ -135,13 +135,13 @@ if __name__ == '__main__':
     trainer = DiscreteInputTrainer(num_agents=3,
                                    num_input_tokens=3,
                                    embedding_dim=64,
-                                   pos_encode_input=False,
+                                   pos_encode_input=True,
                                    num_decoder_layers=4,
-                                   num_encoder_layers=4,
+                                   num_encoder_layers=4 ,
                                    )
 
     N = 100
-    capacity = int(1e5)
+    capacity = int(2e4)
     buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2"), capacity=capacity)
 
     minibatch = 64
@@ -156,12 +156,11 @@ if __name__ == '__main__':
                                                                   num_members=(2, 2),
                                                                   N=N,
                                                                   number_of_tie_matches=0,
-                                                                  number_of_loss_rematches=4,
+                                                                  number_of_loss_rematches=3,
                                                                   noise_model=noise
                                                                   ):
             buffer.push((preembed, team.unsqueeze(0), mask))
-
-            buffer.push((None, team.unsqueeze(0), None))
+            #buffer.push((None, team.unsqueeze(0), None))
 
         init_distribution = dist_from_trainer(trainer=trainer,
                                               input_preembedding=None,
@@ -207,100 +206,4 @@ if __name__ == '__main__':
             print('\tplot time:', round(time.time() - start_time, 2))
         epoch += 1
         print()
-    buffer.close()
-
-    quit()
-    N = 1000
-    capacity = int(1e5)
-    buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2"), capacity=capacity)
-
-    minibatch = 64
-    init_dists = []
-    cond_dists = []
-    strat_labels = ['RR', 'PP', 'SS', 'RP', 'RS', 'PS']
-    losses = []
-    epoch = 0
-    steps_each_time = 2
-    for _ in range(100):
-        start_time = time.time()
-        noise = trainer.create_nose_model_towards_uniform(1/np.sqrt(epoch + 1))
-        players, opponents = (trainer.create_teams(T=2, N=N, noise_model=noise),
-                              trainer.create_teams(T=2, N=N, noise_model=noise))
-        (winners, losers, indices), _ = outcomes(players, opponents)
-
-        against_winners = trainer.create_teams(T=2,
-                                               N=len(winners),
-                                               obs_preembed=winners.view((-1, 2)),
-                                               noise_model=noise,
-                                               )
-        (winners2, losers2, indices2), _ = outcomes(winners.view((-1, 2)), against_winners)
-        for a, b in [(winners, losers),
-                     (winners2, losers2),
-                     ]:
-            for c in [
-                list(torch.tensor([True, True]) for _ in b),
-                list(torch.tensor([True, False]) for _ in b),
-                list(torch.tensor([False, True]) for _ in b),
-                list(torch.tensor([False, False]) for _ in b)]:
-                buffer.extend(zip(a, b, c))
-        game_time = time.time() - start_time
-
-        for step in range(steps_each_time):
-            start_time = time.time()
-            init_distribution = dist_from_trainer(trainer=trainer,
-                                                  input_preembedding=None,
-                                                  input_mask=None,
-                                                  )
-            init_dists.append(init_distribution)
-            conditional_dists = []
-            for opponent_choice in itertools.chain(itertools.combinations(range(3), 1),
-                                                   itertools.combinations(range(3), 2)):
-                if len(opponent_choice) == 1:
-                    opponent_choice = opponent_choice + opponent_choice
-                dist = dist_from_trainer(trainer=trainer,
-                                         input_preembedding=torch.tensor([opponent_choice]),
-                                         input_mask=None,
-                                         )
-                conditional_dists.append(dist)
-            cond_dists.append(conditional_dists)
-
-            sample = buffer.sample(batch=minibatch)
-            # data is in (context, winning team, mask)
-            # N=1 T=2
-            # dataloaders want shape of (T,)
-
-            masked = lambda loser: (not torch.is_tensor(loser)) or torch.all(torch.isnan(loser))
-
-            data = (((loser.view(2),
-                      winner.view(2),
-                      mask,
-                      )
-                     for winner, loser, mask in sample))
-            loader = DataLoader(list(data), shuffle=True, batch_size=16)
-            loss = trainer.training_step_with_loader(loader=loader, minibatch=False).item()
-            losses.append(loss)
-
-            print('epoch', epoch, ';\tbuffer size', len(buffer))
-            print('loss', loss)
-            if step == 0:
-                print('\tgame_time:', round(game_time, 2))
-            print('\ttrain time:', round(time.time() - start_time, 2))
-
-            if not (epoch + 1)%10:
-                start_time = time.time()
-                loss_plot(losses, save_dir=os.path.join(plot_dir, 'loss_plot.png'))
-
-                plot_dist_evolution(init_dists,
-                                    save_dir=os.path.join(plot_dir, 'init_dist.png'),
-                                    labels=strat_labels
-                                    )
-                for k, name in enumerate(strat_labels):
-                    plot_dist_evolution([dist[k] for dist in cond_dists],
-                                        save_dir=os.path.join(plot_dir, 'dist_against' + name + '.png'),
-                                        title='Distribution against ' + name,
-                                        labels=strat_labels,
-                                        )
-                print('\tplot time:', round(time.time() - start_time, 2))
-            epoch += 1
-            print()
     buffer.close()
