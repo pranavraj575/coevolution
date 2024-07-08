@@ -135,8 +135,11 @@ if __name__ == '__main__':
                                    num_input_tokens=3,
                                    embedding_dim=64,
                                    pos_encode_input=True,
+                                   append_pos_encode_input=True,
+                                   pos_encode_teams=True,
+                                   append_pos_encode_teams=True,
                                    num_decoder_layers=4,
-                                   num_encoder_layers=4 ,
+                                   num_encoder_layers=4,
                                    )
 
     N = 100
@@ -150,16 +153,17 @@ if __name__ == '__main__':
     losses = []
     for epoch in range(100):
         start_time = time.time()
-        noise = trainer.create_nose_model_towards_uniform(1/np.sqrt(epoch + 1))
-        for preembed, team, mask in trainer.collect_training_data(outcome=outcomes,
-                                                                  num_members=(2, 2),
-                                                                  N=N,
-                                                                  number_of_tie_matches=0,
-                                                                  number_of_loss_rematches=3,
-                                                                  noise_model=noise
-                                                                  ):
-            buffer.push((preembed, team.unsqueeze(0), mask))
-            #buffer.push((None, team.unsqueeze(0), None))
+        noise = trainer.create_nose_model_towards_uniform(1/np.sqrt(epoch/2 + 1))
+        for scalar, preembed, team, mask in trainer.collect_training_data(outcome=outcomes,
+                                                                          num_members=(2, 2),
+                                                                          N=N,
+                                                                          number_of_tie_matches=0,
+                                                                          number_of_loss_rematches=3,
+                                                                          noise_model=noise,
+                                                                          obtain_negatives=False,
+                                                                          ):
+            buffer.push((scalar, preembed, team, mask))
+            buffer.push((scalar, None, team, None))
 
         init_distribution = dist_from_trainer(trainer=trainer,
                                               input_preembedding=None,
@@ -179,14 +183,16 @@ if __name__ == '__main__':
         cond_dists.append(conditional_dists)
 
         sample = buffer.sample(batch=minibatch)
-
+        collection_time=time.time() - start_time
+        start_time = time.time()
         loss = trainer.training_step(data=sample, minibatch=False).item()
         losses.append(loss)
 
         print('epoch', epoch, ';\tbuffer size', len(buffer))
-        print('loss', loss)
-
+        print('\tcollection time:', round(collection_time, 2))
         print('\ttrain time:', round(time.time() - start_time, 2))
+
+        print('\tloss', loss)
 
         if not (epoch + 1)%10:
             start_time = time.time()

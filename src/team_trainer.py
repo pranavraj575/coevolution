@@ -4,7 +4,8 @@ from torch.utils.data import DataLoader
 
 from networks.team_builder import TeamBuilder, BERTeam
 from networks.input_embedding import DiscreteInputEmbedder, DiscreteInputPosEmbedder, DiscreteInputPosAppender
-from networks.positional_encoder import IdentityEncoding,ClassicPositionalEncoding,PositionalAppender
+from networks.positional_encoder import IdentityEncoding, ClassicPositionalEncoding, PositionalAppender
+
 
 class TeamTrainer:
     def __init__(self,
@@ -29,7 +30,8 @@ class TeamTrainer:
                               number_of_loss_rematches=0,
                               number_of_tie_matches=0,
                               chain_observations=True,
-                              noise_model=None
+                              noise_model=None,
+                              obtain_negatives=False,
                               ):
         """
         Args:
@@ -45,6 +47,8 @@ class TeamTrainer:
             number_of_tie_matches: number of times to build teams to replace tied teams (conditioned on obs)
             chain_observations: whether to chain the observations across different games
             noise_model: noise model to select teams with
+            obtain_negatives: whether to grab 'negative' examples (losing teams with negative scalar returns)
+                this will always be false on rematches
             outcome:
                 Returns the winning agents, as well as the contexts
                 Args:
@@ -66,7 +70,8 @@ class TeamTrainer:
                         embedding_mask: None or (N''', S''') boolean array of which items to mask
                     )
         Returns:
-            iterable of (observation, winning team, observation_mask) to push into replay buffer
+            iterable of (scalar, observation, winning team, observation_mask) to push into replay buffer
+                scalar is 1 for 'good' teams and -1 for 'bad' teams
         """
 
         def append_obs(init_obs_preembed,
@@ -143,10 +148,11 @@ class TeamTrainer:
             init_obs_preembeds_k = initial_obs_preembeds[k]
             init_obs_masks_k = initial_obs_masks[k]
 
-            for ((trials, team_nos), temp_obs, temp_mask), (do_rematch, temp_loss_rematch, temp_tie_rematch) in [
-                (win_stuff, (False, number_of_loss_rematches, number_of_tie_matches)),
-                (lose_stuff, (True, number_of_loss_rematches - 1, number_of_tie_matches)),
-                (tie_stuff, (True, number_of_loss_rematches, number_of_tie_matches - 1)),
+            for (((trials, team_nos), temp_obs, temp_mask),
+                 (scalar, do_rematch, temp_loss_rematch, temp_tie_rematch)) in [
+                (win_stuff, (1., False, number_of_loss_rematches, number_of_tie_matches)),
+                (lose_stuff, (-1., True, number_of_loss_rematches - 1, number_of_tie_matches)),
+                (tie_stuff, (0., True, number_of_loss_rematches, number_of_tie_matches - 1)),
             ]:
                 if do_rematch and (temp_loss_rematch < 0 or temp_tie_rematch < 0):
                     # dont do rematches in this case
@@ -182,8 +188,10 @@ class TeamTrainer:
                             rematch_obs_dim = max(rematch_obs_dim, preembed.shape[1])
                             rematch_obs_shape = preembed.shape[2:]
                             rematch_obs_dtype = preembed.dtype
-                    else:
-                        yield (preembed, team_k[global_idx], mask)
+                    if scalar > 0:
+                        yield (scalar, preembed, team_k[(global_idx,),], mask)
+                    if scalar < 0 and obtain_negatives:
+                        yield (scalar, preembed, team_k[(global_idx,),], mask)
 
                 if do_rematch and rematches:
                     # keep all matchups the same except the index k
@@ -220,46 +228,9 @@ class TeamTrainer:
                             number_of_tie_matches=temp_tie_rematch,
                             chain_observations=chain_observations,
                             noise_model=noise_model,
+                            obtain_negatives=False,
                     ):
                         yield item
-
-    def training_step_with_loader(self,
-                                  loader: DataLoader,
-                                  mask_probs=None,
-                                  replacement_probs=(.8, .1, .1),
-                                  minibatch=True,
-                                  ):
-        """
-        Args:
-            loader: contains data of type (obs_preembed, teams, obs_mask)
-                obs_preembed and obs_mask can both be torch.nan, they are ignored if this is true
-            minibatch: whether to take a step after each batch
-        Returns:
-
-        """
-        if not minibatch:
-            self.optim.zero_grad()
-        all_losses = []
-        for obs_preembed, teams, obs_mask in loader:
-            if torch.is_tensor(obs_preembed) and torch.all(torch.isnan(obs_preembed)):
-                obs_preembed = None
-            if torch.is_tensor(obs_mask) and torch.all(torch.isnan(obs_mask)):
-                obs_mask = None
-            if minibatch:
-                self.optim.zero_grad()
-
-            losses = self.mask_and_learn(obs_preembed=obs_preembed,
-                                         teams=teams,
-                                         obs_mask=obs_mask,
-                                         mask_probs=mask_probs,
-                                         replacement_probs=replacement_probs,
-                                         )
-            if minibatch:
-                self.optim.step()
-            all_losses.append(losses)
-        if not minibatch:
-            self.optim.step()
-        return torch.mean(torch.tensor(all_losses))
 
     def training_step(self,
                       data,
@@ -268,17 +239,32 @@ class TeamTrainer:
                       minibatch=True,
                       ):
         """
-        Args:
-            data: contains data of type (obs_preembed, teams, obs_mask)
-                obs_preembed and obs_mask can both be torch.nan, they are ignored if this is true
-            minibatch: whether to take a step after each batch
-        Returns:
 
+        Args:
+            data: contains data of type (scalar, obs_preembed, teams, obs_mask)
+                obs_preembed and obs_mask can both be torch.nan, they are ignored if this is true
+            mask_probs: list of proabilities of masking to use
+                if None, uses (1/team_size, 2/team_size, ..., 1)
+            replacement_probs: proportion of ([MASK], random element, same element) to replace masked elements with
+                default (.8, .1, .1) because BERT
+            minibatch: whether to take a step after each batch
+            scalar: thing to multiply losses
+                should be 1 for normal MLM training
+                    -1 to push model away from 'bad' teamas
+        Returns:
+            avg losses for whole dataset
         """
         if not minibatch:
             self.optim.zero_grad()
         all_losses = []
-        for obs_preembed, teams, obs_mask in data:
+        for tup in data:
+            if len(tup) == 4:
+                scalar, obs_preembed, teams, obs_mask = tup
+            elif len(tup) == 3:
+                obs_preembed, teams, obs_mask = tup
+                scalar = 1.
+            else:
+                raise Exception("incorrect input data structure:", tup)
             if torch.is_tensor(obs_preembed) and torch.all(torch.isnan(obs_preembed)):
                 obs_preembed = None
             if torch.is_tensor(obs_mask) and torch.all(torch.isnan(obs_mask)):
@@ -291,6 +277,7 @@ class TeamTrainer:
                                          obs_mask=obs_mask,
                                          mask_probs=mask_probs,
                                          replacement_probs=replacement_probs,
+                                         scalar=scalar,
                                          )
             if minibatch:
                 self.optim.step()
@@ -299,7 +286,14 @@ class TeamTrainer:
             self.optim.step()
         return torch.mean(torch.tensor(all_losses))
 
-    def mask_and_learn(self, obs_preembed, teams, obs_mask, mask_probs=None, replacement_probs=(.8, .1, .1)):
+    def mask_and_learn(self,
+                       obs_preembed,
+                       teams,
+                       obs_mask,
+                       mask_probs=None,
+                       replacement_probs=(.8, .1, .1),
+                       scalar=1.,
+                       ):
         """
         runs learn step on a lot of mask_probabilities
             need to test with a wide range of mask probabilites because for generation, we may start with a lot of masks
@@ -311,8 +305,11 @@ class TeamTrainer:
                 if None, uses (1/team_size, 2/team_size, ..., 1)
             replacement_probs: proportion of ([MASK], random element, same element) to replace masked elements with
                 default (.8, .1, .1) because BERT
+            scalar: thing to multiply losses by
+                should be 1 for normal MLM training
+                    -1 to push model away from 'bad' teamas
         Returns:
-            list of crossentropy loss
+            avg crossentropy loss
         """
         if mask_probs is None:
             N, T = teams.shape
@@ -324,11 +321,19 @@ class TeamTrainer:
                                    obs_mask=obs_mask,
                                    mask_prob=mask_prob,
                                    replacement_probs=replacement_probs,
+                                   scalar=scalar,
                                    )
             losses.append(loss)
         return torch.mean(torch.tensor(losses))
 
-    def get_losses(self, obs_preembed, teams, obs_mask, mask_prob=.5, replacement_probs=(.8, .1, .1)):
+    def get_losses(self,
+                   obs_preembed,
+                   teams,
+                   obs_mask,
+                   mask_prob=.5,
+                   replacement_probs=(.8, .1, .1),
+                   scalar=1.,
+                   ):
         """
         randomly masks winning team members, runs the transformer token prediction model, and gets crossentropy loss
             of predicting the masked tokens
@@ -339,6 +344,9 @@ class TeamTrainer:
             mask_prob: proportion of elements to mask (note that we will always mask at least one per batch
             replacement_probs: proportion of ([MASK], random element, same element) to replace masked elements with
                 default (.8, .1, .1) because BERT
+            scalar: thing to multiply final loss by
+                should be 1 for normal MLM training
+                    -1 to push model away from 'bad' teamas
         Returns:
             crossentropy loss of prediction
         """
@@ -355,7 +363,7 @@ class TeamTrainer:
                                            )
         criterion = nn.CrossEntropyLoss()
 
-        loss = criterion(logits[mask_indices], teams[mask_indices])
+        loss = scalar*criterion(logits[mask_indices], teams[mask_indices])
         loss.backward()
         return loss
 
@@ -466,7 +474,6 @@ class TeamTrainer:
         # set all non-masked entries to 0
         conditional_dist[torch.where(init_team != self.MASK)] = 0
         valid_indices = torch.where(torch.sum(conditional_dist, axis=1) > 0)[0]
-        print(conditional_dist)
         if len(valid_indices) == 0:
             # there are no mask tokens, or the conditional distribution is all zeros
             return init_team
@@ -607,7 +614,7 @@ class DiscreteInputTrainer(TeamTrainer):
             else:
                 PosEncConstructorTeams = ClassicPositionalEncoding
         else:
-            PosEncConstructorTeams=IdentityEncoding
+            PosEncConstructorTeams = IdentityEncoding
         berteam = BERTeam(num_agents=num_agents,
                           embedding_dim=embedding_dim,
                           nhead=nhead,
@@ -692,14 +699,13 @@ if __name__ == '__main__':
                             shuffle=True,
                             batch_size=64,
                             )
-        loss = test.training_step_with_loader(
-            loader=loader,
+        loss = test.training_step(
+            data=loader,
             minibatch=True
         )
 
         losses.append(loss)
         print('epoch', epoch, '\tloss', loss.item())
-
     # print(test.mask_and_learn(input_embedding_gen=input_embeddings,
     #                          winning_team_gen=(init_team.clone() for _ in range(N))))
     num_teams = 9

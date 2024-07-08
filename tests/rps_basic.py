@@ -136,16 +136,16 @@ if __name__ == '__main__':
     losses = []
     for epoch in range(100):
         noise = trainer.create_nose_model_towards_uniform(.1)
-        for preembed, team, mask in trainer.collect_training_data(outcome=outcomes,
-                                                                  num_members=(1, 1),
-                                                                  N=N,
-                                                                  number_of_tie_matches=0,
-                                                                  number_of_loss_rematches=1,
-                                                                  noise_model=noise
-                                                                  ):
-            buffer.push((preembed, team.unsqueeze(0), mask))
+        for scalar, preembed, team, mask in trainer.collect_training_data(outcome=outcomes,
+                                                                          num_members=(1, 1),
+                                                                          N=N,
+                                                                          number_of_tie_matches=0,
+                                                                          number_of_loss_rematches=1,
+                                                                          noise_model=noise
+                                                                          ):
+            buffer.push((scalar, preembed, team, mask))
 
-            buffer.push((None, team.unsqueeze(0), None))
+            # buffer.push((scalar, None, team, None))
         init_distribution = trainer.team_builder.forward(obs_preembed=None,
                                                          target_team=trainer.create_masked_teams(T=1, N=1),
                                                          obs_mask=None,
