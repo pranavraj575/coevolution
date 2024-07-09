@@ -61,13 +61,15 @@ class CoevolutionBase:
             yield (tuple(np.random.choice(list(unused), len(unused), replace=False)) +
                    tuple(np.random.choice(list(set(range(N)).difference(unused)), remaining, replace=False)))
 
-    def epoch(self):
+    def epoch(self, rechoose=True):
         # TODO: parallelizable
         for choice in self.create_random_captians():
             self.train_and_update_results(choice)
-        self.terminate_and_clone()
+        if rechoose:
+            self.breed()
+            self.mutate()
 
-    def terminate_and_clone(self):
+    def breed(self):
         """
         terminates poorly performing agents and replaces them with clones
             can also replace through sexual reproduction, if that is possible
@@ -75,6 +77,9 @@ class CoevolutionBase:
         also updates internal variables to reflect the new agents
         """
         raise NotImplementedError
+
+    def mutate(self):
+        pass
 
     def train_and_update_results(self, captian_choices):
         """
@@ -87,7 +92,7 @@ class CoevolutionBase:
 
 
 class TwoPlayerAdversarialCoevolution(CoevolutionBase):
-    def __init__(self, population_size, outcome_fn, clone_fn, elo_update=32, init_tau=1.):
+    def __init__(self, population_size, outcome_fn, clone_fn, elo_update=32, init_tau=100., mutation_fn=None):
         """
         Args:
             population_size: size of population to train
@@ -98,19 +103,23 @@ class TwoPlayerAdversarialCoevolution(CoevolutionBase):
                 replaces agents in the original indices with respective replacement
             elo_update: k for updating elos
             init_tau: initial temperature for deleting agents
+            mutation_fn: mutate agents
         """
         super().__init__(population_sizes=[population_size], num_teams=2)
         self.outcome_fn = outcome_fn
         self.clone_fn = clone_fn
+        self.mutation_fn = mutation_fn
 
         # keeps track of number of games and record for each agent
+        self.elo_update = elo_update
+        self.tau = init_tau
+        self.reset_vals()
+    def reset_vals(self):
         self.captian_fitness = np.ones(self.N)*1000  # ELO
         self.captian_wins = np.zeros(self.N)
         self.captian_losses = np.zeros(self.N)
         self.captian_ties = np.zeros(self.N)
         self.captian_elos = np.ones(self.N)*1000
-        self.elo_update = elo_update
-        self.tau = init_tau
 
     def rescale_elos(self, base_elo=1000.):
         """
@@ -136,22 +145,39 @@ class TwoPlayerAdversarialCoevolution(CoevolutionBase):
         self.captian_elos[i] += self.elo_update*(obs_prob_i - expected_prob_i)
         self.captian_elos[j] += self.elo_update*((1 - obs_prob_i) - (1 - expected_prob_i))
 
-    def terminate_and_clone(self):
+    def mutate(self):
+        if self.mutation_fn is not None:
+            self.mutation_fn()
+
+    def breed(self):
         dist = torch.softmax(torch.tensor(self.captian_elos/self.tau), dim=-1)
-        self.clone_fn(torch.arange(self.N),torch.multinomial(dist,self.N))
+        # sample from this distribution with replacements
+        replacements = torch.multinomial(dist, self.N, replacement=True)
+        self.clone_fn(torch.arange(self.N), replacements)
+        for arr in (self.captian_fitness, self.captian_wins, self.captian_losses, self.captian_ties, self.captian_elos):
+            temp_arr = arr.copy()
+            arr[np.arange(self.N)] = temp_arr[replacements]
+        self.reset_vals()
+        self.rescale_elos()
 
 
 if __name__ == '__main__':
-    popsize=10
-    agents=torch.arange(popsize)%3
-    def clone_fn(original,replacements):
-        agents[original]=agents[replacements]
+    torch.random.manual_seed(69)
+    popsize = 10
+
+    agents = torch.arange(popsize)%3
+
+
+    def clone_fn(original, replacements):
+        agents[original] = agents[replacements]
+
+
     test = TwoPlayerAdversarialCoevolution(population_size=popsize,
                                            outcome_fn=lambda i, j: max(i, j),
                                            clone_fn=clone_fn,
                                            )
     print(agents)
-    test.terminate_and_clone()
+    test.breed()
     print(agents)
     quit()
     test.captian_elos[0] = 0
