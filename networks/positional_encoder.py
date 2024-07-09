@@ -64,5 +64,4 @@ class PositionalAppender(AbstractPositionalEncoding):
         """
 
         appended = torch.cat((x, self.pe[:, :x.size(1), :].broadcast_to(x.shape)), dim=-1)
-
         return self.dropout(self.linear(appended))

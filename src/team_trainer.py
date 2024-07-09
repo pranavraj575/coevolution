@@ -649,20 +649,22 @@ class DiscreteInputTrainer(TeamTrainer):
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
 
-    N = 32
-    S = 1
-    T = 4
-    epochs = 200
+    N = 32  # number of teams to train on per epoch
+    eval_N = 9  # number of teams to evaluate on
+    S = 2  # sequence length of input
+    T = 5  # size of team
+    num_inputs = 4 # number of distinct input tokens
+
+    epochs = 300
     torch.random.manual_seed(69)
 
-    E = 64
+    E = 64 # embedding dim
 
-    num_inputs = 3
     test = DiscreteInputTrainer(num_agents=69,
                                 num_input_tokens=num_inputs,
                                 embedding_dim=E,
-                                pos_encode_input=False,
-                                append_pos_encode_input=False,
+                                pos_encode_input=True,
+                                append_pos_encode_input=True,
                                 pos_encode_teams=True,
                                 append_pos_encode_teams=True,
                                 num_decoder_layers=3,
@@ -678,6 +680,13 @@ if __name__ == '__main__':
         return basic_team[torch.randperm(len(basic_team))]
 
 
+    def correct_output(input_pre):
+        # test it on shifted inputs, mod some number
+        # return (basic_team + input_pre[0])%4
+        return (basic_team + torch.sum(input_pre))%4
+        # return basic_team
+
+
     losses = []
     for epoch in range(epochs):
         # input_preembedding_gen = (torch.randint(0, num_inputs, (i%S,)) if i > 0 else None for i in range(N))
@@ -687,12 +696,7 @@ if __name__ == '__main__':
         input_preembedding = torch.randint(0, num_inputs, (N, S))
         # input_mask = torch.zeros((N, S), dtype=torch.bool)
         # out_teams = torch.stack([random_shuffle() for _ in range(N)], dim=0)
-        out_teams = []
-        for i, input_pre in enumerate(input_preembedding):
-            # out_teams.append(torch.ones(T, dtype=torch.long)*(input_pre[0] + 1)%3)
-            out_teams.append(basic_team)
-
-        out_teams = torch.stack(out_teams, dim=0)
+        out_teams = torch.stack([correct_output(t) for t in input_preembedding], dim=0)
 
         data = list(zip(input_preembedding, out_teams, input_mask))
         loader = DataLoader(data,
@@ -708,15 +712,23 @@ if __name__ == '__main__':
         print('epoch', epoch, '\tloss', loss.item())
     # print(test.mask_and_learn(input_embedding_gen=input_embeddings,
     #                          winning_team_gen=(init_team.clone() for _ in range(N))))
-    num_teams = 9
-    init_teams = test.create_masked_teams(T=T, N=num_teams)
+    init_teams = test.create_masked_teams(T=T, N=eval_N)
     print(init_teams)
-    input_pre = torch.arange(0, num_teams).view((-1, 1))%num_inputs
+    # input_pre = torch.arange(0, num_teams).view((-1, 1))%num_inputs
+
+    input_preembedding = torch.randint(0, num_inputs, (eval_N, S))
     for i in range(T):
-        init_teams = test.add_member_to_team(i, init_team=init_teams)
-        # test.mutate_add_member(initial_teams=init_teams, obs_preembed=input_pre)
+        # force it to add member i to the team
+        # init_teams = test.add_member_to_team(i, init_team=init_teams, obs_preembed=input_preembedding)
+
+        test.mutate_add_member(initial_teams=init_teams, obs_preembed=input_preembedding)
         print(init_teams)
-    print('target:')
-    print(input_pre)
-    plt.plot(range(10, len(losses)), losses[10:])
+    print('goal:')
+    goal = torch.stack([correct_output(t) for t in input_preembedding])
+    print(goal)
+
+    print('accuracy:',
+          round((torch.sum(init_teams == goal)/torch.sum(torch.ones_like(init_teams))).item()*100, 2),
+          '%')
+    plt.plot(range(len(losses)), losses)
     plt.show()

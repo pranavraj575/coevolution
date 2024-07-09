@@ -6,19 +6,18 @@ class CoevolutionBase:
     general coevolution algorithm
     """
 
-    def __init__(self, populations, num_teams=2):
+    def __init__(self, population_sizes, num_teams=2):
         """
         Args:
-            populations: list of lists of agents
-                usually can just be [[population]]
+            population_sizes: list of number of agents in each population
+                usually can just be a list of one element
                 multiple populations are useful if there are different 'types' of agents
                     in the game that take different inputs/have access to different actions
             num_teams: number of teams in the game, default 2
         """
-        self.populations = populations
+        self.population_sizes = population_sizes
         self.num_teams = num_teams
-        self.Ns = [len(population) for population in self.populations]
-        self.N = sum(self.Ns)
+        self.N = sum(self.population_sizes)
         if self.N%num_teams != 0:
             print("WARNING: number of agents is not divisible by num teams")
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
@@ -27,19 +26,19 @@ class CoevolutionBase:
         self.captian_fitness = np.zeros(self.N)
         self.captian_info = [dict() for _ in range(self.N)]
 
-    def index_to_agent(self, i):
+    def index_to_pop_index(self, i):
         """
-        returns the agent specified by i
+        returns the index of agent specified by i
         Args:
             i: index
         Returns:
-            member of self.populations that corresponds to i
+            population index (which population), index in population
         """
         pop_idx = 0
         while i - self.Ns[pop_idx] >= 0:
             i -= self.Ns[pop_idx]
             pop_idx += 1
-        return self.populations[pop_idx][i]
+        return pop_idx,i
 
     def create_random_captians(self, N=None):
         """
@@ -80,18 +79,18 @@ class CoevolutionBase:
         """
         raise NotImplementedError
 
-    def train_and_update_results(self, choice):
+    def train_and_update_results(self, captian_choices):
         """
         takes a choice of team captians and trains them in RL environment
         updates variables to reflect result of game(s)
         Args:
-            choice: tuple of self.num_teams indices
+            captian_choices: tuple of self.num_teams indices
         """
         raise NotImplementedError
 
 
 if __name__ == '__main__':
-    test = CoevolutionBase(populations=[list(range(100))], num_teams=6)
+    test = CoevolutionBase(population_sizes=[list(range(100))], num_teams=6)
     N = test.N
     matching = list(test.create_random_captians(N=N))
     tracker = np.zeros(N)
