@@ -122,7 +122,7 @@ def dist_from_trainer(trainer: DiscreteInputTrainer,
 
 if __name__ == '__main__':
     import os, sys
-    from tests.rps_basic import plot_dist_evolution, loss_plot
+    from tests.rps_basic_teams import plot_dist_evolution, loss_plot
     import time
 
     torch.random.manual_seed(69)
