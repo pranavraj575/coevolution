@@ -25,7 +25,7 @@ if __name__ == '__main__':
     # print(outcomes((torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]]))))[-1])
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
-    plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps')
+    plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps_teams')
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)
     trainer = DiscreteInputTrainer(num_agents=3,
@@ -37,7 +37,7 @@ if __name__ == '__main__':
                                    )
     N = 100
     capacity = int(1e5)
-    buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps"), capacity=capacity)
+    buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps_teams"), capacity=capacity)
 
     minibatch = 64
     init_dists = []

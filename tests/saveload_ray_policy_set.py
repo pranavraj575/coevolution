@@ -1,7 +1,6 @@
 import pickle
 import os, sys
-import time
-
+import time,copy
 import numpy as np
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.dqn import DQNConfig, DQN
@@ -13,34 +12,33 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.examples.envs.classes.multi_agent import MultiAgentCartPole
 
 # Set up a multi-agent Algorithm, training two policies independently.
-dummy_policies = ['dummy1', 'dummy2']
-policies = dummy_policies + ['pol' + str(i) for i in range(10)]
+# dummy_policies = ['dummy1', 'dummy2']
+policies = ['pol' + str(i) for i in range(10)]
 
-policies_to_use = [('pol3', True), ('pol3', False)]
+policies_to_use = [('pol3', True), ('pol0', False)]
 # which to put in for agents 0 and 1, and whether to train them
 # if False, the policy will be used, it will be fixed, and the replay buffer will not be updated
 
 reset_replay = []
 # reset_replay = ['pol0']
+freeze_replay = [pol for pol, t in policies_to_use if not t]
 reset_all = False
 
 # only train the correct policies
 policies_to_train = [thing for thing, b in policies_to_use if b]
+policies_to_not_trein=[thing for thing, b in policies_to_use if not b]
 
 
 def pol_map(agent_id, episode, worker, **kw):
     # policies_to_use[id] is the correct policy
     # however, if we are holding any fixed, we map it to the appropriate dummy
     thing, to_train = policies_to_use[agent_id]
-    if to_train:
-        return thing
-    else:
-        return dummy_policies[agent_id]
+    return thing
 
 
 DIR = os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))
 
-save_dir = os.path.join(DIR, '..', 'data', 'TEST')
+save_dir = os.path.join(DIR, '..', 'data', 'TEST_single')
 if not os.path.exists(save_dir) or reset_all:
     my_ma_config = DQNConfig().multi_agent(
         # Which policies should RLlib create and train?
@@ -78,33 +76,42 @@ else:
                                            )
 
 # if we are holding any agents untrainable, set the dummy weights to their weights
-wait_dick = my_ma_algo.get_weights()
-my_ma_algo.set_weights(
-    {
-        d_key: wait_dick[r_key]
-        for d_key, (r_key, to_train) in zip(dummy_policies, policies_to_use) if not to_train
-    }
-)
 
 # if we want to reset the buffers of various policies, delete them like this
+all_buffers = my_ma_algo.local_replay_buffer.replay_buffers
 for key in reset_replay:
-    all_buffers = my_ma_algo.local_replay_buffer.replay_buffers
     if key in all_buffers:
         all_buffers.pop(key)
 
-my_ma_algo.train()
+temp_replay = dict()
+for key in freeze_replay:
+    if key in all_buffers:
+        temp_replay[key] = all_buffers.pop(key)
 
-for dumb_policy in dummy_policies:
-    print('making sure',dumb_policy,'is untrained')
-    for key in wait_dick[dumb_policy]:
-        assert np.all(wait_dick[dumb_policy][key]==my_ma_algo.get_weights()[dumb_policy][key])
 
+local_waits = copy.deepcopy(my_ma_algo.get_weights())
+
+for ep in range(1):
+    print('training ep',ep)
+    result = my_ma_algo.train()
+
+for pol in policies_to_not_trein:
+    print('making sure', pol, 'is untrained')
+    for key in local_waits[pol]:
+        assert np.all(local_waits[pol][key] == my_ma_algo.get_weights()[pol][key])
+
+
+for key in freeze_replay:
+    if key in temp_replay:
+        my_ma_algo.local_replay_buffer.replay_buffers[key] = temp_replay.pop(key)
+    else:
+        my_ma_algo.local_replay_buffer.replay_buffers.pop(key)
 
 # we do not need to save dummy replay buffers, unsure why it even does this
-for key in dummy_policies:
-    all_buffers = my_ma_algo.local_replay_buffer.replay_buffers
-    if key in all_buffers:
-        all_buffers.pop(key)
+# for key in dummy_policies:
+#    all_buffers = my_ma_algo.local_replay_buffer.replay_buffers
+#    if key in all_buffers:
+#        all_buffers.pop(key)
 
 ma_checkpoint_dir = my_ma_algo.save(save_dir).checkpoint.path
 
@@ -128,3 +135,5 @@ for pol_to_check in policies:
         print('\tnum_entries:', thing['num_entries'])
     else:
         print(pol_to_check, 'untrained')
+
+print(result['env_runners']['policy_reward_mean'])
