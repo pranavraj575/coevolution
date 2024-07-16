@@ -91,6 +91,14 @@ class WorkerDQN(DQN):
             # Sample a new noise matrix
             self.actor.reset_noise(self.env.num_envs)
 
+        actions, buffer_actions = self.get_action(obs=conform_shape(obs, self.observation_space),
+                                                  learning_starts=learning_starts,
+                                                  action_noise=action_noise,
+                                                  )
+        return actions, buffer_actions
+
+    def get_action(self, obs, learning_starts=0, action_noise=None):
+
         self._last_obs = conform_shape(obs, self.observation_space)
         # Select action randomly or according to policy
         actions, buffer_actions = self._sample_action(learning_starts, action_noise, self.env.num_envs)
@@ -164,16 +172,36 @@ class WorkerDQN(DQN):
 
 
 class ParallelDQN:
-    def __init__(self, policy, parallel_env: ParallelEnv, workers=None, **worker_kwargs):
+    def __init__(self, policy, parallel_env: ParallelEnv, workers=None, worker_info=None, **worker_kwargs):
+        """
+        Args:
+            policy: Type of policy to use for stableBaselines DQN
+            parallel_env: Pettingzoo parallel env to use
+            workers: dict of agentid -> worker
+                trainable workers must have initialize_learn,middle_of_rollout_select,
+                    get_action,end_rollout_part,finished_with_rollout
+                untrainable must just have get_action
+            worker_info: dict of agentid -> (worker info dict)
+                worker info dict contains
+                    train: bool (whether or not to treain worker)
+            **worker_kwargs:
+        """
         if workers is None:
             workers = dict()
+        if worker_info is None:
+            worker_info = dict()
         for agent in parallel_env.agents:
             if agent not in workers:
                 dumenv = DumEnv(action_space=parallel_env.action_space(agent=agent),
                                 obs_space=parallel_env.observation_space(agent=agent),
                                 )
                 workers[agent] = WorkerDQN(policy=policy, env=dumenv, **worker_kwargs)
+            if agent not in worker_info:
+                worker_info[agent] = {
+                    'train': True
+                }
         self.workers = workers
+        self.worker_info = worker_info
         self.env = parallel_env
 
     def learn(self,
@@ -188,6 +216,24 @@ class ParallelDQN:
                                            )
             total_timesteps -= timesteps
 
+    def _get_worker_iter(self, trainable):
+        """
+        Args:
+            trainable: if true, returns trainable workers
+                else, untrainable workers
+        Returns: iterable of trainable or untrainable workers
+        """
+        for agent in self.workers:
+            is_trainable = self.worker_info[agent].get('train', True)
+            if is_trainable == trainable:  # either both true or both false
+                yield agent
+
+    def get_trainable_workers(self):
+        return self._get_worker_iter(trainable=True)
+
+    def get_untrainable_workers(self):
+        return self._get_worker_iter(trainable=False)
+
     def learn_episode(self,
                       total_timesteps,
                       callbacks=None,
@@ -197,7 +243,7 @@ class ParallelDQN:
             callbacks = {agent: None for agent in self.workers}
         observations, infos = self.env.reset()
         local_callbacks = dict()
-        for agent in self.workers:
+        for agent in self.get_trainable_workers():
             ag_total_timesteps, ag_callback = self.workers[agent].initialize_learn(
                 total_timesteps=total_timesteps,
                 callback=callbacks[agent],
@@ -208,7 +254,7 @@ class ParallelDQN:
         while not term:
             actions = dict()
             buffer_actions = dict()
-            for agent in self.workers:
+            for agent in self.get_trainable_workers():
                 act, buff_act = self.workers[agent].middle_of_rollout_select(
                     observations[agent],
                     action_noise=self.workers[agent].action_noise,
@@ -219,10 +265,15 @@ class ParallelDQN:
                 else:
                     actions[agent] = act
                 buffer_actions[agent] = buff_act
+            for agent in self.get_untrainable_workers():
+                act = self.workers[agent].get_action(
+                    obs=observations[agent]
+                )
+                actions[agent] = act
             observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
-            for agent in self.workers:
+            for agent in self.get_trainable_workers():
                 self.workers[agent].end_rollout_part(new_obs=observations[agent],
                                                      reward=rewards[agent],
                                                      termination=termination,
@@ -237,12 +288,31 @@ class ParallelDQN:
                                                      )
             term = truncation or termination
         num_collected_steps = 0
-        for agent in self.workers:
+        for agent in self.get_trainable_workers():
             self.workers[agent].finished_with_rollout(callback=local_callbacks[agent], )
             num_collected_steps = self.workers[agent].num_collected_steps
 
         return num_collected_steps
 
+
+env = rps_v2.parallel_env(render_mode="human")
+observations, infos = env.reset()
+
+class always_0:
+    def get_action(self,*args,**kwargs):
+        return 0
+
+thingy = ParallelDQN(policy=MlpPolicy,
+                     parallel_env=env,
+                     buffer_size=100,
+                     worker_info={'player_1':{'train':False}},
+                     workers={'player_1':always_0()},
+                     learning_starts=10
+                     )
+thingy.learn(total_timesteps=100)
+
+
+quit()
 
 parallel_env = pistonball_v6.parallel_env(render_mode="human", continuous=False, n_pistons=6)
 observations, infos = parallel_env.reset(seed=42)
