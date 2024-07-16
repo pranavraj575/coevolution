@@ -271,6 +271,7 @@ class ParallelDQN:
                 )
                 actions[agent] = act
             observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
+            print(rewards['player_0'])
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
             for agent in self.get_trainable_workers():
@@ -295,22 +296,37 @@ class ParallelDQN:
         return num_collected_steps
 
 
-env = rps_v2.parallel_env(render_mode="human")
+env = rps_v2.parallel_env()#render_mode="human")
 observations, infos = env.reset()
 
+
 class always_0:
-    def get_action(self,*args,**kwargs):
+    def get_action(self, *args, **kwargs):
         return 0
+
+
+class easy_pred:
+    def __init__(self, p=.1):
+        self.choice = 0
+        self.p = p
+
+    def get_action(self, *args, **kwargs):
+        if np.random.random() < self.p:
+            self.choice = np.random.randint(3)
+
+        return self.choice
+
 
 thingy = ParallelDQN(policy=MlpPolicy,
                      parallel_env=env,
-                     buffer_size=100,
-                     worker_info={'player_1':{'train':False}},
-                     workers={'player_1':always_0()},
-                     learning_starts=10
+                     buffer_size=1000,
+                     worker_info={'player_1': {'train': False}},
+                     workers={'player_1': easy_pred()},
+                     learning_starts=10,
+                     gamma=0.,
                      )
-thingy.learn(total_timesteps=100)
 
+thingy.learn(total_timesteps=10000)
 
 quit()
 
@@ -318,7 +334,7 @@ parallel_env = pistonball_v6.parallel_env(render_mode="human", continuous=False,
 observations, infos = parallel_env.reset(seed=42)
 
 thingy = ParallelDQN(policy=CnnPolicy, parallel_env=parallel_env, buffer_size=1000)
-thingy.learn(total_timesteps=1000)
+thingy.learn(total_timesteps=10000)
 
 quit()
 
