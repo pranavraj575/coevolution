@@ -10,10 +10,9 @@ from stable_baselines3.common.off_policy_algorithm import should_collect_more_st
 from stable_baselines3.common.vec_env import VecEnv
 
 from parallel_algs.dqn.DQN import WorkerDQN
-from parallel_algs.off_policy import ParallelOffPolicyAlg
+from parallel_algs.parallel_alg import ParallelAlgorithm
 
-
-env = rps_v2.parallel_env()#render_mode="human")
+env = rps_v2.parallel_env()  # render_mode="human")
 observations, infos = env.reset()
 
 
@@ -34,14 +33,15 @@ class easy_pred:
         return self.choice
 
 
-thingy = ParallelOffPolicyAlg(policy=MlpPolicy,
-                              parallel_env=env,
-                              buffer_size=1000,
-                              worker_info={'player_1': {'train': False}},
-                              workers={'player_1': easy_pred()},
-                              learning_starts=10,
-                              gamma=0.,
-                              )
+thingy = ParallelAlgorithm(policy=MlpPolicy,
+                           parallel_env=env,
+                           DefaultWorkerClass=WorkerDQN,
+                           buffer_size=1000,
+                           worker_info={'player_1': {'train': False}},
+                           workers={'player_1': easy_pred()},
+                           learning_starts=10,
+                           gamma=0.,
+                           )
 
 thingy.learn(total_timesteps=10000)
 
