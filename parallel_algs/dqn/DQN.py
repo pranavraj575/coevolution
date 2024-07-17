@@ -1,11 +1,8 @@
-import numpy as np
-
 from stable_baselines3.dqn import DQN
-from stable_baselines3.common.type_aliases import TrainFreq
-from parallel_algs.common import conform_shape
 from parallel_algs.off_policy import OffPolicy
 
-class WorkerDQN(DQN,OffPolicy):
+
+class WorkerDQN(DQN, OffPolicy):
     """
     meant to work inside a parallel DQN
     specifially broke the .learn() and .collect_rollout() methods
@@ -14,4 +11,3 @@ class WorkerDQN(DQN,OffPolicy):
 
     def __init__(self, policy, env, *args, **kwargs):
         super().__init__(policy, env, *args, **kwargs)
-
