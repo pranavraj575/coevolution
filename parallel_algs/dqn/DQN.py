@@ -1,13 +1,9 @@
 import numpy as np
 
-import gymnasium
-from gymnasium import spaces
-
-from pettingzoo import ParallelEnv
 
 from stable_baselines3.dqn import DQN
-from stable_baselines3.common.type_aliases import GymEnv, RolloutReturn, TrainFreq, TrainFrequencyUnit
-from parallel_algs.common import DumEnv, conform_shape
+from stable_baselines3.common.type_aliases import TrainFreq
+from parallel_algs.common import  conform_shape
 
 
 class WorkerDQN(DQN):
@@ -20,14 +16,17 @@ class WorkerDQN(DQN):
     def __init__(self, policy, env, *args, **kwargs):
         super().__init__(policy, env, *args, **kwargs)
 
-    def initialize_learn(self,
-                         callback,
-                         total_timesteps,
-                         train_freq: TrainFreq,
-                         tb_log_name: str = "run",
-                         reset_num_timesteps: bool = False,
-                         progress_bar: bool = False,
-                         ):
+    def init_learn(self,
+                   callback,
+                   total_timesteps,
+                   train_freq: TrainFreq = None,
+                   tb_log_name: str = "run",
+                   reset_num_timesteps: bool = False,
+                   progress_bar: bool = False,
+                   log_interval=4,
+                   ):
+        if train_freq is None:
+            train_freq = self.train_freq
 
         total_timesteps, callback = self._setup_learn(
             total_timesteps,
@@ -42,6 +41,17 @@ class WorkerDQN(DQN):
         assert self.env is not None, "You must set the environment before calling learn()"
         assert isinstance(self.train_freq, TrainFreq)  # check done in _setup_learn()
 
+        init_learn_info = {'callback': callback,
+                           'log_interval': log_interval,
+                           }
+        return init_learn_info
+
+    def init_rollout(self,
+                     init_learn_info
+                     ):
+        train_freq = self.train_freq
+        callback = init_learn_info.get('callback')
+
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
 
@@ -53,44 +63,51 @@ class WorkerDQN(DQN):
             self.actor.reset_noise(self.env.num_envs)
 
         callback.on_rollout_start()
-        return total_timesteps, callback
+        return None
 
-    def middle_of_rollout_select(self,
-                                 obs,
-                                 action_noise,
-                                 learning_starts,
-                                 ):
+    def rollout_1(self,
+                  init_learn_info,
+                  init_rollout_info,
+                  ):
         # while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
         if self.use_sde and self.sde_sample_freq > 0 and self.num_collected_steps%self.sde_sample_freq == 0:
             # Sample a new noise matrix
             self.actor.reset_noise(self.env.num_envs)
+        return None
 
-        actions, buffer_actions = self.get_action(obs=conform_shape(obs, self.observation_space),
-                                                  learning_starts=learning_starts,
-                                                  action_noise=action_noise,
-                                                  )
-        return actions, buffer_actions
+    def rollout_2(self,
+                  obs,
+                  init_learn_info,
+                  init_rollout_info,
+                  rollout_1_info,
+                  ):
+        action_noise = self.action_noise
+        learning_starts = self.learning_starts
+        actions, middle_info = self.get_action(obs=conform_shape(obs, self.observation_space),
+                                               learning_starts=learning_starts,
+                                               action_noise=action_noise,
+                                               )
+        return actions, middle_info
 
-    def get_action(self, obs, learning_starts=0, action_noise=None):
+    def rollout_3(self,
+                  new_obs,
+                  reward,
+                  termination,
+                  truncation,
+                  info,
+                  init_learn_info,
+                  init_rollout_info,
+                  rollout_1_info,
+                  rollout_2_info,
+                  replay_buffer=None,
+                  ):
+        buffer_action = rollout_2_info
+        callback = init_learn_info.get('callback')
+        log_interval = init_learn_info.get('log_interval', None)
+        action_noise = self.action_noise
+        if replay_buffer is None:
+            replay_buffer = self.replay_buffer
 
-        self._last_obs = conform_shape(obs, self.observation_space)
-        # Select action randomly or according to policy
-        actions, buffer_actions = self._sample_action(learning_starts, action_noise, self.env.num_envs)
-        return actions, buffer_actions
-
-    def end_rollout_part(self,
-                         new_obs,
-                         reward,
-                         termination,
-                         truncation,
-                         info,
-                         callback,
-                         replay_buffer,
-                         buffer_actions,
-                         action_noise,
-                         learning_starts,
-                         log_interval,
-                         ):
         self.num_timesteps += self.env.num_envs
         self.num_collected_steps += 1
 
@@ -106,7 +123,7 @@ class WorkerDQN(DQN):
 
         # Store data in replay buffer (normalized action and unnormalized observation)
         new_obs = conform_shape(new_obs, self.observation_space)
-        self._store_transition(replay_buffer, buffer_actions, new_obs, reward, dones,
+        self._store_transition(replay_buffer, buffer_action, new_obs, reward, dones,
                                [info])  # type: ignore[arg-type]
 
         self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps)
@@ -130,9 +147,24 @@ class WorkerDQN(DQN):
                 # Log training infos
                 if log_interval is not None and self._episode_num%log_interval == 0:
                     self._dump_logs()
-        callback.on_rollout_end()
 
-    def finished_with_rollout(self, callback):
+    def get_action(self, obs, learning_starts=0, action_noise=None):
+
+        self._last_obs = conform_shape(obs, self.observation_space)
+        # Select action randomly or according to policy
+        actions, buffer_actions = self._sample_action(learning_starts, action_noise, self.env.num_envs)
+        return actions, buffer_actions
+
+    def end_rollout(self,
+                    init_learn_info,
+                    init_rollout_info,
+                    ):
+        callback = init_learn_info.get('callback')
+        callback.on_rollout_end()
+        return None
+
+    def finish_learn(self, init_learn_info, end_rollout_info):
+        callback = init_learn_info.get('callback')
         episode_timesteps = self.num_collected_steps*self.env.num_envs
         if self.num_timesteps > 0 and self.num_timesteps > self.learning_starts:
             # If no `gradient_steps` is specified,
@@ -145,126 +177,3 @@ class WorkerDQN(DQN):
         callback.on_training_end()
 
 
-class ParallelDQN:
-    def __init__(self, policy, parallel_env: ParallelEnv, workers=None, worker_info=None, **worker_kwargs):
-        """
-        Args:
-            policy: Type of policy to use for stableBaselines DQN
-            parallel_env: Pettingzoo parallel env to use
-            workers: dict of agentid -> worker
-                trainable workers must have initialize_learn,middle_of_rollout_select,
-                    get_action,end_rollout_part,finished_with_rollout
-                untrainable must just have get_action
-            worker_info: dict of agentid -> (worker info dict)
-                worker info dict contains
-                    train: bool (whether or not to treain worker)
-            **worker_kwargs:
-        """
-        if workers is None:
-            workers = dict()
-        if worker_info is None:
-            worker_info = dict()
-        for agent in parallel_env.agents:
-            if agent not in workers:
-                dumenv = DumEnv(action_space=parallel_env.action_space(agent=agent),
-                                obs_space=parallel_env.observation_space(agent=agent),
-                                )
-                workers[agent] = WorkerDQN(policy=policy, env=dumenv, **worker_kwargs)
-            if agent not in worker_info:
-                worker_info[agent] = {
-                    'train': True
-                }
-        self.workers = workers
-        self.worker_info = worker_info
-        self.env = parallel_env
-
-    def learn(self,
-              total_timesteps,
-              callbacks=None,
-              log_interval=4,
-              ):
-        while total_timesteps > 0:
-            timesteps = self.learn_episode(total_timesteps=total_timesteps,
-                                           callbacks=callbacks,
-                                           log_interval=log_interval,
-                                           )
-            total_timesteps -= timesteps
-
-    def _get_worker_iter(self, trainable):
-        """
-        Args:
-            trainable: if true, returns trainable workers
-                else, untrainable workers
-        Returns: iterable of trainable or untrainable workers
-        """
-        for agent in self.workers:
-            is_trainable = self.worker_info[agent].get('train', True)
-            if is_trainable == trainable:  # either both true or both false
-                yield agent
-
-    def get_trainable_workers(self):
-        return self._get_worker_iter(trainable=True)
-
-    def get_untrainable_workers(self):
-        return self._get_worker_iter(trainable=False)
-
-    def learn_episode(self,
-                      total_timesteps,
-                      callbacks=None,
-                      log_interval=4,
-                      ):
-        if callbacks is None:
-            callbacks = {agent: None for agent in self.workers}
-        observations, infos = self.env.reset()
-        local_callbacks = dict()
-        for agent in self.get_trainable_workers():
-            ag_total_timesteps, ag_callback = self.workers[agent].initialize_learn(
-                total_timesteps=total_timesteps,
-                callback=callbacks[agent],
-                train_freq=self.workers[agent].train_freq,
-            )
-            local_callbacks[agent] = ag_callback
-        term = False
-        while not term:
-            actions = dict()
-            buffer_actions = dict()
-            for agent in self.get_trainable_workers():
-                act, buff_act = self.workers[agent].middle_of_rollout_select(
-                    observations[agent],
-                    action_noise=self.workers[agent].action_noise,
-                    learning_starts=self.workers[agent].learning_starts,
-                )
-                if isinstance(self.workers[agent].action_space, spaces.Discrete) and not isinstance(act, int):
-                    actions[agent] = act.reshape(1)[0]
-                else:
-                    actions[agent] = act
-                buffer_actions[agent] = buff_act
-            for agent in self.get_untrainable_workers():
-                act = self.workers[agent].get_action(
-                    obs=observations[agent]
-                )
-                actions[agent] = act
-            observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
-            print(rewards['player_0'])
-            truncation = any([t for (_, t) in truncations.items()])
-            termination = any([t for (_, t) in terminations.items()])
-            for agent in self.get_trainable_workers():
-                self.workers[agent].end_rollout_part(new_obs=observations[agent],
-                                                     reward=rewards[agent],
-                                                     termination=termination,
-                                                     truncation=truncation,
-                                                     info=infos[agent],
-                                                     callback=local_callbacks[agent],
-                                                     replay_buffer=self.workers[agent].replay_buffer,
-                                                     buffer_actions=buffer_actions[agent],
-                                                     action_noise=self.workers[agent].action_noise,
-                                                     learning_starts=self.workers[agent].learning_starts,
-                                                     log_interval=log_interval,
-                                                     )
-            term = truncation or termination
-        num_collected_steps = 0
-        for agent in self.get_trainable_workers():
-            self.workers[agent].finished_with_rollout(callback=local_callbacks[agent], )
-            num_collected_steps = self.workers[agent].num_collected_steps
-
-        return num_collected_steps

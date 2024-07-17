@@ -9,7 +9,8 @@ from stable_baselines3.common.type_aliases import GymEnv, RolloutReturn, TrainFr
 from stable_baselines3.common.off_policy_algorithm import should_collect_more_steps
 from stable_baselines3.common.vec_env import VecEnv
 
-from parallel_algs.dqn.DQN import WorkerDQN,ParallelDQN
+from parallel_algs.dqn.DQN import WorkerDQN
+from parallel_algs.off_policy import ParallelOffPolicyAlg
 
 
 env = rps_v2.parallel_env()#render_mode="human")
@@ -22,7 +23,7 @@ class always_0:
 
 
 class easy_pred:
-    def __init__(self, p=.1):
+    def __init__(self, p=.01):
         self.choice = 0
         self.p = p
 
@@ -33,14 +34,14 @@ class easy_pred:
         return self.choice
 
 
-thingy = ParallelDQN(policy=MlpPolicy,
-                     parallel_env=env,
-                     buffer_size=1000,
-                     worker_info={'player_1': {'train': False}},
-                     workers={'player_1': easy_pred()},
-                     learning_starts=10,
-                     gamma=0.,
-                     )
+thingy = ParallelOffPolicyAlg(policy=MlpPolicy,
+                              parallel_env=env,
+                              buffer_size=1000,
+                              worker_info={'player_1': {'train': False}},
+                              workers={'player_1': easy_pred()},
+                              learning_starts=10,
+                              gamma=0.,
+                              )
 
 thingy.learn(total_timesteps=10000)
 
