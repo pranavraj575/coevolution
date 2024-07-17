@@ -3,16 +3,16 @@ from gymnasium import spaces
 from pettingzoo import ParallelEnv
 
 from parallel_algs.common import DumEnv, conform_act_shape
-from parallel_algs.dqn.DQN import WorkerDQN
+from parallel_algs.ppo.PPO import WorkerPPO
 
 
-class ParallelOffPolicyAlg:
+class ParallelOnPolicyAlg:
     def __init__(self,
                  policy,
                  parallel_env: ParallelEnv,
                  workers=None,
                  worker_info=None,
-                 DefaultWorkerClass=WorkerDQN,
+                 DefaultWorkerClass=WorkerPPO,
                  **worker_kwargs
                  ):
         """
@@ -140,7 +140,6 @@ class ParallelOffPolicyAlg:
             # rollout 3 (end of loop)
             for agent in self.get_trainable_workers():
                 self.workers[agent].rollout_3(
-                    action=actions[agent],
                     new_obs=observations[agent],
                     reward=rewards[agent],
                     termination=termination,

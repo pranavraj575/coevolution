@@ -83,13 +83,14 @@ class WorkerDQN(DQN):
                   ):
         action_noise = self.action_noise
         learning_starts = self.learning_starts
-        actions, middle_info = self.get_action(obs=conform_shape(obs, self.observation_space),
+        actions, rollout_2_info = self.get_action(obs=conform_shape(obs, self.observation_space),
                                                learning_starts=learning_starts,
                                                action_noise=action_noise,
                                                )
-        return actions, middle_info
+        return actions, rollout_2_info
 
     def rollout_3(self,
+                  action,
                   new_obs,
                   reward,
                   termination,
