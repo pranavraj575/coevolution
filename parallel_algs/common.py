@@ -7,6 +7,8 @@ def conform_shape(obs, obs_space):
     if obs_space.shape != obs.shape:
         if obs_space.shape[1:] == obs.shape[:2] and obs_space.shape[0] == obs.shape[2]:
             return np.transpose(obs, (2, 0, 1))
+    if isinstance(obs_space, spaces.Discrete) and not isinstance(obs, int):
+        obs= np.array([obs])
     return obs
 
 

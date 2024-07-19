@@ -139,6 +139,9 @@ class OffPolicy:
                 # Log training infos
                 if log_interval is not None and self._episode_num%log_interval == 0:
                     self._dump_logs()
+        # if not done, then return true for continuing rollout
+        # else, return false for ending rollout
+        return not np.any(dones)
 
     def get_action(self, obs, learning_starts=0, action_noise=None):
 

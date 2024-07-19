@@ -80,7 +80,7 @@ class ParallelAlgorithm:
                       ):
         if callbacks is None:
             callbacks = {agent: None for agent in self.workers}
-        observations, infos = self.env.reset()
+        #observations, infos = self.env.reset()
 
         # init learn
         local_init_learn_info = dict()
@@ -99,8 +99,12 @@ class ParallelAlgorithm:
             )
             local_init_rollout_info[agent] = init_rollout_info
 
-        term = False
-        while not term:
+        continue_rollout = True
+        term=True
+        while continue_rollout:
+            if term:
+                observations, infos = self.env.reset()
+
             # rollout 1 (start of loop)
             local_rollout_1_info = dict()
             for agent in self.get_trainable_workers():
@@ -130,13 +134,16 @@ class ParallelAlgorithm:
                     obs=observations[agent]
                 )
                 actions[agent] = act
+
             observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
-            print(rewards['player_0'])
+            term=termination or truncation
+            print(infos, termination, truncation)
+            continue_rollout = False
             # rollout 3 (end of loop)
             for agent in self.get_trainable_workers():
-                self.workers[agent].rollout_3(
+                local_continue_rollout = self.workers[agent].rollout_3(
                     action=actions[agent],
                     new_obs=observations[agent],
                     reward=rewards[agent],
@@ -147,10 +154,11 @@ class ParallelAlgorithm:
                     init_rollout_info=local_init_rollout_info[agent],
                     rollout_1_info=local_rollout_1_info[agent],
                     rollout_2_info=local_rollout_2_info[agent],
-                    replay_buffer=self.workers[agent].replay_buffer,
+                    # replay_buffer=self.workers[agent].replay_buffer,
                 )
+                continue_rollout = continue_rollout or local_continue_rollout
 
-            term = truncation or termination
+
         # end rollout
         local_end_rollout_info = dict()
         for agent in self.get_trainable_workers():

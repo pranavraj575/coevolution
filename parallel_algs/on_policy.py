@@ -44,7 +44,7 @@ class OnPolicy:
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
 
-        self.n_steps = 0
+        self.current_rollout_steps = 0
         self.rollout_buffer.reset()
         if self.use_sde:
             self.policy.reset_noise(self.env.num_envs)
@@ -57,7 +57,7 @@ class OnPolicy:
                   init_rollout_info,
                   ):
         # while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
-        if self.use_sde and self.sde_sample_freq > 0 and self.n_steps%self.sde_sample_freq == 0:
+        if self.use_sde and self.sde_sample_freq > 0 and self.current_rollout_steps%self.sde_sample_freq == 0:
             # Sample a new noise matrix
             self.policy.reset_noise(self.env.num_envs)
         return None
@@ -120,7 +120,7 @@ class OnPolicy:
         # Retrieve reward and episode length if using Monitor wrapper
         self._update_info_buffer(info, dones=dones)
 
-        self.n_steps += 1
+        self.current_rollout_steps += 1
 
         if isinstance(self.action_space, spaces.Discrete):
             # Reshape in case of discrete action
@@ -129,16 +129,16 @@ class OnPolicy:
         new_obs = conform_shape(new_obs, self.observation_space)
         # Handle timeout by bootstraping with value function
         # see GitHub issue #633
-        for idx, done in enumerate(dones):
-            if (
-                    done
-                    and info[idx].get("terminal_observation") is not None
-                    and info[idx].get("TimeLimit.truncated", False)
-            ):
-                terminal_obs = self.policy.obs_to_tensor(info[idx]["terminal_observation"])[0]
-                with torch.no_grad():
-                    terminal_value = self.policy.predict_values(terminal_obs)[0]  # type: ignore[arg-type]
-                reward[idx] += self.gamma*terminal_value
+
+        if (
+                dones[0]
+                and info.get("terminal_observation") is not None
+                and info.get("TimeLimit.truncated", False)
+        ):
+            terminal_obs = self.policy.obs_to_tensor(info["terminal_observation"])[0]
+            with torch.no_grad():
+                terminal_value = self.policy.predict_values(terminal_obs)[0]  # type: ignore[arg-type]
+            reward += self.gamma*terminal_value
 
         rollout_buffer.add(
             self._last_obs,  # type: ignore[arg-type]
@@ -150,6 +150,8 @@ class OnPolicy:
         )
         self._last_obs = new_obs  # type: ignore[assignment]
         self._last_episode_starts = dones
+        # if current rollout size is less than max rollout size, continue rollout
+        return self.current_rollout_steps < self.n_steps
 
     def get_action(self, obs):
 
@@ -174,7 +176,7 @@ class OnPolicy:
 
         with torch.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))  # type: ignore[arg-type]
+            values = self.policy.predict_values(obs_as_tensor(self._last_obs, self.device))  # type: ignore[arg-type]
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 

@@ -5,11 +5,10 @@ from pettingzoo import ParallelEnv
 from pettingzoo.butterfly import pistonball_v6
 
 from stable_baselines3.dqn.policies import CnnPolicy, MlpPolicy
-from stable_baselines3.common.type_aliases import GymEnv, RolloutReturn, TrainFreq, TrainFrequencyUnit
-from stable_baselines3.common.off_policy_algorithm import should_collect_more_steps
-from stable_baselines3.common.vec_env import VecEnv
+from stable_baselines3.ppo.policies import MlpPolicy as PPOMLPolicy
 
 from parallel_algs.dqn.DQN import WorkerDQN
+from parallel_algs.ppo.PPO import WorkerPPO
 from parallel_algs.parallel_alg import ParallelAlgorithm
 
 env = rps_v2.parallel_env()  # render_mode="human")
@@ -33,13 +32,13 @@ class easy_pred:
         return self.choice
 
 
-thingy = ParallelAlgorithm(policy=MlpPolicy,
+thingy = ParallelAlgorithm(policy=PPOMLPolicy,
                            parallel_env=env,
-                           DefaultWorkerClass=WorkerDQN,
-                           buffer_size=1000,
+                           DefaultWorkerClass=WorkerPPO,
+                           #buffer_size=1000,
                            worker_info={'player_1': {'train': False}},
                            workers={'player_1': easy_pred()},
-                           learning_starts=10,
+                           #learning_starts=10,
                            gamma=0.,
                            )
 
