@@ -4,11 +4,9 @@ from pettingzoo.classic import rps_v2
 from pettingzoo import ParallelEnv
 from pettingzoo.butterfly import pistonball_v6
 
-from stable_baselines3.dqn.policies import CnnPolicy, MlpPolicy
-from stable_baselines3.ppo.policies import MlpPolicy as PPOMLPolicy
+from stable_baselines3.ppo.policies import MlpPolicy
+from parallel_algs.ppo.PPO import WorkerPPO as Worker
 
-from parallel_algs.dqn.DQN import WorkerDQN
-from parallel_algs.ppo.PPO import WorkerPPO
 from parallel_algs.parallel_alg import ParallelAlgorithm
 
 env = rps_v2.parallel_env()  # render_mode="human")
@@ -32,16 +30,16 @@ class easy_pred:
         return self.choice
 
 
-thingy = ParallelAlgorithm(policy=PPOMLPolicy,
+thingy = ParallelAlgorithm(policy=MlpPolicy,
                            parallel_env=env,
-                           DefaultWorkerClass=WorkerPPO,
-                           #buffer_size=1000,
+                           DefaultWorkerClass=Worker,
+                           # buffer_size=1000,
                            worker_info={'player_1': {'train': False}},
                            workers={'player_1': easy_pred()},
-                           #learning_starts=10,
+                           # learning_starts=10,
                            gamma=0.,
-                           n_steps=200,
-                           batch_size=100,
+                           # n_steps=200,
+                           # batch_size=100,
                            )
 
 thingy.learn(total_timesteps=10000)
