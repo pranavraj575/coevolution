@@ -40,6 +40,8 @@ thingy = ParallelAlgorithm(policy=PPOMLPolicy,
                            workers={'player_1': easy_pred()},
                            #learning_starts=10,
                            gamma=0.,
+                           n_steps=200,
+                           batch_size=100,
                            )
 
 thingy.learn(total_timesteps=10000)

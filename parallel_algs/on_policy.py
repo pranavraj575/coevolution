@@ -44,7 +44,7 @@ class OnPolicy:
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
 
-        self.current_rollout_steps = 0
+        self.num_collected_steps = 0
         self.rollout_buffer.reset()
         if self.use_sde:
             self.policy.reset_noise(self.env.num_envs)
@@ -57,7 +57,7 @@ class OnPolicy:
                   init_rollout_info,
                   ):
         # while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
-        if self.use_sde and self.sde_sample_freq > 0 and self.current_rollout_steps%self.sde_sample_freq == 0:
+        if self.use_sde and self.sde_sample_freq > 0 and self.num_collected_steps%self.sde_sample_freq == 0:
             # Sample a new noise matrix
             self.policy.reset_noise(self.env.num_envs)
         return None
@@ -120,7 +120,7 @@ class OnPolicy:
         # Retrieve reward and episode length if using Monitor wrapper
         self._update_info_buffer(info, dones=dones)
 
-        self.current_rollout_steps += 1
+        self.num_collected_steps += 1
 
         if isinstance(self.action_space, spaces.Discrete):
             # Reshape in case of discrete action
@@ -151,7 +151,7 @@ class OnPolicy:
         self._last_obs = new_obs  # type: ignore[assignment]
         self._last_episode_starts = dones
         # if current rollout size is less than max rollout size, continue rollout
-        return self.current_rollout_steps < self.n_steps
+        return self.num_collected_steps < self.n_steps
 
     def get_action(self, obs):
 

@@ -80,7 +80,7 @@ class ParallelAlgorithm:
                       ):
         if callbacks is None:
             callbacks = {agent: None for agent in self.workers}
-        #observations, infos = self.env.reset()
+        # observations, infos = self.env.reset()
 
         # init learn
         local_init_learn_info = dict()
@@ -100,7 +100,7 @@ class ParallelAlgorithm:
             local_init_rollout_info[agent] = init_rollout_info
 
         continue_rollout = True
-        term=True
+        term = True
         while continue_rollout:
             if term:
                 observations, infos = self.env.reset()
@@ -138,8 +138,8 @@ class ParallelAlgorithm:
             observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
-            term=termination or truncation
-            print(infos, termination, truncation)
+
+            term = termination or truncation
             continue_rollout = False
             # rollout 3 (end of loop)
             for agent in self.get_trainable_workers():
@@ -157,7 +157,6 @@ class ParallelAlgorithm:
                     # replay_buffer=self.workers[agent].replay_buffer,
                 )
                 continue_rollout = continue_rollout or local_continue_rollout
-
 
         # end rollout
         local_end_rollout_info = dict()
