@@ -6,9 +6,9 @@ class ParallelAlgorithm:
     def __init__(self,
                  policy,
                  parallel_env: ParallelEnv,
-                 workers,
-                 worker_info,
                  DefaultWorkerClass,
+                 workers=None,
+                 worker_info=None,
                  **worker_kwargs
                  ):
         """
@@ -138,6 +138,7 @@ class ParallelAlgorithm:
             observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
+            print(rewards['player_0'])
 
             term = termination or truncation
             continue_rollout = False

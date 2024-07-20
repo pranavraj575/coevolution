@@ -1,15 +1,14 @@
 import numpy as np
 
-from pettingzoo.classic import rps_v2
 from pettingzoo import ParallelEnv
 from pettingzoo.butterfly import pistonball_v6
 
-from stable_baselines3.ppo.policies import MlpPolicy
+from stable_baselines3.ppo.policies import MlpPolicy, CnnPolicy
 from parallel_algs.ppo.PPO import WorkerPPO as Worker
 
 from parallel_algs.parallel_alg import ParallelAlgorithm
 
-env = rps_v2.parallel_env()  # render_mode="human")
+env = pistonball_v6.parallel_env()  # render_mode="human")
 observations, infos = env.reset()
 
 
@@ -19,7 +18,7 @@ class always_0:
 
 
 class easy_pred:
-    def __init__(self, p=.01):
+    def __init__(self, p=.1):
         self.choice = 0
         self.p = p
 
@@ -29,15 +28,15 @@ class easy_pred:
 
         return self.choice
 
-
-thingy = ParallelAlgorithm(policy=MlpPolicy,
+# TODO: handle image input
+thingy = ParallelAlgorithm(policy=CnnPolicy,
                            parallel_env=env,
                            DefaultWorkerClass=Worker,
                            # buffer_size=1000,
-                           worker_info={'player_1': {'train': False}},
-                           workers={'player_1': easy_pred()},
+                           # worker_info={'player_1': {'train': False}},
+                           # workers={'player_1': easy_pred()},
                            # learning_starts=10,
-                           gamma=0.,
+                           # gamma=0.,
                            # n_steps=200,
                            # batch_size=100,
                            )
@@ -50,7 +49,7 @@ parallel_env = pistonball_v6.parallel_env(render_mode="human", continuous=False,
 observations, infos = parallel_env.reset(seed=42)
 
 thingy = ParallelDQN(policy=CnnPolicy, parallel_env=parallel_env, buffer_size=1000)
-thingy.learn(total_timesteps=10000)
+thingy.learn(total_timesteps=20000)
 
 quit()
 
