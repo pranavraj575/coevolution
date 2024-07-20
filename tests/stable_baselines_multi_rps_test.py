@@ -1,9 +1,6 @@
 import numpy as np
 
 from pettingzoo.classic import rps_v2
-from pettingzoo import ParallelEnv
-from pettingzoo.butterfly import pistonball_v6
-
 from stable_baselines3.ppo.policies import MlpPolicy
 from parallel_algs.ppo.PPO import WorkerPPO as Worker
 
@@ -19,7 +16,7 @@ class always_0:
 
 
 class easy_pred:
-    def __init__(self, p=.1):
+    def __init__(self, p=.01):
         self.choice = 0
         self.p = p
 
@@ -38,11 +35,11 @@ thingy = ParallelAlgorithm(policy=MlpPolicy,
                            workers={'player_1': easy_pred()},
                            # learning_starts=10,
                            gamma=0.,
-                           # n_steps=200,
-                           # batch_size=100,
+                           n_steps=200,
+                           batch_size=100,
                            )
 
-thingy.learn(total_timesteps=10000)
+thingy.learn(total_timesteps=2000)
 
 quit()
 

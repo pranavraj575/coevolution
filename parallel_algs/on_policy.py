@@ -2,8 +2,7 @@ import numpy as np
 import torch
 from gymnasium import spaces
 
-from stable_baselines3.ppo import PPO
-from parallel_algs.common import conform_shape
+from parallel_algs.common import conform_shape, conform_act_shape
 from stable_baselines3.common.utils import obs_as_tensor
 
 
@@ -69,9 +68,8 @@ class OnPolicy:
                   rollout_1_info,
                   ):
         with torch.no_grad():
-            actions, (values, log_probs) = self.get_action(
-                obs=conform_shape(obs, self.observation_space),
-            )
+            actions, (values, log_probs) = self.get_action(obs=obs, )
+            actions = conform_act_shape(actions, act_space=self.action_space)
         actions = actions.cpu().numpy()
 
         # Rescale and perform action
@@ -158,7 +156,8 @@ class OnPolicy:
         self._last_obs = conform_shape(obs, self.observation_space)
 
         # Convert to pytorch tensor or to TensorDict
-        obs_tensor = obs_as_tensor(self._last_obs, self.device)
+        # TODO: why for image spaces does this work
+        obs_tensor = obs_as_tensor(self._last_obs, self.device).unsqueeze(0)
         actions, values, log_probs = self.policy(obs_tensor)
         return actions, (values, log_probs)
 

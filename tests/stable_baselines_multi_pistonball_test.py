@@ -28,7 +28,6 @@ class easy_pred:
 
         return self.choice
 
-# TODO: handle image input
 thingy = ParallelAlgorithm(policy=CnnPolicy,
                            parallel_env=env,
                            DefaultWorkerClass=Worker,

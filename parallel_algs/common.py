@@ -8,11 +8,12 @@ def conform_shape(obs, obs_space):
         if obs_space.shape[1:] == obs.shape[:2] and obs_space.shape[0] == obs.shape[2]:
             return np.transpose(obs, (2, 0, 1))
     if isinstance(obs_space, spaces.Discrete) and not isinstance(obs, int):
-        obs= np.array([obs]).flatten()
+        obs = np.array([obs]).flatten()
     return obs
 
 
 def conform_act_shape(act, act_space):
+    act = act.reshape(act_space.shape)
     if isinstance(act_space, spaces.Discrete) and not isinstance(act, int):
         act = act.reshape(1)[0]
     return act

@@ -1,5 +1,7 @@
 from pettingzoo import ParallelEnv
 from parallel_algs.common import DumEnv, conform_act_shape
+from stable_baselines3.common.preprocessing import check_for_nested_spaces, is_image_space, \
+    is_image_space_channels_first
 
 
 class ParallelAlgorithm:
@@ -138,7 +140,6 @@ class ParallelAlgorithm:
             observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
-            print(rewards['player_0'])
 
             term = termination or truncation
             continue_rollout = False
