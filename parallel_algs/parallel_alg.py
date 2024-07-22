@@ -103,6 +103,7 @@ class ParallelAlgorithm:
 
         continue_rollout = True
         term = True
+        observations = dict()
         while continue_rollout:
             if term:
                 observations, infos = self.env.reset()

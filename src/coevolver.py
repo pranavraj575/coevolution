@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from src.team_trainer import TeamTrainer
 
 
 class CoevolutionBase:
@@ -91,7 +92,13 @@ class CoevolutionBase:
         raise NotImplementedError
 
 
-class TwoPlayerAdversarialCoevolution(CoevolutionBase):
+class CaptianCoevolution(CoevolutionBase):
+    def __init__(self, population_sizes, team_trainer: TeamTrainer, num_teams=2):
+        super().__init__(population_sizes, num_teams=num_teams)
+        self.team_trainer = team_trainer
+
+
+class TwoTeamsCaptainCoevolution(CoevolutionBase):
     def __init__(self, population_size, outcome_fn, clone_fn, elo_update=32, init_tau=100., mutation_fn=None):
         """
         Args:
@@ -116,10 +123,6 @@ class TwoPlayerAdversarialCoevolution(CoevolutionBase):
         self.reset_vals()
 
     def reset_vals(self):
-        self.captian_fitness = np.ones(self.N)*1000  # ELO
-        self.captian_wins = np.zeros(self.N)
-        self.captian_losses = np.zeros(self.N)
-        self.captian_ties = np.zeros(self.N)
         self.captian_elos = np.ones(self.N)*1000
 
     def rescale_elos(self, base_elo=1000.):
@@ -134,13 +137,7 @@ class TwoPlayerAdversarialCoevolution(CoevolutionBase):
     def train_and_update_results(self, captian_choices):
         i, j = captian_choices
         outcome = self.outcome_fn(i, j)
-        if outcome == 0:
-            for idx in captian_choices:
-                self.captian_ties[idx] += 1
-        else:
-            winner, loser = (i, j) if outcome == 1 else (j, i)
-            self.captian_wins[winner] += 1
-            self.captian_losses[loser] += 1
+
         obs_prob_i = (outcome + 1)/2  # observed probability of i win, .5 if tie, 1 if win, 0 if loss
         expected_prob_i = 1/(1 + np.power(10, -(self.captian_elos[i] - self.captian_elos[j])/400))
         self.captian_elos[i] += self.elo_update*(obs_prob_i - expected_prob_i)
@@ -155,7 +152,7 @@ class TwoPlayerAdversarialCoevolution(CoevolutionBase):
         # sample from this distribution with replacements
         replacements = torch.multinomial(dist, self.N, replacement=True)
         self.clone_fn(torch.arange(self.N), replacements)
-        for arr in (self.captian_fitness, self.captian_wins, self.captian_losses, self.captian_ties, self.captian_elos):
+        for arr in (self.captian_elos,):
             temp_arr = arr.copy()
             arr[np.arange(self.N)] = temp_arr[replacements]
         self.reset_vals()
@@ -173,10 +170,10 @@ if __name__ == '__main__':
         agents[original] = agents[replacements]
 
 
-    test = TwoPlayerAdversarialCoevolution(population_size=popsize,
-                                           outcome_fn=lambda i, j: max(i, j),
-                                           clone_fn=clone_fn,
-                                           )
+    test = TwoTeamsCaptainCoevolution(population_size=popsize,
+                                      outcome_fn=lambda i, j: max(i, j),
+                                      clone_fn=clone_fn,
+                                      )
     print(agents)
     test.breed()
     print(agents)
