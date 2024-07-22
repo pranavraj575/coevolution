@@ -32,8 +32,8 @@ class CoevolutionBase:
             population index (which population), index in population
         """
         pop_idx = 0
-        while i - self.Ns[pop_idx] >= 0:
-            i -= self.Ns[pop_idx]
+        while i - self.population_sizes[pop_idx] >= 0:
+            i -= self.population_sizes[pop_idx]
             pop_idx += 1
         return pop_idx, i
 
@@ -114,6 +114,7 @@ class TwoPlayerAdversarialCoevolution(CoevolutionBase):
         self.elo_update = elo_update
         self.tau = init_tau
         self.reset_vals()
+
     def reset_vals(self):
         self.captian_fitness = np.ones(self.N)*1000  # ELO
         self.captian_wins = np.zeros(self.N)
