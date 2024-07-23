@@ -67,4 +67,4 @@ while parallel_env.agents:
     print(terminations[guy])
     print(truncations[guy])
 
-parallel_env.close()
+parallel_env.delete()

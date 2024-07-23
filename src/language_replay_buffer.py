@@ -1,87 +1,110 @@
 import torch
 from torch.utils.data import Dataset
-from torchrl.data import ReplayBuffer, LazyMemmapStorage, ListStorage
 import os, sys, shutil, pickle
 
 
-class RBConstantSizeDataset(Dataset):
-    """
-    this will only work for inputs of the same size
-    """
-
-    def __init__(self, capacity=int(1e6), from_file=None, STORAGE=LazyMemmapStorage):
-        self.memory = ReplayBuffer(storage=STORAGE(max_size=capacity), )
-        self.capacity = capacity
-        self.tensor_len = None
-
-    def push(self, item):
-        self.memory.add(item)
-
-    def extend(self, items):
-        self.memory.extend(items)
-
-    def save(self, dirname):
-        if os.path.exists(dirname):
-            if os.path.isdir(dirname):
-                shutil.rmtree(dirname)
-            else:
-                os.remove(dirname)
-        self.memory.dumps(dirname)
-
-    def load(self, dirname):
-        if self.tensor_len is None:
-            raise Exception("ERROR: TO LOAD THIS REPRESENTATION, tensor_len must be specified on intialization")
-        self.memory.add(torch.zeros(size=(self.tensor_len,)))  # intialize the memory size
-        self.memory.empty()  # delete the dummy tensor
-        self.memory.loads(dirname)
-
-    def __len__(self):
-        return len(self.memory)
-
-    def __getitem__(self, item):
-        return self.memory.__getitem__(item)
-
-
-class ReplayBufferDiskStorage:
-    def __init__(self, storage_dir, capacity=1e6, ):
-        self.idx = 0
-        self.size = 0
-        self.storage_dir = storage_dir
-        self.capacity = capacity
-        self.reset_storage()
-
-    def close(self):
-        if os.path.exists(self.storage_dir):
-            shutil.rmtree(self.storage_dir)
-
+class LangReplayBuffer:
     def reset_storage(self):
-        self.close()
-        os.makedirs(self.storage_dir)
-        self.size = 0
-        self.idx = 0
-
-    def _get_file(self, idx):
-        return os.path.join(self.storage_dir, str(idx) + '.pkl')
+        """
+        resets internal buffer
+        """
+        raise NotImplementedError
 
     def extend(self, items):
         for item in items:
             self.push(item)
 
     def push(self, item):
-        pickle.dump(item, open(self._get_file(self.idx), 'wb'))
-
-        self.size = max(self.idx + 1, self.size)
-        self.idx = (self.idx + 1)%self.capacity
-
-    def _grab_item_by_idx(self, idx):
-        return pickle.load(open(self._get_file(idx=idx), 'rb'))
+        raise NotImplementedError
 
     def sample_one(self):
-        return self[torch.randint(0, self.size, (1,))]
+        raise NotImplementedError
+
+    def delete(self):
+        raise NotImplementedError
 
     def sample(self, batch):
         for _ in range(batch):
             yield self.sample_one()
+
+    def __getitem__(self, item):
+        raise NotImplementedError
+
+    def __len__(self):
+        raise NotImplementedError
+
+
+class ReplayBufferDiskStorage(LangReplayBuffer):
+    def __init__(self, storage_dir, capacity=1e6, device=None):
+        self.idx = 0
+        self.size = 0
+        self.storage_dir = storage_dir
+        self.capacity = capacity
+        self.reset_storage()
+        self.device = device
+
+    def delete(self):
+        if os.path.exists(self.storage_dir):
+            shutil.rmtree(self.storage_dir)
+
+    def reset_storage(self):
+        self.delete()
+        os.makedirs(self.storage_dir)
+        self.size = 0
+        self.idx = 0
+
+    def save_place(self):
+        """
+        saves idx and size to files as well
+        """
+        pickle.dump(
+            {
+                'size': self.size,
+                'idx': self.idx,
+            },
+            open(self._get_file('info'), 'wb')
+        )
+
+    def load_place(self, force=False):
+        info_file = self._get_file(name='info')
+        if os.path.exists(info_file):
+            dic = pickle.load(open(info_file, 'rb'))
+            self.size = dic['size']
+            self.idx = dic['idx']
+        else:
+            if force:
+                print('failed to load file:', info_file)
+                print('resetting storage')
+                self.reset_storage()
+            else:
+                raise Exception('failed to load file: ' + info_file)
+
+    def _get_file(self, name):
+        return os.path.join(self.storage_dir, str(name) + '.pkl')
+
+    def push(self, item):
+        pickle.dump(item, open(self._get_file(self.idx), 'wb'))
+
+        self.size = max(self.idx + 1, self.size)
+        self.idx = int((self.idx + 1)%self.capacity)
+
+        self.save_place()
+
+    def _grab_item_by_idx(self, idx, change_device=True):
+        item = pickle.load(open(self._get_file(name=idx), 'rb'))
+        return self._convert_device(item=item, change_device=change_device)
+
+    def _convert_device(self, item, change_device):
+        if change_device:
+            if type(item) == tuple:
+                item = tuple(self._convert_device(t, change_device=change_device)
+                             for t in item)
+            elif torch.is_tensor(item):
+                item = item.to(self.device)
+        return item
+
+    def sample_one(self):
+        return self[torch.randint(0, self.size, (1,))]
 
     def __getitem__(self, item):
         if item >= self.size:

@@ -1,9 +1,10 @@
 import torch
-from src.coevolver import TwoPlayerAdversarialCoevolution
-from rps_basic_game import plot_dist_evolution, single_game_outcome
+from src.coevolver import CaptianCoevolution
+from rps_basic_game import plot_dist_evolution, SingleOutcome
 
 if __name__ == '__main__':
     import os, sys
+    from src.team_trainer import TeamTrainer
 
     torch.random.manual_seed(69)
 
@@ -24,18 +25,29 @@ if __name__ == '__main__':
         agents[init] = temp[replacement]
 
 
-    trainer = TwoPlayerAdversarialCoevolution(population_size=popsize,
-                                              outcome_fn=lambda i, j: single_game_outcome(i, j, agents=agents),
-                                              clone_fn=clone,
-                                              init_tau=1200,
-                                              )
+    def mutate():
+        global agents
+        idc=torch.randint(0, len(agents), (1,))
+        agents[idc] = torch.randint(0, 3, (1,))
+        return idc
+
+
+
+    trainer = CaptianCoevolution(population_sizes=[popsize],
+                                 outcome_fn=SingleOutcome(agents=agents),
+                                 team_trainer=TeamTrainer(num_agents=popsize),
+                                 clone_fn=clone,
+                                 mutation_fn=mutate,
+                                 elo_update=.05
+                                 )
 
     init_dists = []
     for epoch in range(100):
-        for i in range(100):
+        for i in range(2):
             trainer.epoch(rechoose=False)
-        print('epoch',epoch)
+        print('epoch', epoch)
         trainer.breed()
+        trainer.mutate()
         init_distribution = [len(torch.where(agents == i)[0])/popsize for i in range(3)]
         init_dists.append(init_distribution)
 

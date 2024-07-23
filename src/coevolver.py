@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from src.team_trainer import TeamTrainer
+from src.game_outcome import PlayerInfo, OutcomeFn
+import time
 
 
 class CoevolutionBase:
@@ -8,19 +10,23 @@ class CoevolutionBase:
     general coevolution algorithm
     """
 
-    def __init__(self, population_sizes, num_teams=2):
+    def __init__(self, outcome_fn: OutcomeFn, population_sizes, team_sizes=(1, 1)):
         """
         Args:
+            outcome_fn: collect outcomes and do RL training
             population_sizes: list of number of agents in each population
                 usually can just be a list of one element
                 multiple populations are useful if there are different 'types' of agents
                     in the game that take different inputs/have access to different actions
-            num_teams: number of teams in the game, default 2
+            team_sizes: tuple of number of agents in each team
+                i.e. (1,1) is a 1v1 game
         """
+        self.outcome_fn = outcome_fn
         self.population_sizes = population_sizes
-        self.num_teams = num_teams
+        self.team_sizes = team_sizes
+        self.num_teams = len(team_sizes)
         self.N = sum(self.population_sizes)
-        if self.N%num_teams != 0:
+        if self.N%self.num_teams != 0:
             print("WARNING: number of agents is not divisible by num teams")
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
 
@@ -93,13 +99,104 @@ class CoevolutionBase:
 
 
 class CaptianCoevolution(CoevolutionBase):
-    def __init__(self, population_sizes, team_trainer: TeamTrainer, num_teams=2):
-        super().__init__(population_sizes, num_teams=num_teams)
+    def __init__(self,
+                 outcome_fn: OutcomeFn,
+                 clone_fn,
+                 population_sizes,
+                 team_trainer: TeamTrainer,
+                 team_sizes=(1, 1),
+                 elo_update=1,
+                 mutation_fn=None,
+                 ):
+        super().__init__(outcome_fn=outcome_fn,
+                         population_sizes=population_sizes,
+                         team_sizes=team_sizes,
+                         )
         self.team_trainer = team_trainer
+        self.noise_model = None
+        self.clone_fn = clone_fn
+        self.captian_elos = torch.zeros(self.N)
+        self.elo_update = elo_update
+        self.mutation_fn = mutation_fn
+
+    def train_and_update_results(self, captian_choices):
+        """
+        takes a choice of team captians and trains them in RL environment
+        updates variables to reflect result of game(s)
+        Args:
+            captian_choices: tuple of self.num_teams indices
+        """
+        teams = []
+        captian_positions = []
+        # expected win probabilities, assuming the teams win probability is determined by captian elo
+        expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
+                                           dim=-1)
+        for captian, team_size in zip(captian_choices, self.team_sizes):
+            team = self.team_trainer.add_member_to_team(member=captian,
+                                                        T=team_size,
+                                                        N=1,
+                                                        noise_model=self.noise_model,
+                                                        )
+            pos = torch.where(team.view(-1) == captian)[0].item()
+            captian_positions.append(pos)
+            team = self.team_trainer.fill_in_teams(initial_teams=team,
+                                                   noise_model=self.noise_model,
+                                                   )
+            teams.append(team)
+        team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
+                                                    train=None,
+                                                    )
+        for (captian,
+             team,
+             (team_outcome, player_infos),
+             expected_outcome) in zip(captian_choices,
+                                      teams,
+                                      team_outcomes,
+                                      expected_win_probs):
+            self.captian_elos[captian] += self.elo_update*(team_outcome - expected_outcome)
+            for player_info in player_infos:
+                player_info: PlayerInfo
+                self.team_trainer.add_to_buffer(scalar=team_outcome,
+                                                obs_preembed=player_info.obs_preembed,
+                                                team=team,
+                                                obs_mask=player_info.obs_mask,
+                                                )
+
+    def breed(self):
+        dist = torch.softmax(self.captian_elos, dim=-1)
+        # sample from this distribution with replacements
+        replacements = torch.multinomial(dist, self.N, replacement=True)
+        self.clone_fn(torch.arange(self.N), replacements)
+        for arr in (self.captian_elos,):
+            temp_arr = arr.clone()
+            arr[np.arange(self.N)] = temp_arr[replacements]
+        self.rescale_elos()
+
+    def mutate(self):
+        if self.mutation_fn is not None:
+            idc = self.mutation_fn()
+        else:
+            super().mutate()
+
+    def rescale_elos(self, base_elo=0.):
+        """
+        scales all elos so that base_elo is average
+            does not change any elo calculations, as they are all based on relative difference
+        Args:
+            base_elo: elo to make the 'average' elo
+        """
+        self.captian_elos += base_elo - torch.sum(self.captian_elos)/self.N
 
 
 class TwoTeamsCaptainCoevolution(CoevolutionBase):
-    def __init__(self, population_size, outcome_fn, clone_fn, elo_update=32, init_tau=100., mutation_fn=None):
+    def __init__(self,
+                 population_size,
+                 outcome_fn,
+                 clone_fn,
+                 elo_update=32,
+                 init_tau=100.,
+                 mutation_fn=None,
+                 ):
         """
         Args:
             population_size: size of population to train
@@ -160,15 +257,55 @@ class TwoTeamsCaptainCoevolution(CoevolutionBase):
 
 
 if __name__ == '__main__':
-    torch.random.manual_seed(69)
-    popsize = 10
+    from src.team_trainer import DiscreteInputTrainer
+    from src.language_replay_buffer import ReplayBufferDiskStorage
+    import os, sys
 
-    agents = torch.arange(popsize)%3
+    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+
+    torch.random.manual_seed(69)
+    popsize = 20
+
+    agents = torch.arange(popsize)%6
 
 
     def clone_fn(original, replacements):
-        agents[original] = agents[replacements]
+        temp = agents.clone()
+        agents[original] = temp[replacements]
 
+
+    class MaxOutcome(OutcomeFn):
+        """
+        return team with highest indices
+        """
+
+        def get_outcome(self, team_choices, train=None):
+            agent_choices = [agents[team[0]] for team in team_choices]
+            if agent_choices[0] == agent_choices[1]:
+                return [(.5, [PlayerInfo()]), (.5, [PlayerInfo()])]
+
+            if agent_choices[0] > agent_choices[1]:
+                return [(1, [PlayerInfo()]), (0, [PlayerInfo()])]
+
+            if agent_choices[0] < agent_choices[1]:
+                return [(0, [PlayerInfo()]), (1, [PlayerInfo()])]
+
+
+    cap = CaptianCoevolution(outcome_fn=MaxOutcome(),
+                             population_sizes=[popsize],
+                             team_trainer=TeamTrainer(num_agents=popsize, ),
+                             clone_fn=clone_fn
+                             )
+    for _ in range(20):
+        for _ in range(2):
+            cap.epoch(rechoose=False)
+        print(cap.captian_elos)
+        print(agents)
+        cap.epoch(rechoose=True)
+
+    print(cap.captian_elos)
+    print(agents)
+    quit()
 
     test = TwoTeamsCaptainCoevolution(population_size=popsize,
                                       outcome_fn=lambda i, j: max(i, j),
@@ -177,18 +314,3 @@ if __name__ == '__main__':
     print(agents)
     test.breed()
     print(agents)
-    quit()
-    test.captian_elos[0] = 0
-    test.rescale_elos(10)
-    print(test.captian_elos)
-    print(np.mean(test.captian_elos))
-
-    test = CoevolutionBase(population_sizes=[30], num_teams=2)
-    N = test.N
-    matching = list(test.create_random_captians(N=N))
-    tracker = np.zeros(N)
-    for edge in matching:
-        print(edge)
-        for i in edge:
-            tracker[i] += 1
-    print(tracker)

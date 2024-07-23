@@ -1,5 +1,5 @@
 import torch
-from src.coevolver import TwoPlayerAdversarialCoevolution
+from src.coevolver import TwoTeamsCaptainCoevolution
 from rps_basic_game import plot_dist_evolution, single_game_outcome
 
 
@@ -55,7 +55,7 @@ if __name__ == '__main__':
         agents[mask] = torch.randint(0, 6, (torch.sum(mask).item(),))
 
 
-    trainer = TwoPlayerAdversarialCoevolution(population_size=popsize,
+    trainer = TwoTeamsCaptainCoevolution(population_size=popsize,
                                               outcome_fn=lambda i, j: double_game_outcome(i, j, agents=agents),
                                               clone_fn=clone,
                                               init_tau=1200,

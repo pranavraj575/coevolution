@@ -211,4 +211,4 @@ if __name__ == '__main__':
             print('\tplot time:', round(time.time() - start_time, 2))
         epoch += 1
         print()
-    buffer.close()
+    buffer.delete()
