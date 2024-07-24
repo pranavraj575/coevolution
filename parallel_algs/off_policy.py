@@ -6,7 +6,6 @@ from parallel_algs.common import conform_shape
 
 
 class OffPolicy:
-
     def init_learn(self,
                    callback,
                    total_timesteps,

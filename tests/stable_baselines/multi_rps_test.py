@@ -1,10 +1,28 @@
 import numpy as np
 
 from pettingzoo.classic import rps_v2
-from stable_baselines3.ppo.policies import MlpPolicy
-from parallel_algs.ppo.PPO import WorkerPPO as Worker
 
+from stable_baselines3.dqn.policies import MlpPolicy as DQNPolicy
+from stable_baselines3.dqn.dqn import DQN
+
+from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
+from stable_baselines3.ppo.ppo import PPO
+
+from parallel_algs.dqn.DQN import WorkerDQN
+from parallel_algs.ppo.PPO import WorkerPPO
+
+from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from parallel_algs.parallel_alg import ParallelAlgorithm
+import os, sys
+
+Worker = WorkerPPO
+
+if issubclass(Worker, DQN):
+    MlpPolicy = DQNPolicy
+else:
+    MlpPolicy = PPOPolicy
+
+DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
 env = rps_v2.parallel_env()  # render_mode="human")
 observations, infos = env.reset()
@@ -35,39 +53,27 @@ thingy = ParallelAlgorithm(policy=MlpPolicy,
                            workers={'player_1': easy_pred()},
                            # learning_starts=10,
                            gamma=0.,
-                           n_steps=200,
+                           # n_steps=200,
                            batch_size=100,
                            )
 
-thingy.learn(total_timesteps=2001)#, number_of_eps=69,number_of_eps_per_learning_step=5)
+thingy.learn(total_timesteps=2048*5)
 
 print(thingy.workers)
-print(thingy.env.unwrapped)
-print(thingy.env.unwrapped.history)
-quit()
+worker = thingy.workers['player_0']
+worker: Worker
+work_save = os.path.join(DIR, 'data', 'sb3_save_test', )
+replay_save = os.path.join(DIR, 'data', 'sb3_replay_save_test.pkl')
+worker.save(work_save)
+if isinstance(worker, OffPolicyAlgorithm):
+    worker.save_replay_buffer(replay_save)
+    print(worker.replay_buffer.size())
 
-parallel_env = pistonball_v6.parallel_env(render_mode="human", continuous=False, n_pistons=6)
-observations, infos = parallel_env.reset(seed=42)
-
-thingy = ParallelDQN(policy=CnnPolicy, parallel_env=parallel_env, buffer_size=1000)
-thingy.learn(total_timesteps=20000)
-
-quit()
-
-guy = 'piston_0'
-# test = DumEnv(action_space=parallel_env.action_space(guy), obs_space=parallel_env.observation_space(guy))
-# DQN(CnnPolicy, env=test, buffer_size=100)
-print(observations[guy].shape)
-
-while parallel_env.agents:
-    # this is where you would insert your policy
-    actions = {agent: parallel_env.action_space(agent).sample() for agent in parallel_env.agents}
-    # print([parallel_env.action_space(agent) for agent in parallel_env.agents])
-    print(actions)
-
-    observations, rewards, terminations, truncations, infos = parallel_env.step(actions)
-    print(rewards[guy])
-    print(terminations[guy])
-    print(truncations[guy])
-
-parallel_env.delete()
+worker2 = Worker.load(work_save)
+if isinstance(worker2, OffPolicyAlgorithm):
+    worker2.load_replay_buffer(replay_save)
+    print(worker2.replay_buffer.size())
+worker2.set_env(worker.env)
+thingy.workers['player_0'] = worker2
+print('starting thingy here')
+thingy.learn(total_timesteps=20)

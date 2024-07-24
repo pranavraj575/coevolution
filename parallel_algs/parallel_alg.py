@@ -32,26 +32,35 @@ class ParallelAlgorithm:
         if worker_info is None:
             worker_info = dict()
         for agent in parallel_env.agents:
-            if agent not in workers:
-                dumenv = DumEnv(action_space=parallel_env.action_space(agent=agent),
-                                obs_space=parallel_env.observation_space(agent=agent),
-                                )
-                workers[agent] = DefaultWorkerClass(policy=policy,
-                                                    env=dumenv,
-                                                    **worker_kwargs,
-                                                    )
             if agent not in worker_info:
                 worker_info[agent] = {
                     'train': True
                 }
+
+            dumenv = DumEnv(action_space=parallel_env.action_space(agent=agent),
+                            obs_space=parallel_env.observation_space(agent=agent),
+                            )
+            if agent not in workers:
+                workers[agent] = DefaultWorkerClass(policy=policy,
+                                                    env=dumenv,
+                                                    **worker_kwargs,
+                                                    )
+            elif worker_info[agent]['train']:
+                # in this case, we should probably set the environment anyway
+                workers[agent].set_env(dumenv)
+
         self.workers = workers
         self.worker_info = worker_info
         self.env = parallel_env
+        self.reset_env = True  # should reset env next time
+        self.last_observations = dict()
+        self.last_infos = dict()
 
     def learn(self,
               total_timesteps,
               number_of_eps=None,
               number_of_eps_per_learning_step=1,
+              strict_timesteps=True,
               callbacks=None,
               ):
         """
@@ -62,16 +71,18 @@ class ParallelAlgorithm:
             number_of_eps: if specified, overrides total_timesteps, and instead collects this number of episodes
             number_of_eps_per_learning_step: number of eps before each training step, default 1
                 this parameter is ignored if number_of_eps is None
+            strict_timesteps: if true, breaks an episode in the middle if timesteps are over
             callbacks:
         Returns:
         """
         while True:
             local_num_eps = None
             if number_of_eps is not None:
-                local_num_eps = min(number_of_eps_per_learning_step,number_of_eps)
+                local_num_eps = min(number_of_eps_per_learning_step, number_of_eps)
                 number_of_eps -= number_of_eps_per_learning_step
             timesteps = self.learn_episode(total_timesteps=total_timesteps,
                                            number_of_eps=local_num_eps,
+                                           strict_timesteps=strict_timesteps,
                                            callbacks=callbacks,
                                            )
             total_timesteps -= timesteps
@@ -81,7 +92,7 @@ class ParallelAlgorithm:
                     break
             else:
                 # otherwise, break if we run out of timesteps
-                if  total_timesteps <= 0:
+                if total_timesteps <= 0:
                     break
 
     def _get_worker_iter(self, trainable):
@@ -105,6 +116,7 @@ class ParallelAlgorithm:
     def learn_episode(self,
                       total_timesteps,
                       number_of_eps=None,
+                      strict_timesteps=True,
                       callbacks=None,
                       ):
         """
@@ -112,12 +124,12 @@ class ParallelAlgorithm:
         Args:
             total_timesteps: number of timesteps to collect
             number_of_eps: if specified, overrides total_timesteps, and instead collects this number of episodes
+            strict_timesteps: if true, breaks an episode in the middle if timesteps are over
             callbacks:
         Returns: number of collected timesteps
         """
         if callbacks is None:
             callbacks = {agent: None for agent in self.workers}
-        # observations, infos = self.env.reset()
 
         # init learn
         local_init_learn_info = dict()
@@ -137,11 +149,10 @@ class ParallelAlgorithm:
             local_init_rollout_info[agent] = init_rollout_info
 
         continue_rollout = True
-        term = True
-        observations = dict()
         while continue_rollout:
-            if term:
-                observations, infos = self.env.reset()
+            if self.reset_env:
+                self.last_observations, self.last_infos = self.env.reset()
+                self.reset_env = False
 
             # rollout 1 (start of loop)
             local_rollout_1_info = dict()
@@ -157,7 +168,7 @@ class ParallelAlgorithm:
             local_rollout_2_info = dict()
             for agent in self.get_trainable_workers():
                 act, rollout_2_info = self.workers[agent].rollout_2(
-                    obs=observations[agent],
+                    obs=self.last_observations[agent],
                     init_learn_info=local_init_learn_info[agent],
                     init_rollout_info=local_init_rollout_info[agent],
                     rollout_1_info=local_rollout_1_info[agent],
@@ -169,25 +180,25 @@ class ParallelAlgorithm:
             # also handle the untrainable agents
             for agent in self.get_untrainable_workers():
                 act = self.workers[agent].get_action(
-                    obs=observations[agent]
+                    obs=self.last_observations[agent]
                 )
                 actions[agent] = act
 
-            observations, rewards, terminations, truncations, infos = self.env.step(actions=actions)
+            self.last_observations, rewards, terminations, truncations, self.last_infos = self.env.step(actions=actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
-
             term = termination or truncation
             continue_rollout = False
             # rollout 3 (end of loop)
+            steps_so_far = 0
             for agent in self.get_trainable_workers():
                 local_continue_rollout = self.workers[agent].rollout_3(
                     action=actions[agent],
-                    new_obs=observations[agent],
+                    new_obs=self.last_observations[agent],
                     reward=rewards[agent],
                     termination=termination,
                     truncation=truncation,
-                    info=infos[agent],
+                    info=self.last_infos[agent],
                     init_learn_info=local_init_learn_info[agent],
                     init_rollout_info=local_init_rollout_info[agent],
                     rollout_1_info=local_rollout_1_info[agent],
@@ -195,12 +206,19 @@ class ParallelAlgorithm:
                     # replay_buffer=self.workers[agent].replay_buffer,
                 )
                 continue_rollout = continue_rollout or local_continue_rollout
+                steps_so_far = max(steps_so_far, self.workers[agent].num_collected_steps)
 
             if number_of_eps is not None:
                 # counter for number of episodes to do
                 number_of_eps -= 1
                 if number_of_eps <= 0:
                     continue_rollout = False
+            if term:
+                # environment terminated and must be reset next time
+                self.reset_env = True
+
+            if strict_timesteps and steps_so_far >= total_timesteps:
+                continue_rollout = False
         # end rollout
         local_end_rollout_info = dict()
         for agent in self.get_trainable_workers():

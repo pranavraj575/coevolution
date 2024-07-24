@@ -16,7 +16,7 @@ class OnPolicy:
                    log_interval=4,
                    ):
         self.iteration = 0
-        self.reset_rollout=True
+        self.reset_rollout = True
         total_timesteps, callback = self._setup_learn(
             total_timesteps,
             callback,
