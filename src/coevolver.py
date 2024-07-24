@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 from src.team_trainer import TeamTrainer
-from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
-import time
+from src.game_outcome import PlayerInfo, OutcomeFn
+from src.zoo_cage import ZooCage
 
 
 class CoevolutionBase:
@@ -61,17 +61,20 @@ class CoevolutionBase:
             choice = np.random.choice(list(unused), self.num_teams, replace=False)
             for i in choice:
                 unused.remove(i)
-            yield tuple(choice)
+            yield tuple(choice), tuple(True for _ in choice)
         if unused:
             remaining = self.num_teams - len(unused)
+            unique = tuple(True for _ in range(len(unused))) + tuple(False for _ in range(remaining))
+
             # randomly sort unused, and concatenate with a random choice of the other agent indices
-            yield (tuple(np.random.choice(list(unused), len(unused), replace=False)) +
-                   tuple(np.random.choice(list(set(range(N)).difference(unused)), remaining, replace=False)))
+            choice = (tuple(np.random.choice(list(unused), len(unused), replace=False)) +
+                      tuple(np.random.choice(list(set(range(N)).difference(unused)), remaining, replace=False)))
+            yield choice, unique
 
     def epoch(self, rechoose=True):
         # TODO: parallelizable
-        for choice in self.create_random_captians():
-            self.train_and_update_results(choice)
+        for choice, unique in self.create_random_captians():
+            self.train_and_update_results(captian_choices=choice, unique=unique)
         if rechoose:
             self.breed()
             self.mutate()
@@ -88,12 +91,13 @@ class CoevolutionBase:
     def mutate(self):
         pass
 
-    def train_and_update_results(self, captian_choices):
+    def train_and_update_results(self, captian_choices, unique):
         """
         takes a choice of team captians and trains them in RL environment
         updates variables to reflect result of game(s)
         Args:
             captian_choices: tuple of self.num_teams indices
+            unique: whether each captian is unique (each captian will be marked unique exactly once
         """
         raise NotImplementedError
 
@@ -158,19 +162,20 @@ class CaptianCoevolution(CoevolutionBase):
     def set_noise_model(self, noise_model):
         self.noise_model = noise_model
 
-    def train_and_update_results(self, captian_choices):
+    def train_and_update_results(self, captian_choices, unique):
         """
         takes a choice of team captians and trains them in RL environment
         updates variables to reflect result of game(s)
         Args:
             captian_choices: tuple of self.num_teams indices
+            unique: whether each captian is unique (each captian will be marked unique exactly once
         """
         teams = []
         captian_positions = []
         # expected win probabilities, assuming the teams win probability is determined by captian elo
         expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
                                            dim=-1)
-        for captian, team_size in zip(captian_choices, self.team_sizes):
+        for captian, unq, team_size in zip(captian_choices, unique, self.team_sizes):
             team = self.team_trainer.add_member_to_team(member=captian,
                                                         T=team_size,
                                                         N=1,
@@ -262,10 +267,11 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     def __init__(self,
                  env_constructor,
-                 outcome_fn: PettingZooOutcomeFn,
+                 outcome_fn: OutcomeFn,
                  population_sizes,
                  team_trainer: TeamTrainer,
                  worker_constructor,
+                 zoo_cage: ZooCage,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
                  elo_update=32*np.log(10)/400,
@@ -282,10 +288,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          noise_model=noise_model
                          )
         self.env_constructor = env_constructor
-
-        self.outcome_fn: PettingZooOutcomeFn
-        self.zoo_dir = self.outcome_fn.zoo_dir
-
+        self.worker_constructor = worker_constructor
+        self.zoo_cage = zoo_cage
         raise NotImplementedError
 
     def breed(self):

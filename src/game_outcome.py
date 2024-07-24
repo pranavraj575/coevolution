@@ -1,5 +1,5 @@
-import torch, os
-from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+import torch
+from src.zoo_cage import ZooCage
 
 
 class PlayerInfo:
@@ -118,58 +118,12 @@ class PettingZooOutcomeFn(OutcomeFn):
     outcome function which loads rl agents saved as files in specified directory
     """
 
-    def __init__(self, zoo_dir, DefaultWorkerClass):
+    def __init__(self, zoo_cage: ZooCage):
         """
         Args:
-            zoo_dir: directory that stores files of agent checkpoints
-                each folder in this directory should be a stable baselines checkpoint
-                this folder should probably contain nothing else
-            DefaultWorkerClass: default class to use for loading agents
-                can also be specified each time we load
-                should specify .load() and .save()
+            zoo_cage: ZooCage to store and load workers
         """
-        self.zoo_dir = zoo_dir
-        self.DefaultWorkerClass = DefaultWorkerClass
-        self.workers = dict()
-
-    def load_worker(self, save_folder: str, WorkerClass=None, load_buffer=True):
-        """
-        loads worker from specified folder
-        Args:
-            save_folder: folder to grab worker from
-            WorkerClass: class to use to load worker (if none, uses self.DefaultWorkerClass)
-            load_buffer: whether to load replay buffer, if available
-        Returns:
-
-        """
-        if WorkerClass is None:
-            WorkerClass = self.DefaultWorkerClass
-        full_dir = os.path.join(self.zoo_dir, save_folder)
-        worker = WorkerClass.load(os.path.join(full_dir, 'worker'))
-        if load_buffer and isinstance(worker, OffPolicyAlgorithm):
-            buff_file = os.path.join(full_dir, 'replay_buffer.pkl')
-            if os.path.exists(buff_file):
-                worker.load_replay_buffer(buff_file)
-            else:
-                print('buffer file not found:', buff_file)
-                print('change saving settings perhaps, unless this was intended')
-
-    def save_worker(self, save_folder: str, worker_key, save_buffer=True):
-        """
-        saves worker to specified folder
-        Args:
-            save_folder: folder to save to
-            worker_key: worker to save
-            save_buffer: whether to save replay buffer, if available
-        """
-        worker = self.workers[worker_key]
-        full_dir = os.path.join(self.zoo_dir, save_folder)
-
-        # worker inherits save method from stable baselines
-        worker.save(os.path.join(full_dir, 'worker'))
-        if save_buffer and isinstance(worker, OffPolicyAlgorithm):
-            # worker has a replay buffer that should also probably be saved
-            worker.save_replay_buffer(os.path.join(full_dir, 'replay_buffer.pkl'))
+        self.zoo_cage=zoo_cage
 
     def get_outcome(self, team_choices, train=None):
         """
