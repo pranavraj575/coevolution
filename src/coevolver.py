@@ -119,6 +119,9 @@ class CaptianCoevolution(CoevolutionBase):
         self.elo_update = elo_update
         self.mutation_fn = mutation_fn
 
+    def update_noise_model(self, noise_model):
+        self.noise_model = noise_model
+
     def train_and_update_results(self, captian_choices):
         """
         takes a choice of team captians and trains them in RL environment

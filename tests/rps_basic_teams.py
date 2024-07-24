@@ -59,6 +59,7 @@ if __name__ == '__main__':
     losses = []
     for epoch in range(100):
         noise = trainer.create_nose_model_towards_uniform(.1)
+        coevolver.update_noise_model(noise_model=noise)
         coevolver.epoch(rechoose=False)
 
         # buffer.push((scalar, None, team, None))

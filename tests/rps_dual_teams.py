@@ -1,85 +1,14 @@
 import torch
 from src.team_trainer import DiscreteInputTrainer
 from src.language_replay_buffer import ReplayBufferDiskStorage
+from src.coevolver import CaptianCoevolution
+from tests.rps_dual_game import DualPairOutcome
 import numpy as np
 import itertools
 
 ROCK = 0
 PAPER = 1
 SCISOR = 2
-
-
-def outcomes(teams):
-    """
-    Returns the winning agents, as well as the contexts
-    Args:
-        teams: 2-tuple of (N, 2) arrays of players
-    Returns:
-        (
-            win_indices: which games had winners (game number list, indices of winning team), both size (N')
-            pre_embedded_observations: (N', 2) array observed by winning team
-            embedding_mask: None
-        ),
-        (
-            loss_indices: which games had losers (game number list, indices of winning team), both size (N'')
-            pre_embedded_observations: (N'', 2) array observed by losing team
-            embedding_mask: None
-        ),
-        (
-            tied_indices: indices that tied, (game number list, indices of tied team), both size (N''')
-            pre_embedded_observations: (N''', 2) array observed by tied team
-            embedding_mask: None
-        )
-    """
-    A, B = teams
-    N, _ = A.shape
-    wl_games = []
-    tied_games = []
-    for i in range(N):
-        if (torch.all(A[i] == B[i]) or torch.all(A[i].__reversed__() == B[i])):
-            tied_games.append(i)
-        else:
-            wl_games.append(i)
-    tied_games = torch.tensor(tied_games, dtype=torch.long)
-
-    tiedA, tiedB = A[tied_games], B[tied_games]
-
-    A = A[wl_games, :]
-    B = B[wl_games, :]
-    N_p = len(wl_games)
-    deletedA = torch.zeros((N_p, 2))
-    deletedB = torch.zeros((N_p, 2))
-    for delar, player, opponent in ((deletedA, A, B), (deletedB, B, A)):
-        for i in range(N_p):
-            for k in range(2):
-                deletor = (player[i, k] + 1)%3
-                delar[i, k] = deletor in opponent[i]
-    fails_A = torch.sum(deletedA, dim=1)
-    fails_B = torch.sum(deletedB, dim=1)
-
-    # 1 where B wins, 0 otherwise
-    win_teams = (torch.sign(fails_A - fails_B)/2 + .5).long()
-
-    both = torch.stack((A, B), dim=0)
-    # both[0,:,:] is A, and both[1,:,:] is B
-
-    win_indices = (wl_games, win_teams)
-    loss_indices = (wl_games, 1 - win_teams)
-    tied_indices = (torch.cat((tied_games, tied_games)),
-                    torch.cat((torch.zeros_like(tied_games), torch.ones_like(tied_games)))
-                    )
-
-    tied_obs = torch.cat((tiedB.view((-1, 2)), tiedA.view((-1, 2))), dim=0)
-    win_obs = both[1 - win_teams, torch.arange(N_p), :].view((-1, 2))
-
-    loss_obs = both[win_teams, torch.arange(N_p), :].view((-1, 2))
-
-    return (
-        (win_indices, win_obs, None),
-        (loss_indices, loss_obs, None),
-        (tied_indices, tied_obs, None),
-    )
-    return (winners, losers, wl_games), (tiedA, tiedB, tied_games)
 
 
 def dist_from_trainer(trainer: DiscreteInputTrainer,
@@ -126,6 +55,7 @@ if __name__ == '__main__':
     import time
 
     torch.random.manual_seed(69)
+    agents = torch.arange(3)
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps2_teams')
@@ -140,12 +70,20 @@ if __name__ == '__main__':
                                    append_pos_encode_teams=True,
                                    num_decoder_layers=4,
                                    num_encoder_layers=4,
+                                   buffer=ReplayBufferDiskStorage(
+                                       storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2_teams"),
+                                       capacity=int(2e4),
+                                       device=None,
+                                   ),
+                                   )
+    coevolver = CaptianCoevolution(outcome_fn=DualPairOutcome(agents=agents),
+                                   population_sizes=[3],
+                                   team_trainer=trainer,
+                                   clone_fn=None,
+                                   team_sizes=(2,2),
                                    )
 
     N = 100
-    capacity = int(2e4)
-    buffer = ReplayBufferDiskStorage(storage_dir=os.path.join(DIR, "data", "temp", "tests_rps2_teams"), capacity=capacity)
-
     minibatch = 64
     init_dists = []
     cond_dists = []
@@ -154,16 +92,8 @@ if __name__ == '__main__':
     for epoch in range(100):
         start_time = time.time()
         noise = trainer.create_nose_model_towards_uniform(1/np.sqrt(epoch/2 + 1))
-        for scalar, preembed, team, mask in trainer.collect_training_data(outcome=outcomes,
-                                                                          num_members=(2, 2),
-                                                                          N=N,
-                                                                          number_of_tie_matches=0,
-                                                                          number_of_loss_rematches=3,
-                                                                          noise_model=noise,
-                                                                          obtain_negatives=False,
-                                                                          ):
-            buffer.push((scalar, preembed, team, mask))
-            buffer.push((scalar, None, team, None))
+        coevolver.update_noise_model(noise_model=noise)
+        coevolver.epoch(rechoose=False)
 
         init_distribution = dist_from_trainer(trainer=trainer,
                                               input_preembedding=None,
@@ -182,13 +112,12 @@ if __name__ == '__main__':
             conditional_dists.append(dist)
         cond_dists.append(conditional_dists)
 
-        sample = buffer.sample(batch=minibatch)
-        collection_time=time.time() - start_time
+        collection_time = time.time() - start_time
         start_time = time.time()
-        loss = trainer.training_step(data=sample, minibatch=False).item()
+        loss = trainer.training_step(batch_size=minibatch, minibatch=False)
         losses.append(loss)
 
-        print('epoch', epoch, ';\tbuffer size', len(buffer))
+        print('epoch', epoch, ';\tbuffer size', len(trainer.buffer))
         print('\tcollection time:', round(collection_time, 2))
         print('\ttrain time:', round(time.time() - start_time, 2))
 
@@ -211,4 +140,4 @@ if __name__ == '__main__':
             print('\tplot time:', round(time.time() - start_time, 2))
         epoch += 1
         print()
-    buffer.delete()
+    trainer.buffer.delete()

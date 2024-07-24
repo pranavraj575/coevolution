@@ -1,38 +1,13 @@
 import torch
-from src.coevolver import TwoTeamsCaptainCoevolution
-from rps_basic_game import plot_dist_evolution, single_game_outcome
-
-
-def double_game_outcome(i, j, agents):
-    a, b = agents[(i, j),]
-
-    if a < 3 and b < 3:
-        return single_game_outcome(i, j, agents)
-    if a >= 3 and b >= 3:
-        # ['RR', 'PP', 'SS', 'RP', 'RS', 'PS']
-        # mapped to
-        # ['PS', 'RS', 'RP', ...]
-        # equivalent to
-        # [ R P S ]
-        return single_game_outcome(i, j, agents=6 - agents)
-    elif ({a, b} in ({0, 4}, {1, 3}, {2, 5})):
-        if a < b:
-            return 1
-        else:
-            return -1
-    else:
-        if a > b:
-            return 1
-        else:
-            return -1
-
+from src.coevolver import CaptianCoevolution
+from tests.rps_basic_game import plot_dist_evolution
+from tests.rps_dual_game import DualPreMappedOutcome
+from src.team_trainer import TeamTrainer
 
 if __name__ == '__main__':
     import os, sys
 
     torch.random.manual_seed(69)
-
-    # print(outcomes((torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]]))))[-1])
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps2_evolution')
@@ -49,22 +24,23 @@ if __name__ == '__main__':
         agents[init] = temp[replacement]
 
 
-    def mutate(p=.01):
+    def mutate(p=.05):
         global agents
         mask = torch.rand(popsize) < p
         agents[mask] = torch.randint(0, 6, (torch.sum(mask).item(),))
 
 
-    trainer = TwoTeamsCaptainCoevolution(population_size=popsize,
-                                              outcome_fn=lambda i, j: double_game_outcome(i, j, agents=agents),
-                                              clone_fn=clone,
-                                              init_tau=1200,
-                                              mutation_fn=mutate
-                                              )
+    trainer = CaptianCoevolution(population_sizes=[popsize],
+                                 outcome_fn=DualPreMappedOutcome(agents=agents),
+                                 clone_fn=clone,
+                                 mutation_fn=mutate,
+                                 team_trainer=TeamTrainer(num_agents=popsize),
+                                 elo_update=.5,
+                                 )
 
     init_dists = []
-    for epoch in range(1000):
-        for i in range(100):
+    for epoch in range(500):
+        for i in range(10):
             trainer.epoch(rechoose=False)
         trainer.breed()
         trainer.mutate()
@@ -74,3 +50,4 @@ if __name__ == '__main__':
         if not (epoch + 1)%10:
             plot_dist_evolution(init_dists, save_dir=os.path.join(plot_dir, 'init_dist.png'),
                                 labels=['RR', 'PP', 'SS', 'RP', 'RS', 'PS'])
+            print(epoch + 1)
