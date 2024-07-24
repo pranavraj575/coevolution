@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from src.team_trainer import TeamTrainer
-from src.game_outcome import PlayerInfo, OutcomeFn
+from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
 import time
 
 
@@ -107,6 +107,7 @@ class CaptianCoevolution(CoevolutionBase):
 
         in teams with 1 member, this is not relevant, and is simple coevolution
     """
+
     def __init__(self,
                  outcome_fn: OutcomeFn,
                  population_sizes,
@@ -258,97 +259,40 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
     """
     keeps track of a set of stable baseline algorithms, and uses them to
     """
+
     def __init__(self,
                  env_constructor,
-                 outcome_fn: OutcomeFn,
+                 outcome_fn: PettingZooOutcomeFn,
                  population_sizes,
                  team_trainer: TeamTrainer,
+                 worker_constructor,
                  team_sizes=(1, 1),
-                 elo_update=1,
+                 elo_conversion=400/np.log(10),
+                 elo_update=32*np.log(10)/400,
+                 noise_model=None,
                  ):
         super().__init__(outcome_fn=outcome_fn,
                          population_sizes=population_sizes,
                          team_trainer=team_trainer,
                          team_sizes=team_sizes,
+                         elo_conversion=elo_conversion,
                          elo_update=elo_update,
                          mutation_fn=None,
                          clone_fn=None,
+                         noise_model=noise_model
                          )
-        raise NotImplementedError
         self.env_constructor = env_constructor
 
+        self.outcome_fn: PettingZooOutcomeFn
+        self.zoo_dir = self.outcome_fn.zoo_dir
+
+        raise NotImplementedError
+
     def breed(self):
         raise NotImplementedError
 
     def mutate(self):
         raise NotImplementedError
-
-class TwoTeamsCaptainCoevolution(CoevolutionBase):
-    def __init__(self,
-                 population_size,
-                 outcome_fn,
-                 clone_fn,
-                 elo_update=32,
-                 init_tau=100.,
-                 mutation_fn=None,
-                 ):
-        """
-        Args:
-            population_size: size of population to train
-            outcome_fn: function that takes two captain indices and trains them in a single game against each other
-                outcome_fn(player idx,opponent idx)
-                    returns 1 for win, 0 for tie, -1 for loss
-            clone_fn: takes in (original list, replacement list)
-                replaces agents in the original indices with respective replacement
-            elo_update: k for updating elos
-            init_tau: initial temperature for deleting agents
-            mutation_fn: mutate agents
-        """
-        super().__init__(population_sizes=[population_size], num_teams=2)
-        self.outcome_fn = outcome_fn
-        self.clone_fn = clone_fn
-        self.mutation_fn = mutation_fn
-
-        # keeps track of number of games and record for each agent
-        self.elo_update = elo_update
-        self.tau = init_tau
-        self.reset_vals()
-
-    def reset_vals(self):
-        self.captian_elos = np.ones(self.N)*1000
-
-    def rescale_elos(self, base_elo=1000.):
-        """
-        scales all elos so that base_elo is average
-            does not change any elo calculations, as they are all based on relative difference
-        Args:
-            base_elo: elo to make the 'average' elo
-        """
-        self.captian_elos += base_elo - np.sum(self.captian_elos)/self.N
-
-    def train_and_update_results(self, captian_choices):
-        i, j = captian_choices
-        outcome = self.outcome_fn(i, j)
-
-        obs_prob_i = (outcome + 1)/2  # observed probability of i win, .5 if tie, 1 if win, 0 if loss
-        expected_prob_i = 1/(1 + np.power(10, -(self.captian_elos[i] - self.captian_elos[j])/400))
-        self.captian_elos[i] += self.elo_update*(obs_prob_i - expected_prob_i)
-        self.captian_elos[j] += self.elo_update*((1 - obs_prob_i) - (1 - expected_prob_i))
-
-    def mutate(self):
-        if self.mutation_fn is not None:
-            self.mutation_fn()
-
-    def breed(self):
-        dist = torch.softmax(torch.tensor(self.captian_elos/self.tau), dim=-1)
-        # sample from this distribution with replacements
-        replacements = torch.multinomial(dist, self.N, replacement=True)
-        self.clone_fn(torch.arange(self.N), replacements)
-        for arr in (self.captian_elos,):
-            temp_arr = arr.copy()
-            arr[np.arange(self.N)] = temp_arr[replacements]
-        self.reset_vals()
-        self.rescale_elos()
 
 
 if __name__ == '__main__':

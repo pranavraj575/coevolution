@@ -50,13 +50,39 @@ class ParallelAlgorithm:
 
     def learn(self,
               total_timesteps,
+              number_of_eps=None,
+              number_of_eps_per_learning_step=1,
               callbacks=None,
               ):
-        while total_timesteps > 0:
+        """
+        trains for total_timesteps steps
+            repeatedly calls learn_episode
+        Args:
+            total_timesteps: number of timesteps to collect
+            number_of_eps: if specified, overrides total_timesteps, and instead collects this number of episodes
+            number_of_eps_per_learning_step: number of eps before each training step, default 1
+                this parameter is ignored if number_of_eps is None
+            callbacks:
+        Returns:
+        """
+        while True:
+            local_num_eps = None
+            if number_of_eps is not None:
+                local_num_eps = min(number_of_eps_per_learning_step,number_of_eps)
+                number_of_eps -= number_of_eps_per_learning_step
             timesteps = self.learn_episode(total_timesteps=total_timesteps,
+                                           number_of_eps=local_num_eps,
                                            callbacks=callbacks,
                                            )
             total_timesteps -= timesteps
+            if number_of_eps is not None:
+                # if this is specified, train for this number of eps
+                if number_of_eps <= 0:
+                    break
+            else:
+                # otherwise, break if we run out of timesteps
+                if  total_timesteps <= 0:
+                    break
 
     def _get_worker_iter(self, trainable):
         """
@@ -78,8 +104,17 @@ class ParallelAlgorithm:
 
     def learn_episode(self,
                       total_timesteps,
+                      number_of_eps=None,
                       callbacks=None,
                       ):
+        """
+        learn episode, collects total_timesteps steps then trains
+        Args:
+            total_timesteps: number of timesteps to collect
+            number_of_eps: if specified, overrides total_timesteps, and instead collects this number of episodes
+            callbacks:
+        Returns: number of collected timesteps
+        """
         if callbacks is None:
             callbacks = {agent: None for agent in self.workers}
         # observations, infos = self.env.reset()
@@ -161,6 +196,11 @@ class ParallelAlgorithm:
                 )
                 continue_rollout = continue_rollout or local_continue_rollout
 
+            if number_of_eps is not None:
+                # counter for number of episodes to do
+                number_of_eps -= 1
+                if number_of_eps <= 0:
+                    continue_rollout = False
         # end rollout
         local_end_rollout_info = dict()
         for agent in self.get_trainable_workers():

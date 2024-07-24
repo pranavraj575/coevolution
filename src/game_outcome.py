@@ -112,7 +112,7 @@ class OutcomeFn:
         raise NotImplementedError
 
 
-class PettingZooOutcomeFn:
+class PettingZooOutcomeFn(OutcomeFn):
     """
     outcome function which loads rl agents saved as files in specified directory
     """

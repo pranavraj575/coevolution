@@ -156,7 +156,7 @@ class OffPolicy:
                     ):
         callback = init_learn_info.get('callback')
         callback.on_rollout_end()
-        return None
+        return self.num_collected_steps
 
     def finish_learn(self, init_learn_info, end_rollout_info):
         callback = init_learn_info.get('callback')

@@ -16,7 +16,7 @@ class OnPolicy:
                    log_interval=4,
                    ):
         self.iteration = 0
-
+        self.reset_rollout=True
         total_timesteps, callback = self._setup_learn(
             total_timesteps,
             callback,
@@ -43,8 +43,11 @@ class OnPolicy:
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
 
-        self.num_collected_steps = 0
-        self.rollout_buffer.reset()
+        if self.reset_rollout:
+            # everytime we use rollout buffer to train, we reset self.num_collected_steps to -1
+            # if this isnt true, we have untrained examples in the buffer, and should continue adding to it
+            self.num_collected_steps = 0
+            self.rollout_buffer.reset()
         if self.use_sde:
             self.policy.reset_noise(self.env.num_envs)
 
@@ -100,6 +103,7 @@ class OnPolicy:
                   rollout_2_info,
                   rollout_buffer=None,
                   ):
+        # print(reward)
         if rollout_buffer is None:
             rollout_buffer = self.rollout_buffer
         values, log_probs = rollout_2_info
@@ -168,6 +172,10 @@ class OnPolicy:
                     ):
         if rollout_buffer is None:
             rollout_buffer = self.rollout_buffer
+
+        if self.num_collected_steps < self.n_steps:
+            # if we have not collected enough training steps to fill rollout, continue
+            return False
         callback = init_learn_info.get('callback')
         log_interval = init_learn_info.get('log_interval')
         total_timesteps = init_learn_info.get('total_timesteps')
@@ -192,7 +200,9 @@ class OnPolicy:
             self._dump_logs(self.iteration)
 
         self.train()
-        return None
+        # we just trained on the buffer, so we should reset the buffer time we initialize an episode
+        self.reset_rollout = True
+        return self.num_collected_steps
 
     def finish_learn(self, init_learn_info, end_rollout_info):
         callback = init_learn_info.get('callback')

@@ -39,8 +39,11 @@ thingy = ParallelAlgorithm(policy=MlpPolicy,
                            batch_size=100,
                            )
 
-thingy.learn(total_timesteps=2000)
+thingy.learn(total_timesteps=2001)#, number_of_eps=69,number_of_eps_per_learning_step=5)
 
+print(thingy.workers)
+print(thingy.env.unwrapped)
+print(thingy.env.unwrapped.history)
 quit()
 
 parallel_env = pistonball_v6.parallel_env(render_mode="human", continuous=False, n_pistons=6)
