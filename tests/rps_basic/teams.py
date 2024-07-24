@@ -3,9 +3,8 @@ from src.team_trainer import DiscreteInputTrainer
 from src.coevolver import CaptianCoevolution
 from src.language_replay_buffer import ReplayBufferDiskStorage
 from matplotlib import pyplot as plt
-from tests.rps_basic_game import plot_dist_evolution
-from tests.rps_basic_game import SingleOutcome
-from tests.temp_file import collect_training_data
+from tests.rps_basic.game import plot_dist_evolution
+from tests.rps_basic.game import SingleOutcome
 
 
 def loss_plot(losses, save_dir=None, show=False):
@@ -28,7 +27,7 @@ if __name__ == '__main__':
 
     # print(outcomes((torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]]))))[-1])
 
-    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+    DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps_teams')
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)
@@ -59,7 +58,7 @@ if __name__ == '__main__':
     losses = []
     for epoch in range(100):
         noise = trainer.create_nose_model_towards_uniform(.1)
-        coevolver.update_noise_model(noise_model=noise)
+        coevolver.set_noise_model(noise_model=noise)
         coevolver.epoch(rechoose=False)
 
         # buffer.push((scalar, None, team, None))

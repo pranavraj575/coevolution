@@ -99,27 +99,62 @@ class CoevolutionBase:
 
 
 class CaptianCoevolution(CoevolutionBase):
+    """
+    coevolution where matches are played between team captains
+        i.e. a team built around team captians  (t_1,t_2,...) (one for each team) will play each other
+            the score of the game will be used to update the team captian's elo
+        this way, the performance of a team built to support the captian will only update the elo of the captian
+
+        in teams with 1 member, this is not relevant, and is simple coevolution
+    """
     def __init__(self,
                  outcome_fn: OutcomeFn,
-                 clone_fn,
                  population_sizes,
                  team_trainer: TeamTrainer,
+                 clone_fn=None,
                  team_sizes=(1, 1),
-                 elo_update=1,
+                 elo_conversion=400/np.log(10),
+                 elo_update=32*np.log(10)/400,
                  mutation_fn=None,
+                 noise_model=None,
                  ):
+        """
+        Args:
+            outcome_fn: handles training agents and returning game results
+            population_sizes:
+            team_trainer: model to select teams given a captian, may be trained alongside coevolution
+                in games with 1 captain, this mostly does nothing, and can just be the default TeamTrainer class
+            team_sizes:
+            clone_fn:
+            elo_conversion: to keep calculations simple, we use a scaled version of elo where the probability of
+                player a (rating Ra) winning against player b (rating Rb) is simply 1/(1+e^{Rb-Ra})
+                    i.e. win probabilities are calculated with softmax([Ra,Rb])
+                to convert between this and classic elo (where win probs are 1/(1+10^{(Rb'-Ra')/400}), we simply scale
+                    by the factor 400/np.log(10)
+                This value is only used for display purposes, and will not change behavior of the learning algorithm
+            elo_update: Ra'=Ra+elo_update*(Sa-Ea) (https://en.wikipedia.org/wiki/Elo_rating_system).
+                We are using scaled elo, so keep this in mind.
+                    a 'classic' elo update of 32 is equivalent to a scaled 32*log(10)/400
+            mutation_fn:
+            noise_model: model to use to set noise in team selectoin
+                takes T-element multinomial distributions and returns another (with added noise)
+                    ((N,T) -> (N,T))
+                updated with set_noise_model
+
+        """
         super().__init__(outcome_fn=outcome_fn,
                          population_sizes=population_sizes,
                          team_sizes=team_sizes,
                          )
         self.team_trainer = team_trainer
-        self.noise_model = None
+        self.noise_model = noise_model
         self.clone_fn = clone_fn
         self.captian_elos = torch.zeros(self.N)
         self.elo_update = elo_update
         self.mutation_fn = mutation_fn
+        self.elo_conversion = elo_conversion
 
-    def update_noise_model(self, noise_model):
+    def set_noise_model(self, noise_model):
         self.noise_model = noise_model
 
     def train_and_update_results(self, captian_choices):
@@ -166,6 +201,8 @@ class CaptianCoevolution(CoevolutionBase):
                                                 )
 
     def breed(self):
+        if self.clone_fn is None:
+            return
         dist = torch.softmax(self.captian_elos, dim=-1)
         # sample from this distribution with replacements
         replacements = torch.multinomial(dist, self.N, replacement=True)
@@ -173,7 +210,7 @@ class CaptianCoevolution(CoevolutionBase):
         for arr in (self.captian_elos,):
             temp_arr = arr.clone()
             arr[np.arange(self.N)] = temp_arr[replacements]
-        self.rescale_elos()
+        self.rebase_elos()
 
     def mutate(self):
         if self.mutation_fn is not None:
@@ -181,38 +218,70 @@ class CaptianCoevolution(CoevolutionBase):
         else:
             super().mutate()
 
-    def rescale_elos(self, base_elo=0.):
+    def _get_rebased_elos(self, elos, base_elo):
+        """
+        scales all elos so that base_elo is average
+        Args:
+            elos: elos to rescale
+            base_elo: elo to make the 'average' elo
+        Returns: rebased elos
+        """
+        return elos + (base_elo - torch.mean(elos))
+
+    def rebase_elos(self, base_elo=0.):
         """
         scales all elos so that base_elo is average
             does not change any elo calculations, as they are all based on relative difference
         Args:
             base_elo: elo to make the 'average' elo
         """
-        self.captian_elos += base_elo - torch.sum(self.captian_elos)/self.N
+        self.captian_elos = self._get_rebased_elos(elos=self.captian_elos, base_elo=base_elo)
+
+    def get_classic_elo(self, base_elo=None):
+        """
+        gets 'classic' elo values
+        Args:
+            base_elo: if specified, rebases the elos so this is the average elo
+        Returns:
+            'classic' elos, such that for players with 'classic' elos Ra', Rb', the win probability of a is
+                1/(1+e^{(Rb'-Ra')/self.elo_conversion})
+            i.e. if the default elo_conversion is used, this is  1/(1+10^{(Rb'-Ra')/400}), the standard value
+        """
+
+        scaled_elos = self.captian_elos*self.elo_conversion
+        if base_elo is not None:
+            scaled_elos = self._get_rebased_elos(elos=scaled_elos, base_elo=base_elo)
+        return scaled_elos
 
 
 class PettingZooCaptianCoevolution(CaptianCoevolution):
+    """
+    keeps track of a set of stable baseline algorithms, and uses them to
+    """
     def __init__(self,
                  env_constructor,
                  outcome_fn: OutcomeFn,
-                 clone_fn,
                  population_sizes,
                  team_trainer: TeamTrainer,
                  team_sizes=(1, 1),
                  elo_update=1,
-                 mutation_fn=None,
                  ):
         super().__init__(outcome_fn=outcome_fn,
-                         clone_fn=clone_fn,
                          population_sizes=population_sizes,
                          team_trainer=team_trainer,
                          team_sizes=team_sizes,
                          elo_update=elo_update,
-                         mutation_fn=mutation_fn,
+                         mutation_fn=None,
+                         clone_fn=None,
                          )
         raise NotImplementedError
         self.env_constructor = env_constructor
 
+    def breed(self):
+        raise NotImplementedError
+
+    def mutate(self):
+        raise NotImplementedError
 
 class TwoTeamsCaptainCoevolution(CoevolutionBase):
     def __init__(self,

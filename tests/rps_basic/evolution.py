@@ -1,6 +1,6 @@
 import torch
 from src.coevolver import CaptianCoevolution
-from rps_basic_game import plot_dist_evolution, SingleOutcome
+from tests.rps_basic.game import plot_dist_evolution, SingleOutcome
 
 if __name__ == '__main__':
     import os, sys
@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     # print(outcomes((torch.tensor([[0], [1], [2], [0]]), torch.tensor(([[1], [0], [0], [0]]))))[-1])
 
-    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+    DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps_evolution')
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)

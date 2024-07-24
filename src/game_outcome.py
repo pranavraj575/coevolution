@@ -76,9 +76,9 @@ class PlayerInfo:
             else:
                 new_preembed = other_obs_preembed
         return PlayerInfo(
-                          obs_preembed=new_preembed,
-                          obs_mask=new_mask,
-                          )
+            obs_preembed=new_preembed,
+            obs_mask=new_mask,
+        )
 
     def __str__(self):
         return ('PlayerInfo(' +
@@ -93,6 +93,38 @@ class OutcomeFn:
     gives an outcome score for each team, all outcome scores are non-negative and sum to 1
         usually 1 is win, 0.5 is tie (for two team games) and 0 is loss
     """
+
+    def get_outcome(self, team_choices, train=None):
+        """
+        Args:
+            team_choices: K-tuple of teams, each team is an array of players
+            train: either None or boolean array of same shape as team_choices
+                whether to train each agent
+        Returns: list corresponding to teams
+            [
+                outcome score,
+                list corresponding to players of PlayerInfo(
+                    obs_preembed=player observation (None or size (S,*) seq of observations);
+                    obs_mask=observation mask (None or size (S,) boolean array of which items to mask;
+                    )
+            ]
+        """
+        raise NotImplementedError
+
+
+class PettingZooOutcomeFn:
+    """
+    outcome function which loads rl agents saved as files in specified directory
+    """
+
+    def __init__(self, zoo_dir):
+        """
+        Args:
+            zoo_dir: directory that stores files of agent checkpoints
+                each folder in this directory should be a stable baselines checkpoint
+                this folder should probably contain nothing else
+        """
+        self.zoo_dir = zoo_dir
 
     def get_outcome(self, team_choices, train=None):
         """

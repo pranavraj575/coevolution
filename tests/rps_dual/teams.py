@@ -2,7 +2,7 @@ import torch
 from src.team_trainer import DiscreteInputTrainer
 from src.language_replay_buffer import ReplayBufferDiskStorage
 from src.coevolver import CaptianCoevolution
-from tests.rps_dual_game import DualPairOutcome
+from tests.rps_dual.game import DualPairOutcome
 import numpy as np
 import itertools
 
@@ -51,13 +51,13 @@ def dist_from_trainer(trainer: DiscreteInputTrainer,
 
 if __name__ == '__main__':
     import os, sys
-    from tests.rps_basic_teams import plot_dist_evolution, loss_plot
+    from tests.rps_basic.teams import plot_dist_evolution, loss_plot
     import time
 
     torch.random.manual_seed(69)
     agents = torch.arange(3)
 
-    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+    DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps2_teams')
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     for epoch in range(100):
         start_time = time.time()
         noise = trainer.create_nose_model_towards_uniform(1/np.sqrt(epoch/2 + 1))
-        coevolver.update_noise_model(noise_model=noise)
+        coevolver.set_noise_model(noise_model=noise)
         coevolver.epoch(rechoose=False)
 
         init_distribution = dist_from_trainer(trainer=trainer,

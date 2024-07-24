@@ -1,7 +1,7 @@
 import torch
 from src.coevolver import CaptianCoevolution
-from tests.rps_basic_game import plot_dist_evolution
-from tests.rps_dual_game import DualPreMappedOutcome
+from tests.rps_basic.game import plot_dist_evolution
+from tests.rps_dual.game import DualPreMappedOutcome
 from src.team_trainer import TeamTrainer
 
 if __name__ == '__main__':
@@ -9,7 +9,7 @@ if __name__ == '__main__':
 
     torch.random.manual_seed(69)
 
-    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+    DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
     plot_dir = os.path.join(DIR, 'data', 'plots', 'tests_rps2_evolution')
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)
