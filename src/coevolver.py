@@ -191,6 +191,29 @@ class CaptianCoevolution(CoevolutionBase):
         self.captian_elos += base_elo - torch.sum(self.captian_elos)/self.N
 
 
+class PettingZooCaptianCoevolution(CaptianCoevolution):
+    def __init__(self,
+                 env_constructor,
+                 outcome_fn: OutcomeFn,
+                 clone_fn,
+                 population_sizes,
+                 team_trainer: TeamTrainer,
+                 team_sizes=(1, 1),
+                 elo_update=1,
+                 mutation_fn=None,
+                 ):
+        super().__init__(outcome_fn=outcome_fn,
+                         clone_fn=clone_fn,
+                         population_sizes=population_sizes,
+                         team_trainer=team_trainer,
+                         team_sizes=team_sizes,
+                         elo_update=elo_update,
+                         mutation_fn=mutation_fn,
+                         )
+        raise NotImplementedError
+        self.env_constructor = env_constructor
+
+
 class TwoTeamsCaptainCoevolution(CoevolutionBase):
     def __init__(self,
                  population_size,

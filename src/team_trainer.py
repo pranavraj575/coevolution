@@ -181,6 +181,7 @@ class MLMTeamTrainer(TeamTrainer):
                       mask_probs=None,
                       replacement_probs=(.8, .1, .1),
                       minibatch=True,
+                      mask_obs_prob=.1,
                       ):
         """
 
@@ -194,6 +195,7 @@ class MLMTeamTrainer(TeamTrainer):
             scalar: thing to multiply losses
                 should be 1 for normal MLM training
                     -1 to push model away from 'bad' teamas
+            mask_obs_prob: if >0, randomly masks observations with this probability as well
         Returns:
             avg losses for whole dataset
         """
@@ -215,6 +217,7 @@ class MLMTeamTrainer(TeamTrainer):
                                           mask_probs=mask_probs,
                                           replacement_probs=replacement_probs,
                                           scalar=scalar,
+                                          mask_obs_prob=mask_obs_prob,
                                           )
             if minibatch:
                 self.optim.step()
@@ -230,6 +233,7 @@ class MLMTeamTrainer(TeamTrainer):
                         mask_probs=None,
                         replacement_probs=(.8, .1, .1),
                         scalar=1.,
+                        mask_obs_prob=.1,
                         ):
         """
         runs learn step on a lot of mask_probabilities
@@ -245,6 +249,7 @@ class MLMTeamTrainer(TeamTrainer):
             scalar: thing to multiply losses by
                 should be 1 for normal MLM training
                     -1 to push model away from 'bad' teamas
+            mask_obs_prob: if >0, randomly mask observations with this prob
         Returns:
             avg crossentropy loss
         """
@@ -253,9 +258,18 @@ class MLMTeamTrainer(TeamTrainer):
             mask_probs = torch.arange(0, T + 1)/T
         losses = []
         for mask_prob in mask_probs:
+            if mask_obs_prob > 0 and obs_preembed is not None:
+                if obs_mask is not None:
+                    temp_obs_mask = obs_mask.clone()
+                else:
+                    temp_obs_mask = torch.zeros((obs_preembed.shape[:2]))
+                additional_mask = torch.rand_like(temp_obs_mask) < mask_obs_prob
+                temp_obs_mask = torch.logical_or(temp_obs_mask, additional_mask)
+            else:
+                temp_obs_mask = obs_mask
             loss = self._get_losses(obs_preembed=obs_preembed,
                                     teams=teams,
-                                    obs_mask=obs_mask,
+                                    obs_mask=temp_obs_mask,
                                     mask_prob=mask_prob,
                                     replacement_probs=replacement_probs,
                                     scalar=scalar,
