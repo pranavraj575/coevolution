@@ -100,7 +100,8 @@ class OutcomeFn:
         Args:
             team_choices: K-tuple of teams, each team is an array of players
             train_info: either None or array of same shape as team_choices
-                dictionary of training settings for each agent
+                each element is dictionary of training settings for corresponding agent
+
         Returns: list corresponding to teams
             [
                 outcome score,
@@ -125,13 +126,48 @@ class PettingZooOutcomeFn(OutcomeFn):
         """
         self.zoo = zoo
 
+    def set_index_conversion(self, index_conversion):
+        """
+        sets a function converting indices to (zoo index, population index)
+        Args:
+            index_conversion: (int -> (int, int)); (global index -> (zoo index, population index))
+        """
+        self.index_conversion = index_conversion
+
+    def index_to_agent(self, idx, agent_training_dict):
+        """
+        takes index and agent training dict and returns worker
+            assumes self.set_zoo and self.set_index_conversion have already been called
+        Args:
+            idx: global index of agent
+            agent_training_dict: training dictionary associated with agent
+                includes whether agent is captian, whether there are repeats, etc
+
+        Returns:
+
+        """
+        pop_idx, local_idx = self.index_conversion(idx)
+        collect_only = agent_training_dict.get('collect_only', False)
+        worker, worker_info = self.zoo[pop_idx].load_worker(worker_key=str(local_idx),
+                                                            load_buffer=not collect_only,
+                                                            WorkerClass=None,
+                                                            )
+        return worker
+
     def get_outcome(self, team_choices, train_info=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
-                players are files in zoo_dir
+                players are indices corresponding
             train_info: either None or array of same shape as team_choices
-                dictionary of training settings for each agent
+                each element is dictionary of training settings for corresponding agent
+
+                relevant keys:
+                    'train': whether the agent should be trained
+                    'collect_only': whether the agent should only collect data and update main agent's buffer
+                    'save_buffer': whether to save buffer of agent (should probably be unspecified or true)
+                    'save_class': whether to save class of agent (should probably be unspecified or true)
+
         Returns: list corresponding to teams
             [
                 outcome score,
@@ -140,5 +176,49 @@ class PettingZooOutcomeFn(OutcomeFn):
                     obs_mask=observation mask (None or size (S,) boolean array of which items to mask;
                     )
             ]
+        """
+        if train_info is None:
+            train_info = [[dict() for _ in team] for team in team_choices]
+
+        agent_choices = [
+            [self.index_to_agent(member, member_training) for member, member_training in zip(*t)]
+            for t in zip(team_choices, train_info)]
+        return self._get_outcome_from_agents(agent_choices=agent_choices,
+                                             index_choices=team_choices.detach().numpy(),
+                                             train_info=train_info,
+                                             )
+
+    def _save_agents(self, agent_choices, index_choices, train_info):
+        for t in zip(agent_choices, index_choices, train_info):
+            for agent, global_idx, agent_training_dict in zip(*t):
+                pop_idx, local_idx = self.index_conversion(global_idx)
+                cage: ZooCage = self.zoo[pop_idx]
+
+                if agent_training_dict.get('collect_only', False):
+                    cage.update_worker_buffer(local_worker=agent,
+                                              worker_key=str(local_idx),
+                                              WorkerClass=None,
+                                              )
+                elif agent_training_dict.get('train', True):
+                    cage.overwrite_worker(worker=agent,
+                                          worker_key=str(local_idx),
+                                          save_buffer=agent_training_dict.get('save_buffer', True),
+                                          save_class=agent_training_dict.get('save_class', True),
+                                          worker_info=None,
+                                          )
+
+    def _get_outcome_from_agents(self, agent_choices, index_choices, train_info):
+        """
+        from workers, indices, and training info, evaluates the teams in a pettingzoo enviornment and returns
+            the output for self.get_outcome
+        also should train agents as specified by train_info
+        also should save agents as specified by train_info
+        Args:
+            agent_choices:
+            index_choices:
+            train_info:
+
+        Returns:
+
         """
         raise NotImplementedError

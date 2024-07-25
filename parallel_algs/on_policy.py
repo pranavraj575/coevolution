@@ -45,14 +45,14 @@ class OnPolicy:
         self.policy.set_training_mode(False)
 
         if self.reset_rollout:
-            # everytime we use rollout buffer to train, we reset self.num_collected_steps to -1
             # if this isnt true, we have untrained examples in the buffer, and should continue adding to it
             self.num_collected_steps = 0
             self.rollout_buffer.reset()
-            self.reset_rollout=False
+            self.reset_rollout = False
         if self.use_sde:
             self.policy.reset_noise(self.env.num_envs)
 
+        self.starting_steps = self.num_collected_steps
         callback.on_rollout_start()
         return None
 
@@ -159,7 +159,10 @@ class OnPolicy:
         self._last_obs = new_obs  # type: ignore[assignment]
         self._last_episode_starts = dones
         # if current rollout size is less than max rollout size, continue rollout
-        return self.num_collected_steps < self.n_steps
+        return {
+            'continue_rollout': self.num_collected_steps < self.n_steps,
+            'steps_so_far': self.num_collected_steps - self.starting_steps,
+        }
 
     def get_action(self, obs):
 
@@ -181,7 +184,9 @@ class OnPolicy:
 
         if self.num_collected_steps < self.n_steps:
             # if we have not collected enough training steps to fill rollout, continue
-            return False
+            return {'num_collected_steps': self.num_collected_steps - self.starting_steps,
+                    'rollout_filled': False,
+                    }
         callback = init_learn_info.get('callback')
         log_interval = init_learn_info.get('log_interval')
         total_timesteps = init_learn_info.get('total_timesteps')
@@ -208,7 +213,9 @@ class OnPolicy:
         self.train()
         # we just trained on the buffer, so we should reset the buffer time we initialize an episode
         self.reset_rollout = True
-        return self.num_collected_steps
+        return {'num_collected_steps': self.num_collected_steps - self.starting_steps,
+                'rollout_filled': True,
+                }
 
     def finish_learn(self, init_learn_info, end_rollout_info):
         callback = init_learn_info.get('callback')

@@ -140,7 +140,10 @@ class OffPolicy:
                     self._dump_logs()
         # if not done, then return true for continuing rollout
         # else, return false for ending rollout
-        return not np.any(dones)
+        return {
+            'continue_rollout': not np.any(dones),
+            'steps_so_far': self.num_collected_steps,
+        }
 
     def get_action(self, obs, learning_starts=0, action_noise=None):
 
@@ -155,7 +158,7 @@ class OffPolicy:
                     ):
         callback = init_learn_info.get('callback')
         callback.on_rollout_end()
-        return self.num_collected_steps
+        return {'num_collected_steps': self.num_collected_steps}
 
     def finish_learn(self, init_learn_info, end_rollout_info):
         callback = init_learn_info.get('callback')

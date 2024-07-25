@@ -192,7 +192,7 @@ class ParallelAlgorithm:
             # rollout 3 (end of loop)
             steps_so_far = 0
             for agent in self.get_trainable_workers():
-                local_continue_rollout = self.workers[agent].rollout_3(
+                rollout_3_info = self.workers[agent].rollout_3(
                     action=actions[agent],
                     new_obs=self.last_observations[agent],
                     reward=rewards[agent],
@@ -204,35 +204,40 @@ class ParallelAlgorithm:
                     rollout_1_info=local_rollout_1_info[agent],
                     rollout_2_info=local_rollout_2_info[agent],
                 )
-                continue_rollout = continue_rollout or local_continue_rollout
-                steps_so_far = max(steps_so_far, self.workers[agent].num_collected_steps)
+                continue_rollout = continue_rollout or rollout_3_info.get('continue_rollout', True)
+                steps_so_far = max(steps_so_far, rollout_3_info.get('steps_so_far', 0))
 
             if number_of_eps is not None:
                 # counter for number of episodes to do
                 number_of_eps -= 1
                 if number_of_eps <= 0:
                     continue_rollout = False
+                    print('there')
             if term:
                 # environment terminated and must be reset next time
                 self.reset_env = True
 
             if strict_timesteps and steps_so_far >= total_timesteps:
                 continue_rollout = False
+                print('here')
+
         # end rollout
         local_end_rollout_info = dict()
+        num_collected_steps = 0
         for agent in self.get_trainable_workers():
             end_rollout_info = self.workers[agent].end_rollout(
                 init_learn_info=local_init_learn_info[agent],
                 init_rollout_info=local_init_rollout_info[agent],
             )
             local_end_rollout_info[agent] = end_rollout_info
+            print(end_rollout_info)
+            num_collected_steps = max(num_collected_steps,
+                                      end_rollout_info.get('num_collected_steps', 0))
 
-        num_collected_steps = 0
         for agent in self.get_trainable_workers():
             self.workers[agent].finish_learn(
                 init_learn_info=local_init_learn_info[agent],
                 end_rollout_info=local_end_rollout_info[agent],
             )
-            num_collected_steps = self.workers[agent].num_collected_steps
 
         return num_collected_steps

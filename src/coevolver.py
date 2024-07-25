@@ -1,3 +1,5 @@
+import shutil
+
 import numpy as np
 import torch
 from src.team_trainer import TeamTrainer
@@ -36,22 +38,22 @@ class CoevolutionBase:
             print("WARNING: number of agents is not divisible by num teams")
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
 
-    def index_to_pop_index(self, i):
+    def index_to_pop_index(self, global_idx):
         """
         returns the index of agent specified by i
         Args:
-            i: index
+            global_idx:
         Returns:
             population index (which population), index in population
         """
         pop_idx = 0
-        while i - self.population_sizes[pop_idx] >= 0:
-            i -= self.population_sizes[pop_idx]
+        while global_idx - self.population_sizes[pop_idx] >= 0:
+            global_idx -= self.population_sizes[pop_idx]
             pop_idx += 1
-        return pop_idx, i
+        return pop_idx, global_idx
 
-    def pop_index_to_index(self, pop_idx, j):
-        return self.cumsums[pop_idx] + j
+    def pop_index_to_index(self, pop_idx, i):
+        return self.cumsums[pop_idx] + i
 
     def create_random_captians(self, N=None):
         """
@@ -287,12 +289,13 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  population_sizes,
                  team_trainer: TeamTrainer,
                  worker_constructors,
-                 zoo_cages_dir,
+                 zoo_dir,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
                  elo_update=32*np.log(10)/400,
                  noise_model=None,
                  reinit_agents=True,
+                 mutation_prob=.01,
                  ):
         """
         Args:
@@ -303,11 +306,22 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             worker_constructors: list of K constructors, size of each population
                 ith constructor takes a worker index (0<j<population_sizes[i])
                     returns a (worker,worker_info) tuple
-            zoo_cages_dir: place to store cages of agents
+                worker_info relevant keys:
+                    'is_worker': whether agent is a worker class
+                    'clonable': whether agent is able to be cloned
+                    'clone_replacable': whether agent is able to be replace by a clone of another agent
+                    'mutation_resettable': whether agent is resettable in mutation
+                    'keep_old_buffer': whether to keep old buffer in event of reset
+
+                    'position_dict': dictionary of info that is associated with position:
+                        i.e. if any entries are in this dictionary, they will be unchanged after replacing with a clone
+                            or mutation
+            zoo_dir: place to store cages of agents
             team_sizes:
             elo_conversion:
             elo_update:
             noise_model:
+            mutation_prob: probability an agent randomly reinitializes each epoch
         """
         super().__init__(outcome_fn=outcome_fn,
                          population_sizes=population_sizes,
@@ -317,36 +331,29 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          elo_update=elo_update,
                          mutation_fn=None,
                          clone_fn=None,
-                         noise_model=noise_model
+                         noise_model=noise_model,
                          )
         self.env_constructor = env_constructor
         self.worker_constructors = worker_constructors
         self.zoo = [
-            ZooCage(zoo_dir=os.path.join(zoo_cages_dir, 'cage_' + str(i)),
+            ZooCage(zoo_dir=os.path.join(zoo_dir, 'cage_' + str(i)),
                     overwrite_zoo=True,
                     )
-            for i in range(self.num_teams)
+            for i in range(len(population_sizes))
         ]
 
         self.outcome_fn: PettingZooOutcomeFn
         self.outcome_fn.set_zoo(self.zoo)
-
+        self.outcome_fn.set_index_conversion(index_conversion=self.index_to_pop_index)
+        self.zoo_dir = zoo_dir
         if reinit_agents:
             self.init_agents()
+        self.mutation_prob = mutation_prob
 
     def init_agents(self):
-        for popsize, constructor, cage in zip(self.population_sizes,
-                                              self.worker_constructors,
-                                              self.zoo,
-                                              ):
+        for pop_idx, popsize in enumerate(self.population_sizes):
             for i in range(popsize):
-                worker, worker_info = constructor(i)
-                cage.overwrite_worker(worker=worker,
-                                      worker_key=str(i),
-                                      save_buffer=True,
-                                      save_class=True,
-                                      worker_info=worker_info,
-                                      )
+                self.reset_agent(pop_idx=pop_idx, i=i)
 
     def save_zoo(self, save_dir):
         """
@@ -357,11 +364,90 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         for zoo_cage in self.zoo:
             zoo_cage.save_cage(os.path.join(save_dir, os.path.basename(zoo_cage.zoo_dir)))
 
+    def kill_zoo(self):
+        for zoo_cage in self.zoo:
+            zoo_cage.kill_cage()
+        shutil.rmtree(self.zoo_dir)
+
     def breed(self):
-        raise NotImplementedError
+        valid_replacement_indices = []
+        elos = []
+        for global_idx in range(self.N):
+            pop_idx, i = self.index_to_pop_index(global_idx=global_idx)
+            info = self.zoo[pop_idx].load_info(key=str(i))
+            if info.get('clonable', True):
+                valid_replacement_indices.append(global_idx)
+                elos.append(self.captian_elos[global_idx])
+        if not valid_replacement_indices:
+            # no clonable agents
+            return
+
+        dist = torch.softmax(torch.tensor(elos), dim=-1)
+        # sample from this distribution with replacements
+        replacements = list(torch.multinomial(dist, self.N, replacement=True))
+        for global_idx, rep_idx in enumerate(replacements):
+            # replace agent at global idx with agent at valid_replacement_indices[rep_idx]
+            pop_idx, i = self.index_to_pop_index(global_idx=global_idx)
+            info = self.zoo[pop_idx].load_info(key=str(i))
+            if info.get('clone_replacable', True):
+                # keep these values,
+                carry_over = info.get('position_dict', dict())
+                carry_over['position_dict'] = info.get('position_dict', dict())
+                pop_idx_rep, i_rep = self.index_to_pop_index(global_idx=valid_replacement_indices[rep_idx])
+                replacement_agent, replacement_info = self.zoo[pop_idx_rep].load_animal(key=str(i_rep),
+                                                                                        load_buffer=True)
+                # update replacement dictionary with elements in carry_over dict
+                replacement_info.update(carry_over)
+
+                self.zoo[pop_idx].overwrite_animal(animal=replacement_agent,
+                                                   key=str(i),
+                                                   info=replacement_info,
+                                                   save_buffer=True,
+                                                   save_class=True,
+                                                   )
+                # replace elo as well
+                self.captian_elos[global_idx] = elos[rep_idx]
+        self.rebase_elos()
+
+    def reset_agent(self, pop_idx, i, keep_old_buffer=False):
+        agent, info = self.worker_constructors[pop_idx](i)
+        cage = self.zoo[pop_idx]
+        if info.get('is_worker', True):
+            if keep_old_buffer and cage.worker_exists(worker_key=str(i)):
+                old_worker, _ = cage.load_worker(worker_key=str(i),
+                                                 WorkerClass=None,
+                                                 load_buffer=True,
+                                                 )
+            else:
+                old_worker = None
+            cage.overwrite_worker(worker=agent,
+                                  worker_key=str(i),
+                                  save_buffer=True,
+                                  save_class=True,
+                                  worker_info=info,
+                                  )
+            if old_worker is not None:
+                cage.update_worker_buffer(local_worker=old_worker,
+                                          worker_key=str(i),
+                                          WorkerClass=None,
+                                          )
+        else:
+            cage.overwrite_other(other=agent,
+                                 other_key=str(i),
+                                 other_info=info,
+                                 )
 
     def mutate(self):
-        raise NotImplementedError
+        if self.mutation_prob > 0:
+            for global_idx in range(self.N):
+                if torch.rand(1) < self.mutation_prob:
+                    pop_idx, i = self.index_to_pop_index(global_idx=global_idx)
+                    info = self.zoo[pop_idx].load_info(key=str(i))
+                    if info.get('mutation_resettable', True):
+                        self.reset_agent(pop_idx=pop_idx,
+                                         i=i,
+                                         keep_old_buffer=info.get('keep_old_buffer', True)
+                                         )
 
 
 if __name__ == '__main__':
@@ -380,12 +466,12 @@ if __name__ == '__main__':
         agents[original] = temp[replacements]
 
 
-    class MaxOutcome(OutcomeFn):
+    class MaxOutcome(PettingZooOutcomeFn):
         """
         return team with highest indices
         """
 
-        def get_outcome(self, team_choices, train=None):
+        def get_outcome(self, team_choices, train_info=None):
             agent_choices = [agents[team[0]] for team in team_choices]
             if agent_choices[0] == agent_choices[1]:
                 return [(.5, [PlayerInfo()]), (.5, [PlayerInfo()])]
@@ -411,12 +497,17 @@ if __name__ == '__main__':
 
     print(cap.captian_elos)
     print(agents)
-    quit()
 
-    test = TwoTeamsCaptainCoevolution(population_size=popsize,
-                                      outcome_fn=lambda i, j: max(i, j),
-                                      clone_fn=clone_fn,
-                                      )
-    print(agents)
-    test.breed()
-    print(agents)
+    from parallel_algs.dqn.DQN import WorkerDQN
+    from stable_baselines3.dqn import MlpPolicy
+
+    capzoo = PettingZooCaptianCoevolution(env_constructor=lambda _: None,
+                                          outcome_fn=MaxOutcome(),
+                                          population_sizes=[3, 4, 5],
+                                          team_trainer=TeamTrainer(num_agents=3 + 4 + 5),
+                                          worker_constructors=[lambda _: (WorkerDQN(policy=MlpPolicy,
+                                                                                    env='CartPole-v1'), None)
+                                                               for _ in range(3)],
+                                          zoo_dir=os.path.join(DIR, 'data', 'coevolver_zoo_test'),
+                                          )
+    capzoo.kill_zoo()

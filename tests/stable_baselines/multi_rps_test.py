@@ -18,7 +18,7 @@ import os, sys
 
 from src.zoo_cage import ZooCage
 
-Worker = WorkerDQN
+Worker = WorkerPPO
 
 if issubclass(Worker, DQN):
     MlpPolicy = DQNPolicy
@@ -30,9 +30,6 @@ DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), 
 env = rps_v2.parallel_env()  # render_mode="human")
 
 observations, infos = env.reset()
-for agent in env.agents:
-    print(env.observation_space('player_0'))
-quit()
 
 
 class always_0:
@@ -66,42 +63,40 @@ thingy = ParallelAlgorithm(policy=MlpPolicy,
 
 zoo = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_test_rps'))
 
-thingy.learn(total_timesteps=200)
+thingy.learn(total_timesteps=400)
 
 print(thingy.workers)
-worker = thingy.workers['player_0']
-worker: Worker
+worker0 = thingy.workers['player_0']
+worker0: Worker
 
-zoo.overwrite_worker(worker=worker, worker_key='0')
-zoo.overwrite_worker(worker=zoo.load_worker(worker_key='0'), worker_key='1')
+zoo.overwrite_worker(worker=worker0, worker_key='0')
+zoo.overwrite_worker(worker=zoo.load_worker(worker_key='0')[0], worker_key='1')
 
-zoo.activate_worker(0, '0')
-zoo.activate_worker(1, '1')
-worker2 = zoo.active_workers[1]
+worker1, _ = zoo.load_worker(worker_key = '1')
 
-if isinstance(worker, OffPolicyAlgorithm):
-    print(worker.replay_buffer.size())
-elif isinstance(worker, OnPolicyAlgorithm):
-    print(worker.rollout_buffer.size())
+if isinstance(worker0, OffPolicyAlgorithm):
+    print(worker0.replay_buffer.size())
+elif isinstance(worker0, OnPolicyAlgorithm):
+    print(worker0.rollout_buffer.size())
 
-if isinstance(worker2, OffPolicyAlgorithm):
-    print(worker2.replay_buffer.size())
-elif isinstance(worker, OnPolicyAlgorithm):
-    print(worker2.rollout_buffer.size())
-worker2.set_env(worker.env)
-thingy.workers['player_0'] = worker2
+if isinstance(worker1, OffPolicyAlgorithm):
+    print(worker1.replay_buffer.size())
+elif isinstance(worker0, OnPolicyAlgorithm):
+    print(worker1.rollout_buffer.size())
+worker1.set_env(worker0.env)
+thingy.workers['player_0'] = worker1
 print('starting thingy here')
-thingy.learn(total_timesteps=220)
+thingy.learn(total_timesteps=20)
 
-if isinstance(worker2, OffPolicyAlgorithm):
-    print(worker2.replay_buffer.size())
-elif isinstance(worker, OnPolicyAlgorithm):
-    print(worker2.rollout_buffer.size())
+if isinstance(worker1, OffPolicyAlgorithm):
+    print(worker1.replay_buffer.size())
+elif isinstance(worker0, OnPolicyAlgorithm):
+    print(worker1.rollout_buffer.size())
 
 for _ in range(2):
-    # pushes the 220 examples from worker2 into file of worker
-    worker = zoo.update_worker_buffer(1, '0')
-    if isinstance(worker, OffPolicyAlgorithm):
-        print(worker.replay_buffer.size())
-    elif isinstance(worker, OnPolicyAlgorithm):
-        print(worker.rollout_buffer.size())
+    # pushes the 220 examples from worker1 into file of worker0
+    worker0,_ = zoo.update_worker_buffer(local_worker=worker1, worker_key='0')
+    if isinstance(worker0, OffPolicyAlgorithm):
+        print(worker0.replay_buffer.size())
+    elif isinstance(worker0, OnPolicyAlgorithm):
+        print(worker0.rollout_buffer.size())

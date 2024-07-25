@@ -1,7 +1,7 @@
 import torch, os, pickle, shutil
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from stable_baselines3.common.buffers import BaseBuffer, DictReplayBuffer, DictRolloutBuffer
+from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
 
@@ -13,26 +13,58 @@ class ZooCage:
         elif overwrite_zoo:
             self.kill_cage()
             os.makedirs(self.zoo_dir)
-        self.active_workers = dict()
-        self.active_worker_info = dict()
         self.saved_workers = set(os.listdir(self.zoo_dir))
 
-    def activate_worker(self, agent_key, worker_key, WorkerClass=None, load_buffer=True):
-        """
-        loads worker and adds to active workers
-        Args:
-            agent_key: key to save worker as in dictionary (usually same as pettingzoo enviornment agent id)
-            worker_key: folder to grab worker from
-            WorkerClass: class to use to load worker (if none, tries to load from class.pkl)
-            load_buffer: whether to load replay buffer, if available
-        """
-        worker, worker_info = self.load_worker(worker_key=worker_key,
-                                               WorkerClass=WorkerClass,
-                                               load_buffer=load_buffer,
-                                               )
-        self.active_workers[agent_key] = worker
-        self.active_worker_info[agent_key] = worker_info
+    def overwrite_animal(self, animal,
+                         key: str,
+                         info,
+                         save_buffer=True,
+                         save_class=True,
+                         ):
+        if info.get('is_worker', False):
+            return self.overwrite_worker(worker=animal,
+                                         worker_key=key,
+                                         worker_info=info,
+                                         save_buffer=save_buffer,
+                                         save_class=save_class,
+                                         )
+        else:
+            return self.overwrite_other(other=animal, other_key=key, other_info=info)
 
+    def load_animal(self, key: str, load_buffer=True):
+        info = self.load_info(key=key)
+        if info.get('is_worker', False):
+            return self.load_worker(worker_key=key,
+                                    WorkerClass=None,
+                                    load_buffer=load_buffer,
+                                    )
+        else:
+            return self.load_other(other_key=key)
+
+    ### info methods
+    def save_info(self,
+                  key: str,
+                  info,
+                  ):
+        if info is not None:
+            info_file = os.path.join(self.zoo_dir, key, 'info.pkl')
+            f = open(info_file, 'wb')
+            pickle.dump(info, f)
+            f.close()
+
+    def load_info(self,
+                  key: str,
+                  ):
+        filename = os.path.join(self.zoo_dir, key, 'info.pkl')
+        if os.path.exists(filename):
+            f = open(filename, 'rb')
+            info = pickle.load(f)
+            f.close()
+            return info
+        else:
+            return {}
+
+    ### worker methods
     def load_worker(self, worker_key: str, WorkerClass=None, load_buffer=True):
         """
         loads worker from specified folder
@@ -44,9 +76,7 @@ class ZooCage:
         """
         full_dir = os.path.join(self.zoo_dir, worker_key)
 
-        f = open(os.path.join(full_dir, 'info.pkl'), 'rb')
-        worker_info = pickle.load(f)
-        f.close()
+        worker_info = self.load_info(key=worker_key)
 
         if WorkerClass is None:
             f = open(os.path.join(full_dir, 'class.pkl'), 'rb')
@@ -59,38 +89,14 @@ class ZooCage:
                 buff_file = os.path.join(full_dir, 'replay_buffer.pkl')
                 if os.path.exists(buff_file):
                     worker.load_replay_buffer(buff_file)
-                else:
-                    print('buffer file not found:', buff_file)
-                    print('change saving settings perhaps, unless this was intended')
             elif isinstance(worker, OnPolicyAlgorithm):
-                worker.rollout_buffer = load_from_pkl(os.path.join(full_dir, 'rollout_buffer.pkl'))
-                worker.rollout_buffer.device = worker.device
+                buff_file = os.path.join(full_dir, 'rollout_buffer.pkl')
+                if os.path.exists(buff_file):
+                    worker.rollout_buffer = load_from_pkl(buff_file)
+                    worker.rollout_buffer.device = worker.device
             else:
                 print('WHAT ALGORITHM IS THIS', worker)
         return worker, worker_info
-
-    def save_active_worker(self, agent_key, worker_key: str, save_buffer=True, save_class=True):
-        """
-        saves worker to folder named worker_key
-        Args:
-            agent_key: key of agent in active_worker dict (usually something like 'player 0' in environment)
-            worker_key: worker to save, folder to save to
-            save_buffer: whether to save replay buffer, if available
-            save_class: whether to save class of algorithm (suprised this works)
-        """
-        self.overwrite_worker(worker=self.active_workers[agent_key],
-                              worker_key=worker_key,
-                              save_buffer=save_buffer,
-                              save_class=save_class,
-                              worker_info=self.active_worker_info[agent_key],
-                              )
-
-    def get_active_worker_and_info(self, agent_key):
-        return self.active_workers[agent_key], self.active_worker_info[agent_key]
-
-    def deactivate_worker(self, agent_key):
-        self.active_workers.pop(agent_key)
-        self.active_worker_info.pop(agent_key)
 
     def overwrite_worker(self,
                          worker,
@@ -108,11 +114,11 @@ class ZooCage:
             save_class: whether to save class of algorithm (suprised this works)
         """
         full_dir = os.path.join(self.zoo_dir, worker_key)
-
-        if not os.path.exists(full_dir):
-            os.makedirs(full_dir)
+        if os.path.exists(full_dir):
+            shutil.rmtree(full_dir)
+        os.makedirs(full_dir)
         # worker inherits save method from stable baselines
-        worker.save(os.path.join(full_dir, 'worker'))
+        worker.save(os.path.join(full_dir, 'worker.zip'))
         if save_buffer:
             if isinstance(worker, OffPolicyAlgorithm):
                 # worker has a replay buffer that should also probably be saved
@@ -126,12 +132,18 @@ class ZooCage:
             f = open(os.path.join(full_dir, 'class.pkl'), 'wb')
             pickle.dump(cls, f)
             f.close()
-
-        f = open(os.path.join(full_dir, 'info.pkl'), 'wb')
-        pickle.dump(worker_info, f)
-        f.close()
-
+        if worker_info is None:
+            worker_info = dict()
+        worker_info['is_worker'] = True
+        self.save_info(key=worker_key,
+                       info=worker_info,
+                       )
         self.saved_workers.add(worker_key)
+
+    def worker_exists(self, worker_key: str):
+        full_dir = os.path.join(self.zoo_dir, worker_key)
+        return (os.path.exists(os.path.join(full_dir, 'info.pkl')) and
+                os.path.exists(os.path.join(full_dir, 'worker.zip')))
 
     def _update_off_policy_buffer(self, buffer, local_buffer):
         """
@@ -209,12 +221,12 @@ class ZooCage:
                 log_prob=log_prob,
             )
 
-    def update_worker_buffer(self, agent_key, worker_key: str, WorkerClass=None):
+    def update_worker_buffer(self, local_worker, worker_key: str, WorkerClass=None):
         """
         takes active agent's buffer and stores it into buffer of worker_key
             assumes buffer inherits BaseBuffer
         Args:
-            agent_key: agent to copy from
+            local_worker: worker to copy from
             worker_key: folder to load from/save to
             WorkerClass: class to use, if known
         """
@@ -223,7 +235,6 @@ class ZooCage:
                                                load_buffer=True,
                                                WorkerClass=WorkerClass,
                                                )
-        local_worker = self.active_workers[agent_key]
         if isinstance(worker, OffPolicyAlgorithm):
             assert isinstance(local_worker, OffPolicyAlgorithm)
             self._update_off_policy_buffer(buffer=worker.replay_buffer,
@@ -245,8 +256,56 @@ class ZooCage:
                               save_class=self.class_is_saved(worker_key=worker_key),
                               worker_info=worker_info,
                               )
-        return worker
+        return worker, worker_info
 
+    ### other methods
+    def overwrite_other(self,
+                        other,
+                        other_key: str,
+                        other_info=None,
+                        ):
+        """
+        pickles another object and saves it into key
+        Args:
+            other: some object
+            other_key: folder to save into
+            other_info: info to save
+        Returns:
+        """
+
+        full_dir = os.path.join(self.zoo_dir, other_key)
+        if os.path.exists(full_dir):
+            shutil.rmtree(full_dir)
+        os.makedirs(full_dir)
+        f = open(os.path.join(full_dir, 'other.pkl'), 'wb')
+        pickle.dump(other, f)
+        f.close()
+
+        self.save_info(key=other_key,
+                       info=other_info,
+                       )
+
+    def load_other(self,
+                   other_key: str,
+                   ):
+        """
+        loads other object
+        Args:
+            other_key: folder to load from
+        Returns: other object, other info
+        """
+        full_dir = os.path.join(self.zoo_dir, other_key)
+        f = open(os.path.join(full_dir, 'other.pkl'), 'rb')
+        other = pickle.load(f)
+        f.close()
+        return other, self.load_info(key=other_key)
+
+    def other_exists(self, other_key: str):
+        full_dir = os.path.join(self.zoo_dir, other_key)
+        return (os.path.exists(os.path.join(full_dir, 'info.pkl')) and
+                os.path.exists(os.path.join(full_dir, 'other.pkl')))
+
+    ### misc
     def class_is_saved(self, worker_key: str):
         """
         returns if class is saved in worker key
@@ -257,6 +316,7 @@ class ZooCage:
         """
         return os.path.exists(os.path.join(self.zoo_dir, worker_key, 'class.pkl'))
 
+    ### global methods
     def save_cage(self, save_dir):
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -283,7 +343,7 @@ if __name__ == '__main__':
         zoo.overwrite_worker(worker=WorkerPPO(policy=MlpPolicy, env='CartPole-v1'),
                              worker_key=str(i),
                              )
-    save_dir = os.path.join(DIR, 'data', 'zoo_cage_save','test','test','test')
+    save_dir = os.path.join(DIR, 'data', 'zoo_cage_save', 'test', 'test', 'test')
     zoo.save_cage(save_dir=save_dir)
     zoo2 = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_cage2'))
     zoo2.load_cage(save_dir=save_dir)
