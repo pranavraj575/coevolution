@@ -7,6 +7,8 @@ from stable_baselines3.common.utils import obs_as_tensor
 
 
 class OnPolicy:
+    reset_rollout = True
+
     def init_learn(self,
                    callback,
                    total_timesteps,
@@ -16,7 +18,6 @@ class OnPolicy:
                    log_interval=4,
                    ):
         self.iteration = 0
-        self.reset_rollout = True
         total_timesteps, callback = self._setup_learn(
             total_timesteps,
             callback,
@@ -48,6 +49,7 @@ class OnPolicy:
             # if this isnt true, we have untrained examples in the buffer, and should continue adding to it
             self.num_collected_steps = 0
             self.rollout_buffer.reset()
+            self.reset_rollout=False
         if self.use_sde:
             self.policy.reset_noise(self.env.num_envs)
 

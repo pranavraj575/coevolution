@@ -203,7 +203,6 @@ class ParallelAlgorithm:
                     init_rollout_info=local_init_rollout_info[agent],
                     rollout_1_info=local_rollout_1_info[agent],
                     rollout_2_info=local_rollout_2_info[agent],
-                    # replay_buffer=self.workers[agent].replay_buffer,
                 )
                 continue_rollout = continue_rollout or local_continue_rollout
                 steps_so_far = max(steps_so_far, self.workers[agent].num_collected_steps)

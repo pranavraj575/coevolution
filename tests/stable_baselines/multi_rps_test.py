@@ -68,8 +68,11 @@ worker = thingy.workers['player_0']
 worker: Worker
 
 zoo.overwrite_worker(worker=worker, worker_key='0')
-worker2=zoo.load_worker(worker_key='0')
+zoo.overwrite_worker(worker=zoo.load_worker(worker_key='0'), worker_key='1')
 
+zoo.activate_worker(0,'0')
+zoo.activate_worker(1,'1')
+worker2 = zoo.active_workers[1]
 
 if isinstance(worker, OffPolicyAlgorithm):
     print(worker.replay_buffer.size())
@@ -81,11 +84,18 @@ if isinstance(worker2, OffPolicyAlgorithm):
 else:
     print(worker2.rollout_buffer.size())
 worker2.set_env(worker.env)
-
+print(worker.reset_rollout)
+print(worker2.reset_rollout)
+thingy.workers['player_0'] = worker2
 print('starting thingy here')
-thingy.learn(total_timesteps=20)
-quit()
+thingy.learn(total_timesteps=220)
 
+if isinstance(worker2, OffPolicyAlgorithm):
+    print(worker2.replay_buffer.size())
+else:
+    print(worker2.rollout_buffer.size())
+
+quit()
 
 work_save = os.path.join(DIR, 'data', 'sb3_save_test', )
 replay_save = os.path.join(DIR, 'data', 'sb3_replay_save_test.pkl')
