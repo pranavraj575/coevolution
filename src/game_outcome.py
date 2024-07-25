@@ -95,12 +95,12 @@ class OutcomeFn:
         usually 1 is win, 0.5 is tie (for two team games) and 0 is loss
     """
 
-    def get_outcome(self, team_choices, train=None):
+    def get_outcome(self, team_choices, train_info=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
-            train: either None or boolean array of same shape as team_choices
-                whether to train each agent
+            train_info: either None or array of same shape as team_choices
+                dictionary of training settings for each agent
         Returns: list corresponding to teams
             [
                 outcome score,
@@ -118,20 +118,20 @@ class PettingZooOutcomeFn(OutcomeFn):
     outcome function which loads rl agents saved as files in specified directory
     """
 
-    def __init__(self, zoo_cage: ZooCage):
+    def set_zoo(self, zoo: [ZooCage]):
         """
         Args:
-            zoo_cage: ZooCage to store and load workers
+            zoo: list of ZooCages
         """
-        self.zoo_cage=zoo_cage
+        self.zoo = zoo
 
-    def get_outcome(self, team_choices, train=None):
+    def get_outcome(self, team_choices, train_info=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
                 players are files in zoo_dir
-            train: either None or boolean array of same shape as team_choices
-                whether to train each agent
+            train_info: either None or array of same shape as team_choices
+                dictionary of training settings for each agent
         Returns: list corresponding to teams
             [
                 outcome score,

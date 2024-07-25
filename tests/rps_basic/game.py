@@ -32,7 +32,7 @@ class SingleOutcome(OutcomeFn):
     def __init__(self, agents):
         self.agents = agents
 
-    def get_outcome(self, team_choices, train=None):
+    def get_outcome(self, team_choices, train_info=None):
         i, j = team_choices
         diff = (self.agents[i[0]] - self.agents[j[0]])%3
         if diff == 0:  # the agents tied

@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from src.team_trainer import TeamTrainer
-from src.game_outcome import PlayerInfo, OutcomeFn
+from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage
 
 
@@ -25,7 +25,13 @@ class CoevolutionBase:
         self.population_sizes = population_sizes
         self.team_sizes = team_sizes
         self.num_teams = len(team_sizes)
-        self.N = sum(self.population_sizes)
+
+        # cumulative population sizes
+        self.cumsums = np.cumsum(np.concatenate(([0], self.population_sizes)))
+
+        # total population size
+        self.N = int(self.cumsums[-1])
+
         if self.N%self.num_teams != 0:
             print("WARNING: number of agents is not divisible by num teams")
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
@@ -43,6 +49,9 @@ class CoevolutionBase:
             i -= self.population_sizes[pop_idx]
             pop_idx += 1
         return pop_idx, i
+
+    def pop_index_to_index(self, pop_idx, j):
+        return self.cumsums[pop_idx] + j
 
     def create_random_captians(self, N=None):
         """
@@ -171,6 +180,7 @@ class CaptianCoevolution(CoevolutionBase):
             unique: whether each captian is unique (each captian will be marked unique exactly once
         """
         teams = []
+        train_infos = []
         captian_positions = []
         # expected win probabilities, assuming the teams win probability is determined by captian elo
         expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
@@ -187,8 +197,14 @@ class CaptianCoevolution(CoevolutionBase):
                                                    noise_model=self.noise_model,
                                                    )
             teams.append(team)
+            tinfo = [{'captian': False} for _ in range(team_size)]
+            tinfo[pos] = {
+                'captian': True,
+                'unique': unq
+            }
+            train_infos.append(tinfo)
         team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
-                                                    train=None,
+                                                    train_info=train_infos,
                                                     )
         for (captian,
              team,
@@ -267,16 +283,32 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     def __init__(self,
                  env_constructor,
-                 outcome_fn: OutcomeFn,
+                 outcome_fn: PettingZooOutcomeFn,
                  population_sizes,
                  team_trainer: TeamTrainer,
-                 worker_constructor,
-                 zoo_cage: ZooCage,
+                 worker_constructors,
+                 zoo_cages_dir,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
                  elo_update=32*np.log(10)/400,
                  noise_model=None,
+                 reinit_agents=True,
                  ):
+        """
+        Args:
+            env_constructor:
+            outcome_fn:
+            population_sizes: list of K ints, size of each population
+            team_trainer:
+            worker_constructors: list of K constructors, size of each population
+                ith constructor takes a worker index (0<j<population_sizes[i])
+                    returns a (worker,worker_info) tuple
+            zoo_cages_dir: place to store cages of agents
+            team_sizes:
+            elo_conversion:
+            elo_update:
+            noise_model:
+        """
         super().__init__(outcome_fn=outcome_fn,
                          population_sizes=population_sizes,
                          team_trainer=team_trainer,
@@ -288,9 +320,42 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          noise_model=noise_model
                          )
         self.env_constructor = env_constructor
-        self.worker_constructor = worker_constructor
-        self.zoo_cage = zoo_cage
-        raise NotImplementedError
+        self.worker_constructors = worker_constructors
+        self.zoo = [
+            ZooCage(zoo_dir=os.path.join(zoo_cages_dir, 'cage_' + str(i)),
+                    overwrite_zoo=True,
+                    )
+            for i in range(self.num_teams)
+        ]
+
+        self.outcome_fn: PettingZooOutcomeFn
+        self.outcome_fn.set_zoo(self.zoo)
+
+        if reinit_agents:
+            self.init_agents()
+
+    def init_agents(self):
+        for popsize, constructor, cage in zip(self.population_sizes,
+                                              self.worker_constructors,
+                                              self.zoo,
+                                              ):
+            for i in range(popsize):
+                worker, worker_info = constructor(i)
+                cage.overwrite_worker(worker=worker,
+                                      worker_key=str(i),
+                                      save_buffer=True,
+                                      save_class=True,
+                                      worker_info=worker_info,
+                                      )
+
+    def save_zoo(self, save_dir):
+        """
+        saves all zoo cages to specified dir
+        Args:
+            save_dir: dir to save to
+        """
+        for zoo_cage in self.zoo:
+            zoo_cage.save_cage(os.path.join(save_dir, os.path.basename(zoo_cage.zoo_dir)))
 
     def breed(self):
         raise NotImplementedError
@@ -300,8 +365,6 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
 
 if __name__ == '__main__':
-    from src.team_trainer import DiscreteInputTrainer
-    from src.language_replay_buffer import ReplayBufferDiskStorage
     import os, sys
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))

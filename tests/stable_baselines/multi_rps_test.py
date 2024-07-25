@@ -28,7 +28,11 @@ else:
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
 env = rps_v2.parallel_env()  # render_mode="human")
+
 observations, infos = env.reset()
+for agent in env.agents:
+    print(env.observation_space('player_0'))
+quit()
 
 
 class always_0:

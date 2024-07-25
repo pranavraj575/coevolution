@@ -11,9 +11,10 @@ class ZooCage:
         if not os.path.exists(self.zoo_dir):
             os.makedirs(self.zoo_dir)
         elif overwrite_zoo:
-            self.kill_zoo()
+            self.kill_cage()
             os.makedirs(self.zoo_dir)
         self.active_workers = dict()
+        self.active_worker_info = dict()
         self.saved_workers = set(os.listdir(self.zoo_dir))
 
     def activate_worker(self, agent_key, worker_key, WorkerClass=None, load_buffer=True):
@@ -25,10 +26,12 @@ class ZooCage:
             WorkerClass: class to use to load worker (if none, tries to load from class.pkl)
             load_buffer: whether to load replay buffer, if available
         """
-        self.active_workers[agent_key] = self.load_worker(worker_key=worker_key,
-                                                          WorkerClass=WorkerClass,
-                                                          load_buffer=load_buffer,
-                                                          )
+        worker, worker_info = self.load_worker(worker_key=worker_key,
+                                               WorkerClass=WorkerClass,
+                                               load_buffer=load_buffer,
+                                               )
+        self.active_workers[agent_key] = worker
+        self.active_worker_info[agent_key] = worker_info
 
     def load_worker(self, worker_key: str, WorkerClass=None, load_buffer=True):
         """
@@ -40,10 +43,16 @@ class ZooCage:
         Returns: loaded worker (SB3 algorithm)
         """
         full_dir = os.path.join(self.zoo_dir, worker_key)
+
+        f = open(os.path.join(full_dir, 'info.pkl'), 'rb')
+        worker_info = pickle.load(f)
+        f.close()
+
         if WorkerClass is None:
             f = open(os.path.join(full_dir, 'class.pkl'), 'rb')
             WorkerClass = pickle.load(f)
             f.close()
+
         worker = WorkerClass.load(os.path.join(full_dir, 'worker'))
         if load_buffer:
             if isinstance(worker, OffPolicyAlgorithm):
@@ -58,7 +67,7 @@ class ZooCage:
                 worker.rollout_buffer.device = worker.device
             else:
                 print('WHAT ALGORITHM IS THIS', worker)
-        return worker
+        return worker, worker_info
 
     def save_active_worker(self, agent_key, worker_key: str, save_buffer=True, save_class=True):
         """
@@ -73,9 +82,23 @@ class ZooCage:
                               worker_key=worker_key,
                               save_buffer=save_buffer,
                               save_class=save_class,
+                              worker_info=self.active_worker_info[agent_key],
                               )
 
-    def overwrite_worker(self, worker, worker_key: str, save_buffer=True, save_class=True):
+    def get_active_worker_and_info(self, agent_key):
+        return self.active_workers[agent_key], self.active_worker_info[agent_key]
+
+    def deactivate_worker(self, agent_key):
+        self.active_workers.pop(agent_key)
+        self.active_worker_info.pop(agent_key)
+
+    def overwrite_worker(self,
+                         worker,
+                         worker_key: str,
+                         save_buffer=True,
+                         save_class=True,
+                         worker_info=None,
+                         ):
         """
         saves worker to folder named worker_key
         Args:
@@ -103,6 +126,11 @@ class ZooCage:
             f = open(os.path.join(full_dir, 'class.pkl'), 'wb')
             pickle.dump(cls, f)
             f.close()
+
+        f = open(os.path.join(full_dir, 'info.pkl'), 'wb')
+        pickle.dump(worker_info, f)
+        f.close()
+
         self.saved_workers.add(worker_key)
 
     def _update_off_policy_buffer(self, buffer, local_buffer):
@@ -191,7 +219,10 @@ class ZooCage:
             WorkerClass: class to use, if known
         """
 
-        worker = self.load_worker(worker_key=worker_key, load_buffer=True, WorkerClass=WorkerClass)
+        worker, worker_info = self.load_worker(worker_key=worker_key,
+                                               load_buffer=True,
+                                               WorkerClass=WorkerClass,
+                                               )
         local_worker = self.active_workers[agent_key]
         if isinstance(worker, OffPolicyAlgorithm):
             assert isinstance(local_worker, OffPolicyAlgorithm)
@@ -212,6 +243,7 @@ class ZooCage:
                               worker_key=worker_key,
                               save_buffer=True,
                               save_class=self.class_is_saved(worker_key=worker_key),
+                              worker_info=worker_info,
                               )
         return worker
 
@@ -225,16 +257,18 @@ class ZooCage:
         """
         return os.path.exists(os.path.join(self.zoo_dir, worker_key, 'class.pkl'))
 
-    def save_zoo(self, save_dir):
+    def save_cage(self, save_dir):
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
         shutil.rmtree(save_dir)
         shutil.copytree(self.zoo_dir, save_dir)
 
-    def load_zoo(self, save_dir):
-        self.kill_zoo()
+    def load_cage(self, save_dir):
+        self.kill_cage()
         shutil.copytree(save_dir, self.zoo_dir)
         self.saved_workers = set(os.listdir(self.zoo_dir))
 
-    def kill_zoo(self):
+    def kill_cage(self):
         shutil.rmtree(self.zoo_dir)
 
 
@@ -246,14 +280,14 @@ if __name__ == '__main__':
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
     zoo = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_cage'))
     for i in range(100):
-        zoo.overwrite_worker(worker=WorkerPPO(policy=MlpPolicy, env='CartPole-v0'),
+        zoo.overwrite_worker(worker=WorkerPPO(policy=MlpPolicy, env='CartPole-v1'),
                              worker_key=str(i),
                              )
-    save_dir = os.path.join(DIR, 'data', 'zoo_cage_save')
-    zoo.save_zoo(save_dir=save_dir)
+    save_dir = os.path.join(DIR, 'data', 'zoo_cage_save','test','test','test')
+    zoo.save_cage(save_dir=save_dir)
     zoo2 = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_cage2'))
-    zoo2.load_zoo(save_dir=save_dir)
+    zoo2.load_cage(save_dir=save_dir)
     print(len(zoo2.saved_workers))
-    zoo.kill_zoo()
-    zoo2.kill_zoo()
+    zoo.kill_cage()
+    zoo2.kill_cage()
     shutil.rmtree(save_dir)
