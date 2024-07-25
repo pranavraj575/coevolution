@@ -12,12 +12,13 @@ from parallel_algs.dqn.DQN import WorkerDQN
 from parallel_algs.ppo.PPO import WorkerPPO
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from parallel_algs.parallel_alg import ParallelAlgorithm
 import os, sys
 
 from src.zoo_cage import ZooCage
 
-Worker = WorkerPPO
+Worker = WorkerDQN
 
 if issubclass(Worker, DQN):
     MlpPolicy = DQNPolicy
@@ -70,48 +71,33 @@ worker: Worker
 zoo.overwrite_worker(worker=worker, worker_key='0')
 zoo.overwrite_worker(worker=zoo.load_worker(worker_key='0'), worker_key='1')
 
-zoo.activate_worker(0,'0')
-zoo.activate_worker(1,'1')
+zoo.activate_worker(0, '0')
+zoo.activate_worker(1, '1')
 worker2 = zoo.active_workers[1]
 
 if isinstance(worker, OffPolicyAlgorithm):
     print(worker.replay_buffer.size())
-else:
+elif isinstance(worker, OnPolicyAlgorithm):
     print(worker.rollout_buffer.size())
 
 if isinstance(worker2, OffPolicyAlgorithm):
     print(worker2.replay_buffer.size())
-else:
+elif isinstance(worker, OnPolicyAlgorithm):
     print(worker2.rollout_buffer.size())
 worker2.set_env(worker.env)
-print(worker.reset_rollout)
-print(worker2.reset_rollout)
 thingy.workers['player_0'] = worker2
 print('starting thingy here')
 thingy.learn(total_timesteps=220)
 
 if isinstance(worker2, OffPolicyAlgorithm):
     print(worker2.replay_buffer.size())
-else:
+elif isinstance(worker, OnPolicyAlgorithm):
     print(worker2.rollout_buffer.size())
 
-quit()
-
-work_save = os.path.join(DIR, 'data', 'sb3_save_test', )
-replay_save = os.path.join(DIR, 'data', 'sb3_replay_save_test.pkl')
-worker.save(work_save)
-if isinstance(worker, OffPolicyAlgorithm):
-    worker.save_replay_buffer(replay_save)
-    print(worker.replay_buffer.size())
-else:
-    print(worker.rollout_buffer.size())
-worker2 = Worker.load(work_save)
-if isinstance(worker2, OffPolicyAlgorithm):
-    worker2.load_replay_buffer(replay_save)
-    print(worker2.replay_buffer.size())
-else:
-    print(worker2.rollout_buffer.size())
-worker2.set_env(worker.env)
-thingy.workers['player_0'] = worker2
-print('starting thingy here')
-thingy.learn(total_timesteps=20)
+for _ in range(2):
+    # pushes the 220 examples from worker2 into file of worker
+    worker = zoo.update_worker_buffer(1, '0')
+    if isinstance(worker, OffPolicyAlgorithm):
+        print(worker.replay_buffer.size())
+    elif isinstance(worker, OnPolicyAlgorithm):
+        print(worker.rollout_buffer.size())

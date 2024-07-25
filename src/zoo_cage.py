@@ -157,7 +157,6 @@ class ZooCage:
             pos_0 = (local_buffer.pos + 1)%local_buffer.buffer_size
         else:
             pos_0 = 0
-
         for i in range(local_buffer.size()):
             pos = (i + pos_0)%local_buffer.buffer_size
             if isinstance(local_buffer, DictRolloutBuffer):
@@ -214,6 +213,7 @@ class ZooCage:
                               save_buffer=True,
                               save_class=self.class_is_saved(worker_key=worker_key),
                               )
+        return worker
 
     def class_is_saved(self, worker_key: str):
         """
