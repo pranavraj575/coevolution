@@ -142,6 +142,10 @@ class OnPolicy:
                 terminal_value = self.policy.predict_values(terminal_obs)[0]  # type: ignore[arg-type]
             reward += self.gamma*terminal_value
 
+        if rollout_buffer.full:
+            # this should probably not happen
+            # if it does, we should start collecting more recent samples
+            rollout_buffer.pos = 0
         rollout_buffer.add(
             self._last_obs,  # type: ignore[arg-type]
             action,

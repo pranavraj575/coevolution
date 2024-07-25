@@ -1,7 +1,7 @@
-import os, pickle, shutil
+import torch, os, pickle, shutil
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from stable_baselines3.common.buffers import BaseBuffer, DictReplayBuffer, ReplayBuffer, RolloutBuffer
+from stable_baselines3.common.buffers import BaseBuffer, DictReplayBuffer, DictRolloutBuffer
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
 
@@ -75,18 +75,6 @@ class ZooCage:
                               save_class=save_class,
                               )
 
-    def update_worker_buffer(self, agent_key, worker_key: str):
-        """
-        takes active agent's buffer and stores it into buffer of worker_key
-            assumes buffer inherits BaseBuffer
-        Args:
-            agent_key:
-            worker_key: folder to load from/save to
-        Returns:
-
-        """
-        raise NotImplementedError
-
     def overwrite_worker(self, worker, worker_key: str, save_buffer=True, save_class=True):
         """
         saves worker to folder named worker_key
@@ -116,6 +104,126 @@ class ZooCage:
             pickle.dump(cls, f)
             f.close()
         self.saved_workers.add(worker_key)
+
+    def _update_off_policy_buffer(self, buffer, local_buffer):
+        """
+        adds contents of local buffer to buffer
+        Args:
+            buffer: target to add to
+            local_buffer: buffer to draw from
+        """
+        if local_buffer.full:
+            pos_0 = (local_buffer.pos + 1)%local_buffer.buffer_size
+        else:
+            pos_0 = 0
+
+        for i in range(local_buffer.size()):
+            pos = (i + pos_0)%local_buffer.buffer_size
+            if isinstance(local_buffer, DictReplayBuffer):
+                obs = {key: local_buffer.observations[key][pos]
+                       for key in local_buffer.observations}
+            else:
+                obs = local_buffer.observations[pos]
+            action = local_buffer.actions[pos]
+            reward = local_buffer.rewards[pos]
+            done = local_buffer.dones[pos]
+            infos = [{'TimeLimit.truncated': True} if timeout else {}
+                     for timeout in local_buffer.timeouts[pos]]
+            if local_buffer.optimize_memory_usage:
+                next_obs = local_buffer.observations[(pos + 1)%local_buffer.buffer_size]
+            else:
+                if isinstance(local_buffer, DictReplayBuffer):
+                    next_obs = {key: local_buffer.next_observations[key][pos]
+                                for key in local_buffer.next_observations}
+                else:
+                    next_obs = local_buffer.next_observations[pos]
+            buffer.add(
+                obs=obs,
+                next_obs=next_obs,
+                action=action,
+                reward=reward,
+                done=done,
+                infos=infos,
+            )
+
+    def _update_on_policy_buffer(self, buffer, local_buffer):
+        """
+        adds contents of local buffer to buffer
+        Args:
+            buffer: target to add to
+            local_buffer: buffer to draw from
+        """
+        if local_buffer.full:
+            pos_0 = (local_buffer.pos + 1)%local_buffer.buffer_size
+        else:
+            pos_0 = 0
+
+        for i in range(local_buffer.size()):
+            pos = (i + pos_0)%local_buffer.buffer_size
+            if isinstance(local_buffer, DictRolloutBuffer):
+                obs = {key: local_buffer.observations[key][pos]
+                       for key in local_buffer.observations}
+            else:
+                obs = local_buffer.observations[pos]
+            action = local_buffer.actions[pos]
+            reward = local_buffer.rewards[pos]
+            episode_start = local_buffer.episode_starts[pos]
+            value = torch.tensor(local_buffer.values[pos])
+            log_prob = torch.tensor(local_buffer.log_probs[pos])
+            if buffer.full:
+                # start filling from the front
+                buffer.pos = 0
+            buffer.add(
+                obs=obs,
+                action=action,
+                reward=reward,
+                episode_start=episode_start,
+                value=value,
+                log_prob=log_prob,
+            )
+
+    def update_worker_buffer(self, agent_key, worker_key: str, WorkerClass=None):
+        """
+        takes active agent's buffer and stores it into buffer of worker_key
+            assumes buffer inherits BaseBuffer
+        Args:
+            agent_key: agent to copy from
+            worker_key: folder to load from/save to
+            WorkerClass: class to use, if known
+        """
+
+        worker = self.load_worker(worker_key=worker_key, load_buffer=True, WorkerClass=WorkerClass)
+        local_worker = self.active_workers[agent_key]
+        if isinstance(worker, OffPolicyAlgorithm):
+            assert isinstance(local_worker, OffPolicyAlgorithm)
+            self._update_off_policy_buffer(buffer=worker.replay_buffer,
+                                           local_buffer=local_worker.replay_buffer,
+                                           )
+
+        elif isinstance(worker, OnPolicyAlgorithm):
+            assert isinstance(local_worker, OnPolicyAlgorithm)
+
+            self._update_on_policy_buffer(buffer=worker.rollout_buffer,
+                                          local_buffer=local_worker.rollout_buffer,
+                                          )
+        else:
+            raise Exception("what algorithigm is this", worker)
+
+        self.overwrite_worker(worker=worker,
+                              worker_key=worker_key,
+                              save_buffer=True,
+                              save_class=self.class_is_saved(worker_key=worker_key),
+                              )
+
+    def class_is_saved(self, worker_key: str):
+        """
+        returns if class is saved in worker key
+        Args:
+            worker_key: folder to check
+        Returns:
+            boolean
+        """
+        return os.path.exists(os.path.join(self.zoo_dir, worker_key, 'class.pkl'))
 
     def save_zoo(self, save_dir):
         shutil.rmtree(save_dir)
