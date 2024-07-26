@@ -6,6 +6,11 @@ setup(
     version='6.9.0',
     packages=find_packages(),
     install_requires=[
-                      ],
+        'gymnasium',
+        'matplotlib',
+        'pettingzoo',
+        'torch',
+        'stable-baselines3',
+    ],
     license='Liscence to Krill',
 )

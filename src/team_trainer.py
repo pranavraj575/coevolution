@@ -25,6 +25,7 @@ class TeamTrainer:
                            N=1,
                            init_team=None,
                            noise_model=None,
+                           valid_locations=None,
                            **kwargs,
                            ):
         """
@@ -41,6 +42,7 @@ class TeamTrainer:
             noise_model: noise model that takes T-element multinomial distributions and returns another (with noise)
                 ((N,T) -> (N,T))
                 default None
+            valid_locations: boolean array of size (N,T) that determines whether each location is valid
         Returns:
             team with member attached
         """
@@ -56,8 +58,11 @@ class TeamTrainer:
         if noise_model is not None:
             conditional_dist = noise_model(conditional_dist)
 
-        # set all non-masked entries to 0
+        # set all non-masked or invalid entries to 0
         conditional_dist[torch.where(init_team != self.MASK)] = 0
+        if valid_locations is not None:
+            conditional_dist = conditional_dist*valid_locations  # sets invalid locations to 0
+
         valid_indices = torch.where(torch.sum(conditional_dist, axis=1) > 0)[0]
         if len(valid_indices) == 0:
             # there are no mask tokens, or the conditional distribution is all zeros
@@ -75,6 +80,7 @@ class TeamTrainer:
                       obs_mask=None,
                       noise_model=None,
                       num_masks=None,
+                      valid_members=None,
                       ):
         """
         replaces all [MASK] with team members
@@ -87,6 +93,7 @@ class TeamTrainer:
             noise_model: noise to add to probability distribution, if None, doesnt add noise
             num_masks: specify the largest number of [MASK] tokens in any row
                 if None, just calls mutate_add_member (T) times
+            valid_members: (N,T,num_agents) boolean array of which agents are valid for which locations
         Returns:
             filled in teams of size (N,T)
         """
@@ -98,7 +105,8 @@ class TeamTrainer:
                                                    indices=None,
                                                    obs_preembed=obs_preembed,
                                                    obs_mask=obs_mask,
-                                                   noise_model=noise_model
+                                                   noise_model=noise_model,
+                                                   valid_members=valid_members,
                                                    )
         return initial_teams
 
@@ -106,6 +114,7 @@ class TeamTrainer:
                           initial_teams,
                           indices=None,
                           noise_model=None,
+                          valid_members=None,
                           **kwargs,
                           ):
         """
@@ -119,6 +128,7 @@ class TeamTrainer:
                 None if no input
             obs_mask: size (N,S) boolean array of whether to mask each input embedding
             noise_model: noise to add to probability distribution, if None, doesnt add noise
+            valid_members: (N,T,num_agents) boolean array of which agents are valid for which locations
         Returns:
             team with updates
         """
@@ -135,7 +145,12 @@ class TeamTrainer:
         if len(indices[0]) == 0:
             # no [MASK] tokens exist
             return initial_teams
-        dist = torch.ones((len(indices[0]), self.num_agents))/self.num_agents
+        dist = torch.ones((N, T, self.num_agents))/self.num_agents
+        if valid_members is not None:
+            dist = dist*valid_members
+        # just look at the relevant indices
+        dist = dist[indices]
+
         if noise_model is not None:
             # add noise if this is a thing
             dist = noise_model(dist)
@@ -375,6 +390,7 @@ class MLMTeamTrainer(TeamTrainer):
                            obs_preembed=None,
                            obs_mask=None,
                            noise_model=None,
+                           valid_locations=None,
                            ):
         """
         adds the specified member to the team in a random position (sampled from the network distribution)
@@ -390,6 +406,7 @@ class MLMTeamTrainer(TeamTrainer):
             noise_model: noise model that takes T-element multinomial distributions and returns another (with noise)
                 ((N,T) -> (N,T))
                 default None
+            valid_locations: boolean array of size (N,T) that determines whether each location is valid
         Returns:
             team with member attached
         """
@@ -411,6 +428,9 @@ class MLMTeamTrainer(TeamTrainer):
 
         # set all non-masked entries to 0
         conditional_dist[torch.where(init_team != self.MASK)] = 0
+        if valid_locations is not None:
+            conditional_dist = conditional_dist*valid_locations
+
         valid_indices = torch.where(torch.sum(conditional_dist, axis=1) > 0)[0]
         if len(valid_indices) == 0:
             # there are no mask tokens, or the conditional distribution is all zeros
@@ -448,45 +468,13 @@ class MLMTeamTrainer(TeamTrainer):
                                   noise_model=noise_model,
                                   )
 
-    def fill_in_teams(self,
-                      initial_teams,
-                      obs_preembed=None,
-                      obs_mask=None,
-                      noise_model=None,
-                      num_masks=None,
-                      ):
-        """
-        replaces all [MASK] with team members
-            repeatedly calls mutate_add_member
-        Args:
-            initial_teams: initial torch array of team members, shape (N,T)
-            obs_preembed: input to give input embedder, size (N,S,*)
-                None if no input
-            obs_mask: size (N,S) boolean array of whether to mask each input embedding
-            noise_model: noise to add to probability distribution, if None, doesnt add noise
-            num_masks: specify the largest number of [MASK] tokens in any row
-                if None, just calls mutate_add_member (T) times
-        Returns:
-            filled in teams of size (N,T)
-        """
-        N, T = initial_teams.shape
-        if num_masks is None:
-            num_masks = T
-        for _ in range(num_masks):
-            initial_teams = self.mutate_add_member(initial_teams=initial_teams,
-                                                   indices=None,
-                                                   obs_preembed=obs_preembed,
-                                                   obs_mask=obs_mask,
-                                                   noise_model=noise_model
-                                                   )
-        return initial_teams
-
     def mutate_add_member(self,
                           initial_teams,
                           indices=None,
                           obs_preembed=None,
                           obs_mask=None,
                           noise_model=None,
+                          valid_members=None,
                           ):
         """
         updates initial teams by updating specified indices with samples from the probability distribution
@@ -499,6 +487,7 @@ class MLMTeamTrainer(TeamTrainer):
                 None if no input
             obs_mask: size (N,S) boolean array of whether to mask each input embedding
             noise_model: noise to add to probability distribution, if None, doesnt add noise
+            valid_members: (N,T,num_agents) boolean array of which agents are valid for which locations
         Returns:
             team with updates
         """
@@ -521,6 +510,10 @@ class MLMTeamTrainer(TeamTrainer):
                                            output_probs=True,
                                            pre_softmax=False,
                                            )
+        if valid_members is not None:
+            # set invalid members to 0
+            output = output*valid_members
+
         dist = output[indices]  # (|indices|,num_agents) multinomial distribution for each index to update
         if noise_model is not None:
             # add noise if this is a thing

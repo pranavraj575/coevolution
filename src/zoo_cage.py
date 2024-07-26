@@ -4,6 +4,8 @@ from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
+DICT_IS_WORKER='is_worker'
+
 
 class ZooCage:
     def __init__(self, zoo_dir, overwrite_zoo=True):
@@ -21,7 +23,7 @@ class ZooCage:
                          save_buffer=True,
                          save_class=True,
                          ):
-        if info.get('is_worker', False):
+        if info.get(DICT_IS_WORKER, False):
             return self.overwrite_worker(worker=animal,
                                          worker_key=key,
                                          worker_info=info,
@@ -33,7 +35,7 @@ class ZooCage:
 
     def load_animal(self, key: str, load_buffer=True):
         info = self.load_info(key=key)
-        if info.get('is_worker', False):
+        if info.get(DICT_IS_WORKER, False):
             return self.load_worker(worker_key=key,
                                     WorkerClass=None,
                                     load_buffer=load_buffer,
@@ -134,7 +136,7 @@ class ZooCage:
             f.close()
         if worker_info is None:
             worker_info = dict()
-        worker_info['is_worker'] = True
+        worker_info[DICT_IS_WORKER] = True
         self.save_info(key=worker_key,
                        info=worker_info,
                        )

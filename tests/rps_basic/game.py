@@ -1,6 +1,6 @@
 import torch
 from matplotlib import pyplot as plt
-from src.game_outcome import PlayerInfo, OutcomeFn
+from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
 
 ROCK = 0
 PAPER = 1
@@ -39,7 +39,7 @@ class SingleOutcome(OutcomeFn):
             choice = self.agents[i,]
             return [(.5, [PlayerInfo(obs_preembed=choice)]),
                     (.5, [PlayerInfo(obs_preembed=choice)])]
-        if diff==1:
+        if diff == 1:
             # agent i won
             return [
                 (1, [PlayerInfo(obs_preembed=self.agents[j,])]),
@@ -54,11 +54,35 @@ class SingleOutcome(OutcomeFn):
             ]
 
 
+class SingleZooOutcome(PettingZooOutcomeFn):
+
+    def _get_outcome_from_agents(self, agent_choices, info_choices, index_choices, train_info):
+        a, b = agent_choices
+        a = a[0]
+        b = b[0]
+        diff = (a - b)%3
+        if diff == 0:  # the agents tied
+            return [(.5, [PlayerInfo(obs_preembed=torch.tensor(b).view((-1, 1)))]),
+                    (.5, [PlayerInfo(obs_preembed=torch.tensor(a).view((-1, 1)))])]
+        if diff == 1:
+            # agent i won
+            return [
+                (1, [PlayerInfo(obs_preembed=torch.tensor(b).view((-1, 1)))]),
+                (0, [PlayerInfo(obs_preembed=torch.tensor(a).view((-1, 1)))]),
+            ]
+
+        if diff == 2:
+            # agent j won
+            return [
+                (0, [PlayerInfo(obs_preembed=torch.tensor(b).view((-1, 1)))]),
+                (1, [PlayerInfo(obs_preembed=torch.tensor(a).view((-1, 1)))]),
+            ]
+
+
 if __name__ == '__main__':
     torch.random.manual_seed(69)
-    agents=torch.arange(3)
-    outcomes=SingleOutcome(agents=agents)
-    print(outcomes.get_outcome(team_choices=(torch.tensor([0]),torch.tensor([1]))))
-    print(outcomes.get_outcome(team_choices=(torch.tensor([1]),torch.tensor([1]))))
-    print(outcomes.get_outcome(team_choices=(torch.tensor([2]),torch.tensor([1]))))
-
+    agents = torch.arange(3)
+    outcomes = SingleOutcome(agents=agents)
+    print(outcomes.get_outcome(team_choices=(torch.tensor([0]), torch.tensor([1]))))
+    print(outcomes.get_outcome(team_choices=(torch.tensor([1]), torch.tensor([1]))))
+    print(outcomes.get_outcome(team_choices=(torch.tensor([2]), torch.tensor([1]))))
