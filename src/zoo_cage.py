@@ -48,7 +48,6 @@ class ZooCage:
                   key: str,
                   info,
                   ):
-        assert type(info)==dict
         if info is not None:
             info_file = os.path.join(self.zoo_dir, key, 'info.pkl')
             f = open(info_file, 'wb')

@@ -2,7 +2,7 @@ from pettingzoo import ParallelEnv
 from parallel_algs.common import DumEnv, conform_act_shape
 from stable_baselines3.common.preprocessing import check_for_nested_spaces, is_image_space, \
     is_image_space_channels_first
-
+from src.utils.dict_keys import DICT_TRAIN
 
 
 class ParallelAlgorithm:
@@ -11,7 +11,7 @@ class ParallelAlgorithm:
                  parallel_env: ParallelEnv,
                  DefaultWorkerClass,
                  workers=None,
-                 worker_info=None,
+                 worker_info_dict=None,
                  **worker_kwargs
                  ):
         """
@@ -22,20 +22,20 @@ class ParallelAlgorithm:
                 trainable workers must have initialize_learn,middle_of_rollout_select,
                     get_action,end_rollout_part,finished_with_rollout
                 untrainable must just have get_action
-            worker_info: dict of agentid -> (worker info dict)
+            worker_info_dict: dict of agentid -> (worker info dict)
                 worker info dict contains
-                    train: bool (whether or not to treain worker)
+                    DICT_TRAIN: bool (whether or not to treain worker)
             DefaultWorkerClass: class to use to initialize workers
             **worker_kwargs: kwargs to use to initializw workers
         """
         if workers is None:
             workers = dict()
-        if worker_info is None:
-            worker_info = dict()
+        if worker_info_dict is None:
+            worker_info_dict = dict()
         for agent in parallel_env.agents:
-            if agent not in worker_info:
-                worker_info[agent] = {
-                    'train': True
+            if agent not in worker_info_dict:
+                worker_info_dict[agent] = {
+                    DICT_TRAIN: True
                 }
 
             dumenv = DumEnv(action_space=parallel_env.action_space(agent=agent),
@@ -46,12 +46,12 @@ class ParallelAlgorithm:
                                                     env=dumenv,
                                                     **worker_kwargs,
                                                     )
-            elif worker_info[agent]['train']:
+            elif worker_info_dict[agent].get(DICT_TRAIN, True):
                 # in this case, we should probably set the environment anyway
                 workers[agent].set_env(dumenv)
 
         self.workers = workers
-        self.worker_info = worker_info
+        self.worker_info = worker_info_dict
         self.env = parallel_env
         self.reset_env = True  # should reset env next time
         self.last_observations = dict()
@@ -104,7 +104,7 @@ class ParallelAlgorithm:
         Returns: iterable of trainable or untrainable workers
         """
         for agent in self.workers:
-            is_trainable = self.worker_info[agent].get('train', True)
+            is_trainable = self.worker_info[agent].get(DICT_TRAIN, True)
             if is_trainable == trainable:  # either both true or both false
                 yield agent
 
@@ -213,14 +213,12 @@ class ParallelAlgorithm:
                 number_of_eps -= 1
                 if number_of_eps <= 0:
                     continue_rollout = False
-                    print('there')
             if term:
                 # environment terminated and must be reset next time
                 self.reset_env = True
 
             if strict_timesteps and steps_so_far >= total_timesteps:
                 continue_rollout = False
-                print('here')
 
         # end rollout
         local_end_rollout_info = dict()
@@ -231,7 +229,6 @@ class ParallelAlgorithm:
                 init_rollout_info=local_init_rollout_info[agent],
             )
             local_end_rollout_info[agent] = end_rollout_info
-            print(end_rollout_info)
             num_collected_steps = max(num_collected_steps,
                                       end_rollout_info.get('num_collected_steps', 0))
 

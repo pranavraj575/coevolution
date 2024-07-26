@@ -32,7 +32,7 @@ class SingleOutcome(OutcomeFn):
     def __init__(self, agents):
         self.agents = agents
 
-    def get_outcome(self, team_choices, train_infos=None):
+    def get_outcome(self, team_choices, train_infos=None,env=None):
         i, j = team_choices
         diff = (self.agents[i[0]] - self.agents[j[0]])%3
         if diff == 0:  # the agents tied
@@ -56,7 +56,7 @@ class SingleOutcome(OutcomeFn):
 
 class SingleZooOutcome(PettingZooOutcomeFn):
 
-    def _get_outcome_from_agents(self, agent_choices, index_choices, train_info):
+    def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos,env):
         a, b = agent_choices
         a = a[0]
         b = b[0]

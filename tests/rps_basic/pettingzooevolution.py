@@ -37,7 +37,6 @@ if __name__ == '__main__':
                                                                                })],
                                            zoo_dir=os.path.join(DIR, 'data', 'test', 'rps_basic_zoo'),
                                            env_constructor=None,
-
                                            )
     for cage_idx, pop in enumerate(popsizes):
         for i in range(pop):

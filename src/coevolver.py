@@ -6,6 +6,7 @@ from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage, DICT_IS_WORKER
 from src.utils.dict_keys import *
+from parallel_algs.common import DumEnv
 
 
 class CoevolutionBase:
@@ -38,6 +39,7 @@ class CoevolutionBase:
         self.population_sizes = population_sizes
         self.team_sizes = team_sizes
         self.num_teams = len(team_sizes)
+        self.env_constructor = lambda: None
 
         # cumulative population sizes
         self.cumsums = np.cumsum(np.concatenate(([0], self.population_sizes)))
@@ -49,28 +51,29 @@ class CoevolutionBase:
             print("WARNING: number of agents is not divisible by num teams")
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
         if member_to_population is None:
-            self.member_to_population = lambda: set(range(len(self.population_sizes)))
+            self.member_to_population = lambda team_idx, member_idx: set(range(len(self.population_sizes)))
         else:
             self.member_to_population = member_to_population
-        if member_to_population is None:
 
-            self.pop_to_team = lambda: set(range(len(team_sizes)))
-        else:
-            self.build_pop_to_team()
+        self.build_pop_to_member()
 
-    def build_pop_to_team(self):
+    def build_pop_to_member(self):
         temp = [set() for _ in range(len(self.population_sizes))]
         for team_idx, team_size in enumerate(self.team_sizes):
             for member_idx in range(team_size):
                 populations = self.member_to_population(team_idx, member_idx)
                 if populations is None:
                     for item in temp:
-                        item.add(team_idx)
+                        item.add((team_idx, member_idx))
                 else:
                     for pop_idx in populations:
-                        temp[pop_idx].add(team_idx)
+                        temp[pop_idx].add((team_idx, member_idx))
         temp = tuple(tuple(item) for item in temp)
-        self.pop_to_team = lambda pop_idx: temp[pop_idx]
+        self.pop_to_member = lambda pop_idx: temp[pop_idx]
+
+    def sample_team_member_from_pop(self, pop_idx):
+        for item in self.pop_to_member(pop_idx):
+            return item
 
     def index_to_pop_index(self, global_idx):
         """
@@ -163,13 +166,14 @@ class CaptianCoevolution(CoevolutionBase):
     def __init__(self,
                  outcome_fn: OutcomeFn,
                  population_sizes,
-                 team_trainer: TeamTrainer,
+                 team_trainer: TeamTrainer = None,
                  clone_fn=None,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
                  elo_update=32*np.log(10)/400,
                  mutation_fn=None,
                  noise_model=None,
+                 member_to_population=None,
                  ):
         """
         Args:
@@ -198,7 +202,10 @@ class CaptianCoevolution(CoevolutionBase):
         super().__init__(outcome_fn=outcome_fn,
                          population_sizes=population_sizes,
                          team_sizes=team_sizes,
+                         member_to_population=member_to_population,
                          )
+        if team_trainer is None:
+            team_trainer = TeamTrainer(num_agents=self.N)
         self.team_trainer = team_trainer
         self.noise_model = noise_model
         self.clone_fn = clone_fn
@@ -251,6 +258,7 @@ class CaptianCoevolution(CoevolutionBase):
             train_infos.append(tinfo)
         team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
                                                     train_infos=train_infos,
+                                                    env=self.env_constructor(),
                                                     )
         for (captian,
              team,
@@ -331,9 +339,10 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  env_constructor,
                  outcome_fn: PettingZooOutcomeFn,
                  population_sizes,
-                 team_trainer: TeamTrainer,
-                 worker_constructors,
                  zoo_dir,
+                 worker_constructors,
+                 member_to_population=None,
+                 team_trainer: TeamTrainer = None,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
                  elo_update=32*np.log(10)/400,
@@ -341,6 +350,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  reinit_agents=True,
                  mutation_prob=.01,
                  protect_new=20,
+                 team_idx_to_agent_id=None,
+                 worker_constructors_from_env_input=False,
                  ):
         """
         Args:
@@ -348,9 +359,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             outcome_fn:
             population_sizes: list of K ints, size of each population
             team_trainer:
-            worker_constructors: list of K constructors, size of each population
-                ith constructor takes a worker index (0<j<population_sizes[i])
-                    returns a (worker,worker_info) tuple
+            worker_constructors: if specified, list of K functions, size of population
+                each funciton goes from (index, enviornment) into
+                    (a worker with the specified action and obs space, worker_info) tuple
                 info dicts keys are found in src.utils.dict_keys
 
                 worker_info relevant keys:
@@ -379,10 +390,41 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          mutation_fn=None,
                          clone_fn=None,
                          noise_model=noise_model,
+                         member_to_population=member_to_population,
                          )
 
         self.env_constructor = env_constructor
-        self.worker_constructors = worker_constructors
+
+        test_env = self.env_constructor()
+
+        if team_idx_to_agent_id is not None:
+            self.team_idx_to_agent_id = team_idx_to_agent_id
+        else:
+            env_agents = iter(test_env.agents)
+            dict_team_idx_to_agent_id = dict()
+            for team_idx, team_size in enumerate(self.team_sizes):
+                for member_idx in range(team_size):
+                    dict_team_idx_to_agent_id[(team_idx, member_idx)] = next(env_agents)
+            self.team_idx_to_agent_id = lambda idx: dict_team_idx_to_agent_id[idx]
+
+        self.action_space = test_env.action_space
+        self.observation_space = test_env.observation_space
+        if worker_constructors_from_env_input:
+            def pop_idx_to_dumenv(pop_idx):
+                idx = self.sample_team_member_from_pop(pop_idx=pop_idx)
+                agent_id = self.team_idx_to_agent_id(idx=idx)
+                return DumEnv(action_space=self.action_space(agent_id),
+                              obs_space=self.observation_space(agent_id),
+                              )
+
+            self.worker_constructors = lambda pop_idx: (lambda i:
+                                                        worker_constructors[pop_idx](i,
+                                                                                     env=pop_idx_to_dumenv(pop_idx)
+                                                                                     )
+                                                        )
+
+        else:
+            self.worker_constructors = lambda pos_idx: worker_constructors[pos_idx]
         self.zoo = [
             ZooCage(zoo_dir=os.path.join(zoo_dir, 'cage_' + str(i)),
                     overwrite_zoo=True,
@@ -483,7 +525,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.zoo[pop_idx].save_info(key=str(local_idx), info=info)
 
     def reset_agent(self, pop_idx, local_idx, keep_old_buffer=False):
-        agent, info = self.worker_constructors[pop_idx](local_idx)
+        agent, info = self.worker_constructors(pop_idx)(local_idx)
         # info[PERSONAL_DICT_AGE] = 0
         cage = self.zoo[pop_idx]
         if info.get(DICT_IS_WORKER, True):
@@ -581,8 +623,8 @@ if __name__ == '__main__':
                                           outcome_fn=MaxOutcome(),
                                           population_sizes=[3, 4, 5],
                                           team_trainer=TeamTrainer(num_agents=3 + 4 + 5),
-                                          worker_constructors=[lambda _: (WorkerDQN(policy=MlpPolicy,
-                                                                                    env='CartPole-v1'), None)
+                                          worker_constructors=[lambda *_: (WorkerDQN(policy=MlpPolicy,
+                                                                                     env='CartPole-v1'), None)
                                                                for _ in range(3)],
                                           zoo_dir=os.path.join(DIR, 'data', 'coevolver_zoo_test'),
                                           )

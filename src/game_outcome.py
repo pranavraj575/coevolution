@@ -96,12 +96,13 @@ class OutcomeFn:
         usually 1 is win, 0.5 is tie (for two team games) and 0 is loss
     """
 
-    def get_outcome(self, team_choices, train_infos=None):
+    def get_outcome(self, team_choices, train_infos=None, env=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
             train_infos: either None or array of same shape as team_choices
                 each element is dictionary of training settings for corresponding agent
+            env: envionrment to use default None
 
         Returns: list corresponding to teams
             [
@@ -154,7 +155,7 @@ class PettingZooOutcomeFn(OutcomeFn):
                                                           )
         return agent
 
-    def get_outcome(self, team_choices, train_infos=None):
+    def get_outcome(self, team_choices, train_infos=None, env=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
@@ -186,7 +187,8 @@ class PettingZooOutcomeFn(OutcomeFn):
         index_choices = [[member.item() for member in t] for t in team_choices]
         out = self._get_outcome_from_agents(agent_choices=agent_choices,
                                             index_choices=index_choices,
-                                            train_info=train_infos,
+                                            train_infos=train_infos,
+                                            env=env,
                                             )
         self._save_agents(agent_choices=agent_choices,
                           index_choices=index_choices,
@@ -214,18 +216,26 @@ class PettingZooOutcomeFn(OutcomeFn):
                                               )
                 cage.save_info(key=str(local_idx), info=train_dict)
 
-    def _get_outcome_from_agents(self, agent_choices, index_choices, train_info):
+    def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos, env):
         """
         from workers, indices, and training info, evaluates the teams in a pettingzoo enviornment and returns
             the output for self.get_outcome
         also should train agents as specified by train_info
         also should save agents as specified by train_info
         Args:
-            agent_choices:
-            index_choices:
-            train_info:
-
+            agent_choices: agents to use for training
+            index_choices: global indices of agents
+            train_infos: info dicts, same shape as agetns
+            env: env to use
         Returns:
-
+            same output as self.get_outcome
+            list corresponding to teams
+            [
+                outcome score,
+                list corresponding to players of PlayerInfo(
+                    obs_preembed=player observation (None or size (S,*) seq of observations);
+                    obs_mask=observation mask (None or size (S,) boolean array of which items to mask;
+                    )
+            ]
         """
         raise NotImplementedError

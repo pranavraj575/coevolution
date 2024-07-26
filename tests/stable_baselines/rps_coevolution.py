@@ -17,7 +17,10 @@ from parallel_algs.parallel_alg import ParallelAlgorithm
 import os, sys, torch
 
 from src.zoo_cage import ZooCage
-from src.game_outcome import PettingZooOutcomeFn, PlayerInfo, DICT_TRAIN
+from src.game_outcome import PettingZooOutcomeFn, PlayerInfo
+from src.utils.dict_keys import *
+from src.coevolver import PettingZooCaptianCoevolution
+from src.team_trainer import TeamTrainer
 
 Worker = WorkerPPO
 
@@ -25,55 +28,6 @@ if issubclass(Worker, DQN):
     MlpPolicy = DQNPolicy
 else:
     MlpPolicy = PPOPolicy
-
-
-class SingleZooOutcome(PettingZooOutcomeFn):
-
-    def _get_outcome_from_agents(self, agent_choices, index_choices, train_info):
-        a, b = agent_choices
-        a = a[0]
-        b = b[0]
-        a_info, b_info = train_info
-        a_info = a_info[0]
-        b_info = b_info[0]
-
-        ParallelAlgorithm(policy=MlpPolicy,
-                          parallel_env=env,
-                          DefaultWorkerClass=Worker,
-                          # buffer_size=1000,
-                          worker_info={'player_1': {'train': False}},
-                          workers={'player_1': a, 'player_2': b},
-                          # learning_starts=10,
-                          gamma=0.,
-                          # n_steps=200,
-                          # batch_size=100,
-                          )
-        a = a[0]
-        b = b[0]
-        diff = (a - b)%3
-        if diff == 0:  # the agents tied
-            return [(.5, [PlayerInfo(obs_preembed=torch.tensor(b).view((-1, 1)))]),
-                    (.5, [PlayerInfo(obs_preembed=torch.tensor(a).view((-1, 1)))])]
-        if diff == 1:
-            # agent i won
-            return [
-                (1, [PlayerInfo(obs_preembed=torch.tensor(b).view((-1, 1)))]),
-                (0, [PlayerInfo(obs_preembed=torch.tensor(a).view((-1, 1)))]),
-            ]
-
-        if diff == 2:
-            # agent j won
-            return [
-                (0, [PlayerInfo(obs_preembed=torch.tensor(b).view((-1, 1)))]),
-                (1, [PlayerInfo(obs_preembed=torch.tensor(a).view((-1, 1)))]),
-            ]
-
-
-DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
-
-env = rps_v2.parallel_env()  # render_mode="human")
-
-observations, infos = env.reset()
 
 
 class always_0:
@@ -93,54 +47,103 @@ class easy_pred:
         return self.choice
 
 
-thingy = ParallelAlgorithm(policy=MlpPolicy,
-                           parallel_env=env,
-                           DefaultWorkerClass=Worker,
-                           # buffer_size=1000,
-                           worker_info={'player_1': {'train': False}},
-                           workers={'player_1': easy_pred()},
-                           # learning_starts=10,
-                           gamma=0.,
-                           # n_steps=200,
-                           # batch_size=100,
-                           )
+class SingleZooOutcome(PettingZooOutcomeFn):
+    def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos, env):
+        a, b = agent_choices
+        a = a[0]
+        b = b[0]
+        a_info, b_info = train_infos
+        a_info = a_info[0]
+        b_info = b_info[0]
 
-zoo = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_test_rps'))
+        par_alg = ParallelAlgorithm(policy=MlpPolicy,
+                                    parallel_env=env,
+                                    DefaultWorkerClass=Worker,
+                                    worker_info_dict={'player_0': a_info,
+                                                      'player_1': b_info
+                                                      },
+                                    workers={'player_0': a,
+                                             'player_1': b
+                                             },
+                                    )
+        rec = [0, 0]
+        obs = [[], []]
+        for i in range(3):
+            par_alg.learn_episode(total_timesteps=1)
+            hist = par_alg.env.unwrapped.history
+            game = hist[:2]
+            diff = (game[0] - game[1])%3
+            if diff == 1:
+                rec[0] += 1
+            elif diff == 2:
+                rec[1] += 1
+            obs[0].append(par_alg.last_observations['player_0'].item())
+            obs[1].append(par_alg.last_observations['player_1'].item())
 
-thingy.learn(total_timesteps=400)
 
-print(thingy.workers)
-worker0 = thingy.workers['player_0']
-worker0: Worker
+        easy = [isinstance(c, easy_pred) or isinstance(c, always_0) for c in (a, b)]
 
-zoo.overwrite_worker(worker=worker0, worker_key='0')
-zoo.overwrite_worker(worker=zoo.load_worker(worker_key='0')[0], worker_key='1')
+        obs = [torch.tensor(oo).view((-1, 1)) for oo in obs]
+        if True:
+            if sum(easy)==1:
+                if not easy[0]:
+                    print(rec)
+                    print(a.rollout_buffer.size())
+                else:
+                    print(rec[::-1])
+                    print(b.rollout_buffer.size())
+        if rec[0] == rec[1]:  # the agents tied
+            return [
+                (.5, [PlayerInfo(obs_preembed=obs[0])]),
+                (.5, [PlayerInfo(obs_preembed=obs[1])]),
+            ]
+        if rec[0] > rec[1]:
+            # agent 0 won
+            return [
+                (1, [PlayerInfo(obs_preembed=obs[0])]),
+                (0, [PlayerInfo(obs_preembed=obs[1])]),
+            ]
 
-worker1, _ = zoo.load_worker(worker_key='1')
+        if rec[0] < rec[1]:
+            # agent 1 won
+            return [
+                (0, [PlayerInfo(obs_preembed=obs[0])]),
+                (1, [PlayerInfo(obs_preembed=obs[1])]),
+            ]
 
-if isinstance(worker0, OffPolicyAlgorithm):
-    print(worker0.replay_buffer.size())
-elif isinstance(worker0, OnPolicyAlgorithm):
-    print(worker0.rollout_buffer.size())
 
-if isinstance(worker1, OffPolicyAlgorithm):
-    print(worker1.replay_buffer.size())
-elif isinstance(worker0, OnPolicyAlgorithm):
-    print(worker1.rollout_buffer.size())
-worker1.set_env(worker0.env)
-thingy.workers['player_0'] = worker1
-print('starting thingy here')
-thingy.learn(total_timesteps=20)
+DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
-if isinstance(worker1, OffPolicyAlgorithm):
-    print(worker1.replay_buffer.size())
-elif isinstance(worker0, OnPolicyAlgorithm):
-    print(worker1.rollout_buffer.size())
 
-for _ in range(2):
-    # pushes the 220 examples from worker1 into file of worker0
-    worker0, _ = zoo.update_worker_buffer(local_worker=worker1, worker_key='0')
-    if isinstance(worker0, OffPolicyAlgorithm):
-        print(worker0.replay_buffer.size())
-    elif isinstance(worker0, OnPolicyAlgorithm):
-        print(worker0.rollout_buffer.size())
+def env_constructor():
+    env = rps_v2.parallel_env()
+    env.agents = ['player_0', 'player_1']
+    return env
+
+
+trainer = PettingZooCaptianCoevolution(population_sizes=[100,
+                                                         3
+                                                         ],
+                                       outcome_fn=SingleZooOutcome(),
+                                       env_constructor=env_constructor,
+                                       worker_constructors=[
+                                           lambda i, env: (always_0(), {DICT_TRAIN: False,
+                                                                        DICT_CLONABLE: False,
+                                                                        DICT_CLONE_REPLACABLE: False,
+                                                                        DICT_MUTATION_REPLACABLE: False,
+                                                                        DICT_IS_WORKER:False,
+                                                                        }),
+                                           lambda i, env: (Worker(policy=MlpPolicy,
+                                                                  env=env,
+                                                                  n_steps=200,
+                                                                  batch_size=100,
+                                                                  gamma=0.,
+                                                                  ),
+                                                           {})
+                                       ],
+                                       zoo_dir=os.path.join(DIR, 'data', '2rps_zoo_coevolution_test'),
+                                       worker_constructors_from_env_input=True,
+                                       )
+for _ in range(10000):
+    trainer.epoch()
+trainer.kill_zoo()
