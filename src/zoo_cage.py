@@ -4,7 +4,7 @@ from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
-DICT_IS_WORKER='is_worker'
+from src.utils.dict_keys import *
 
 
 class ZooCage:
@@ -48,6 +48,7 @@ class ZooCage:
                   key: str,
                   info,
                   ):
+        assert type(info)==dict
         if info is not None:
             info_file = os.path.join(self.zoo_dir, key, 'info.pkl')
             f = open(info_file, 'wb')

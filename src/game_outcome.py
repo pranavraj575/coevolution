@@ -1,10 +1,6 @@
 import torch
-from src.zoo_cage import ZooCage, DICT_IS_WORKER
-
-DICT_TRAIN = 'train'
-DICT_COLLECT_ONLY = 'Collect_only'
-DICT_SAVE_CLASS = 'save_class'
-DICT_SAVE_BUFFER = 'save_buffer'
+from src.zoo_cage import ZooCage
+from src.utils.dict_keys import *
 
 
 class PlayerInfo:
@@ -100,11 +96,11 @@ class OutcomeFn:
         usually 1 is win, 0.5 is tie (for two team games) and 0 is loss
     """
 
-    def get_outcome(self, team_choices, train_info=None):
+    def get_outcome(self, team_choices, train_infos=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
-            train_info: either None or array of same shape as team_choices
+            train_infos: either None or array of same shape as team_choices
                 each element is dictionary of training settings for corresponding agent
 
         Returns: list corresponding to teams
@@ -139,31 +135,31 @@ class PettingZooOutcomeFn(OutcomeFn):
         """
         self.index_conversion = index_conversion
 
-    def index_to_agent(self, idx, agent_training_dict):
+    def index_to_agent(self, idx, training_dict):
         """
         takes index and agent training dict and returns agent
             assumes self.set_zoo and self.set_index_conversion have already been called
         Args:
             idx: global index of agent
-            agent_training_dict: training dictionary associated with agent
+            training_dict: training dictionary associated with agent
                 includes whether agent is captian, whether there are repeats, etc
 
         Returns:
 
         """
         pop_idx, local_idx = self.index_conversion(idx)
-        collect_only = agent_training_dict.get(DICT_COLLECT_ONLY, False)
-        agent, info = self.zoo[pop_idx].load_animal(key=str(local_idx),
-                                                    load_buffer=not collect_only,
-                                                    )
-        return agent, info
+        collect_only = training_dict.get(DICT_COLLECT_ONLY, False)
+        agent, saved_info = self.zoo[pop_idx].load_animal(key=str(local_idx),
+                                                          load_buffer=not collect_only,
+                                                          )
+        return agent
 
-    def get_outcome(self, team_choices, train_info=None):
+    def get_outcome(self, team_choices, train_infos=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
                 players are indices corresponding
-            train_info: either None or array of same shape as team_choices
+            train_infos: either None or array of same shape as team_choices
                 each element is dictionary of training settings for corresponding agent
 
                 relevant keys:
@@ -181,48 +177,44 @@ class PettingZooOutcomeFn(OutcomeFn):
                     )
             ]
         """
-        if train_info is None:
-            train_info = [[dict() for _ in team] for team in team_choices]
+        if train_infos is None:
+            train_infos = [[dict() for _ in team] for team in team_choices]
 
-        agent_info_choices = [
+        agent_choices = [
             [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
-            for t in zip(team_choices, train_info)]
-        agent_choices = [[agent for agent, _ in t] for t in agent_info_choices]
-        info_choices = [[info for _, info in t] for t in agent_info_choices]
+            for t in zip(team_choices, train_infos)]
         index_choices = [[member.item() for member in t] for t in team_choices]
         out = self._get_outcome_from_agents(agent_choices=agent_choices,
-                                            info_choices=info_choices,
                                             index_choices=index_choices,
-                                            train_info=train_info,
+                                            train_info=train_infos,
                                             )
         self._save_agents(agent_choices=agent_choices,
-                          info_choices=info_choices,
                           index_choices=index_choices,
-                          train_info=train_info,
+                          train_infos=train_infos,
                           )
         return out
 
-    def _save_agents(self, agent_choices, info_choices, index_choices, train_info):
-        for t in zip(agent_choices, info_choices, index_choices, train_info):
-            for agent, agent_info, global_idx, agent_training_dict in zip(*t):
+    def _save_agents(self, agent_choices, index_choices, train_infos):
+        for t in zip(agent_choices, index_choices, train_infos):
+            for agent, global_idx, train_dict in zip(*t):
                 pop_idx, local_idx = self.index_conversion(global_idx)
                 cage: ZooCage = self.zoo[pop_idx]
-                if agent_info.get(DICT_IS_WORKER, True):
-                    if agent_training_dict.get(DICT_COLLECT_ONLY, False):
+                if train_dict.get(DICT_IS_WORKER, True):
+                    if train_dict.get(DICT_COLLECT_ONLY, False):
                         cage.update_worker_buffer(local_worker=agent,
                                                   worker_key=str(local_idx),
                                                   WorkerClass=None,
                                                   )
-                    elif agent_training_dict.get(DICT_TRAIN, True):
+                    elif train_dict.get(DICT_TRAIN, True):
                         cage.overwrite_worker(worker=agent,
                                               worker_key=str(local_idx),
-                                              save_buffer=agent_training_dict.get(DICT_SAVE_BUFFER, True),
-                                              save_class=agent_training_dict.get(DICT_SAVE_CLASS, True),
-                                              worker_info=agent_info,
+                                              save_buffer=train_dict.get(DICT_SAVE_BUFFER, True),
+                                              save_class=train_dict.get(DICT_SAVE_CLASS, True),
+                                              worker_info=train_dict,
                                               )
-                cage.save_info(key=str(local_idx), info=agent_info)
+                cage.save_info(key=str(local_idx), info=train_dict)
 
-    def _get_outcome_from_agents(self, agent_choices, info_choices, index_choices, train_info):
+    def _get_outcome_from_agents(self, agent_choices, index_choices, train_info):
         """
         from workers, indices, and training info, evaluates the teams in a pettingzoo enviornment and returns
             the output for self.get_outcome

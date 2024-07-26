@@ -5,13 +5,7 @@ import torch, os
 from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage, DICT_IS_WORKER
-
-DICT_CLONABLE = 'clonable'
-DICT_CLONE_REPLACABLE = 'clone_replacable'
-DICT_MUTATION_REPLACABLE = 'mutation_replacable'
-DICT_KEEP_OLD_BUFFER = 'keep_old_buffer'
-DICT_POSITION_DEPENDENT = 'position_dependent'
-DICT_AGE = 'age'
+from src.utils.dict_keys import *
 
 
 class CoevolutionBase:
@@ -94,6 +88,9 @@ class CoevolutionBase:
 
     def pop_index_to_index(self, pop_idx, local_idx):
         return self.cumsums[pop_idx] + local_idx
+
+    def get_info(self, pop_idx, local_idx):
+        return dict()
 
     def create_random_captians(self, N=None):
         """
@@ -239,14 +236,21 @@ class CaptianCoevolution(CoevolutionBase):
                                                    noise_model=self.noise_model,
                                                    )
             teams.append(team)
-            tinfo = [{'captian': False} for _ in range(team_size)]
-            tinfo[pos] = {
-                'captian': True,
-                'unique': unq
-            }
+            tinfo = []
+            for i, member in enumerate(team.flatten()):
+                global_idx = member.item()
+                pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+
+                info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
+                if i == pos:
+                    info[TEMP_DICT_CAPTIAN] = True
+                    info[TEMP_DICT_UNIQUE] = unq
+                else:
+                    info[TEMP_DICT_CAPTIAN] = False
+                tinfo.append(info)
             train_infos.append(tinfo)
         team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
-                                                    train_info=train_infos,
+                                                    train_infos=train_infos,
                                                     )
         for (captian,
              team,
@@ -347,13 +351,14 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             worker_constructors: list of K constructors, size of each population
                 ith constructor takes a worker index (0<j<population_sizes[i])
                     returns a (worker,worker_info) tuple
+                info dicts keys are found in src.utils.dict_keys
+
                 worker_info relevant keys:
                     DICT_IS_WORKER: whether agent is a worker class
                     DICT_CLONABLE: whether agent is able to be cloned
                     DICT_CLONE_REPLACABLE: whether agent is able to be replace by a clone of another agent
                     DICT_MUTATION_REPLACABLE: whether agent is resettable in mutation
                     DICT_KEEP_OLD_BUFFER: whether to keep old buffer in event of reset
-
                     DICT_POSITION_DEPENDENT: set of dict that is associated with position:
                         i.e. if any entries are in this set, they will be unchanged after replacing agent with a clone
                             or mutation
@@ -375,13 +380,14 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          clone_fn=None,
                          noise_model=noise_model,
                          )
+
         self.env_constructor = env_constructor
         self.worker_constructors = worker_constructors
         self.zoo = [
             ZooCage(zoo_dir=os.path.join(zoo_dir, 'cage_' + str(i)),
                     overwrite_zoo=True,
                     )
-            for i in range(len(population_sizes))
+            for i in range(len(self.population_sizes))
         ]
 
         self.outcome_fn: PettingZooOutcomeFn
@@ -412,12 +418,15 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             zoo_cage.kill_cage()
         shutil.rmtree(self.zoo_dir)
 
+    def get_info(self, pop_idx, local_idx):
+        return self.zoo[pop_idx].load_info(key=str(local_idx))
+
     def breed(self):
         valid_replacement_indices = []
         elos = []
         for global_idx in range(self.N):
-            pop_idx, i = self.index_to_pop_index(global_idx=global_idx)
-            info = self.zoo[pop_idx].load_info(key=str(i))
+            pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+            info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
             if info.get(DICT_CLONABLE, True):
                 valid_replacement_indices.append(global_idx)
                 elos.append(self.captian_elos[global_idx])
@@ -430,8 +439,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         replacements = list(torch.multinomial(dist, self.N, replacement=True))
         for global_idx, rep_idx in enumerate(replacements):
             # replace agent at global idx with agent at valid_replacement_indices[rep_idx]
-            pop_idx, i = self.index_to_pop_index(global_idx=global_idx)
-            info = self.zoo[pop_idx].load_info(key=str(i))
+            pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+            info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
             # only replace old agents
 
             if info.get(DICT_CLONE_REPLACABLE, True) and (info.get(DICT_AGE, 0) > self.protect_new):
@@ -453,7 +462,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                         replacement_info.pop(key)
 
                 self.zoo[pop_idx].overwrite_animal(animal=replacement_agent,
-                                                   key=str(i),
+                                                   key=str(local_idx),
                                                    info=replacement_info,
                                                    save_buffer=True,
                                                    save_class=True,
@@ -469,14 +478,13 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 self.age_up_agent(pop_idx=pop_idx, local_idx=local_idx)
 
     def age_up_agent(self, pop_idx, local_idx):
-        info = self.zoo[pop_idx].load_info(key=str(local_idx))
+        info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
         info[DICT_AGE] = info.get(DICT_AGE, 0) + 1
         self.zoo[pop_idx].save_info(key=str(local_idx), info=info)
 
     def reset_agent(self, pop_idx, local_idx, keep_old_buffer=False):
         agent, info = self.worker_constructors[pop_idx](local_idx)
-        info[DICT_AGE] = 0
-
+        # info[PERSONAL_DICT_AGE] = 0
         cage = self.zoo[pop_idx]
         if info.get(DICT_IS_WORKER, True):
             if keep_old_buffer and cage.worker_exists(worker_key=str(local_idx)):
@@ -510,7 +518,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             for global_idx in range(self.N):
                 if torch.rand(1) < self.mutation_prob:
                     pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
-                    info = self.zoo[pop_idx].load_info(key=str(local_idx))
+                    info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
                     if info.get(DICT_MUTATION_REPLACABLE, True) and (info.get(DICT_AGE, 0) > self.protect_new):
                         self.reset_agent(pop_idx=pop_idx,
                                          local_idx=local_idx,

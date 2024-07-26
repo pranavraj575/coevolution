@@ -1,7 +1,7 @@
 import torch
-from src.coevolver import PettingZooCaptianCoevolution, DICT_CLONABLE, DICT_CLONE_REPLACABLE
+from src.coevolver import PettingZooCaptianCoevolution
 from tests.rps_basic.game import plot_dist_evolution, SingleZooOutcome
-from src.zoo_cage import DICT_IS_WORKER
+from src.utils.dict_keys import *
 
 if __name__ == '__main__':
     import os, sys
@@ -16,8 +16,8 @@ if __name__ == '__main__':
     if not os.path.exists((plot_dir)):
         os.makedirs(plot_dir)
 
-    popsizes = [1,1,28]
-    popsize=sum(popsizes)
+    popsizes = [1, 1, 28]
+    popsize = sum(popsizes)
 
     trainer = PettingZooCaptianCoevolution(population_sizes=popsizes,
                                            outcome_fn=SingleZooOutcome(),
@@ -25,17 +25,21 @@ if __name__ == '__main__':
                                            worker_constructors=[lambda i: (1, {DICT_IS_WORKER: False,
                                                                                DICT_CLONABLE: True,
                                                                                DICT_CLONE_REPLACABLE: False,
+                                                                               DICT_TRAIN: False,
                                                                                }),
                                                                 lambda i: (2, {DICT_IS_WORKER: False,
                                                                                DICT_CLONABLE: True,
                                                                                DICT_CLONE_REPLACABLE: False,
+                                                                               DICT_TRAIN: False,
                                                                                }),
-                                                                lambda i: (0, {DICT_IS_WORKER: False})],
+                                                                lambda i: (0, {DICT_IS_WORKER: False,
+                                                                               DICT_TRAIN: False,
+                                                                               })],
                                            zoo_dir=os.path.join(DIR, 'data', 'test', 'rps_basic_zoo'),
                                            env_constructor=None,
 
                                            )
-    for cage_idx,pop in enumerate(popsizes):
+    for cage_idx, pop in enumerate(popsizes):
         for i in range(pop):
             animal, info = trainer.zoo[cage_idx].load_animal(key=str(i))
 
@@ -46,7 +50,7 @@ if __name__ == '__main__':
         print('epoch', epoch)
         trainer.breed()
         trainer.mutate()
-        animals=[]
+        animals = []
         for cage_idx, pop in enumerate(popsizes):
             for i in range(pop):
                 animal, info = trainer.zoo[cage_idx].load_animal(key=str(i))

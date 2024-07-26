@@ -4,6 +4,7 @@ from stable_baselines3.common.preprocessing import check_for_nested_spaces, is_i
     is_image_space_channels_first
 
 
+
 class ParallelAlgorithm:
     def __init__(self,
                  policy,
