@@ -30,7 +30,7 @@ class CoevolutionBase:
             team_sizes: tuple of number of agents in each team
                 i.e. (1,1) is a 1v1 game
 
-            TODO: this is currently unused
+            TODO: help this is currently unused
             member_to_population: takes team member (team_idx, member_idx) and returns set of
                 populations (subset of (0<i<len(population_sizes))) that the member can be drawn from
                 by default, assumes each member can be drawn from each population
@@ -528,6 +528,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         agent, info = self.worker_constructors(pop_idx)(local_idx)
         # info[PERSONAL_DICT_AGE] = 0
         cage = self.zoo[pop_idx]
+
         if info.get(DICT_IS_WORKER, True):
             if keep_old_buffer and cage.worker_exists(worker_key=str(local_idx)):
                 old_worker, _ = cage.load_worker(worker_key=str(local_idx),
