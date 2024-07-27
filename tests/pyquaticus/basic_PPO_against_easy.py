@@ -11,21 +11,12 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  )
 from multi_agent_algs.ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
-from experiments.pyquaticus_coevolution import env_constructor,CTFOutcome
+from experiments.pyquaticus_coevolution import env_constructor, CTFOutcome, RandPolicy
 
+DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
-class RandPolicy:
-    def __init__(self, action_space):
-        self.action_space = action_space
-
-    def get_action(self, obs, *args, **kwargs):
-        return 7
-        return self.action_space.sample()
-
-
-DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
-
-data_folder = os.path.join(DIR, 'data', 'pyquaticus_coevolution')
+print(DIR)
+data_folder = os.path.join(DIR, 'data', 'basic_ppo_against_easy')
 
 PARSER = argparse.ArgumentParser()
 
@@ -41,12 +32,10 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                                          1
                                                          ],
                                        outcome_fn=CTFOutcome(),
-                                       env_constructor=env_constructor,
+                                       env_constructor=lambda : env_constructor(render_mode=RENDER_MODE),
                                        worker_constructors=[
                                            lambda i, env: (WorkerPPO(policy=MlpPolicy,
                                                                      env=env,
-                                                                     n_steps=100,
-                                                                     batch_size=100,
                                                                      ),
                                                            {DICT_TRAIN: True,
                                                             DICT_CLONABLE: False,
@@ -62,7 +51,7 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                                                                           DICT_IS_WORKER: False,
                                                                                           }),
                                        ],
-                                       zoo_dir=os.path.join(DIR, 'data', 'basic_ppo_against_easy'),
+                                       zoo_dir=os.path.join(data_folder, 'zoo'),
 
                                        # ppo is always on the first team, random always second
                                        member_to_population=lambda team_idx, member_idx: {team_idx},

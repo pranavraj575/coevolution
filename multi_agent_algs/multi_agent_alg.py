@@ -104,6 +104,7 @@ class MultiAgentAlgorithm:
                 # otherwise, break if we run out of timesteps
                 if timestep_counter >= total_timesteps:
                     break
+        return timestep_counter, episode_counter
 
     def _get_worker_iter(self, trainable):
         """
