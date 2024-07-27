@@ -156,7 +156,7 @@ class OnPolicy:
             values,
             log_probs,
         )
-        self._last_obs = new_obs  # type: ignore[assignment]
+        self._last_obs = conform_shape(new_obs,obs_space=self.observation_space)  # type: ignore[assignment]
         self._last_episode_starts = dones
         # if current rollout size is less than max rollout size, continue rollout
         return {

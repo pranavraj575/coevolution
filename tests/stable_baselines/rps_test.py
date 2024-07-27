@@ -52,7 +52,7 @@ class easy_pred:
 thingy = multi_agent_algorithm(policy=MlpPolicy,
                                env=env,
                                DefaultWorkerClass=Worker,
-                               worker_info_dict={'player_1': {'train': False}},
+                               worker_infos={'player_1': {'train': False}},
                                workers={'player_1': easy_pred()},
                                gamma=0.,
 

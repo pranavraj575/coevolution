@@ -23,7 +23,7 @@ class ZooCage:
                          save_buffer=True,
                          save_class=True,
                          ):
-        if info.get(DICT_IS_WORKER, False):
+        if info.get(DICT_IS_WORKER, True):
             return self.overwrite_worker(worker=animal,
                                          worker_key=key,
                                          worker_info=info,

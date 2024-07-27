@@ -11,7 +11,7 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
                  workers,
                  policy=MlpPolicy,
                  DefaultWorkerClass=WorkerPPO,
-                 worker_info_dict=None,
+                 worker_infos=None,
                  **worker_kwargs,
                  ):
         """
@@ -24,7 +24,7 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
                     multi_agent_algs.off_policy:OffPolicyAlgorithm
                     or multi_agent_algs.on_policy:OnPolicyAlgorithm
                 untrainable workers must have a get_action (obs -> action) method
-            worker_info_dict: dict of agentid -> (worker info dict)
+            worker_infos: dict of agentid -> (worker info dict)
                 worker info dict contains
                     DICT_TRAIN: bool (whether or not to train worker)
 
@@ -37,7 +37,7 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
             env=parallel_env,
             DefaultWorkerClass=DefaultWorkerClass,
             workers=workers,
-            worker_info_dict=worker_info_dict,
+            worker_infos=worker_infos,
             **worker_kwargs,
         )
 
@@ -81,20 +81,32 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
 
         continue_rollout = True
         steps_so_far = 0
+        if self.reset_env:
+            episodes_completed = -1
+            # if we are resetting immedieately, we should start at -1
+        else:
+            episodes_completed = 0
+
         while continue_rollout:
             if number_of_eps is not None:
-                # counter for number of episodes to do
-                number_of_eps -= 1
-                if number_of_eps <= 0:
+                if episodes_completed >= number_of_eps:
                     continue_rollout = False
             if strict_timesteps and steps_so_far >= total_timesteps:
                 continue_rollout = False
             if not continue_rollout:
                 break
+
             continue_rollout = False
 
             if self.reset_env:
-                self.last_observations, self.last_infos = self.env.reset()
+                episodes_completed += 1
+                reset_obj = self.env.reset()
+                # sometimes the environment does not send infos as a tuple, we must set them manually in this case
+                if type(reset_obj) == tuple:
+                    self.last_observations, self.last_infos = reset_obj
+                else:
+                    self.last_observations = reset_obj
+                    self.last_infos = {idx: dict() for idx in self.last_observations}
                 self.reset_env = False
 
             # rollout 1 (start of loop)
@@ -127,10 +139,11 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
                 )
                 actions[agent] = act
 
-            self.last_observations, rewards, terminations, truncations, self.last_infos = self.env.step(actions=actions)
+            self.last_observations, rewards, terminations, truncations, self.last_infos = self.env.step(actions)
             truncation = any([t for (_, t) in truncations.items()])
             termination = any([t for (_, t) in terminations.items()])
             term = termination or truncation
+
             # rollout 3 (end of loop)
             for agent in self.get_trainable_workers():
                 rollout_3_info = self.workers[agent].rollout_3(
@@ -139,7 +152,7 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
                     reward=rewards[agent],
                     termination=termination,
                     truncation=truncation,
-                    info=self.last_infos[agent],
+                    info=self.last_infos.get(agent, dict()),
                     init_learn_info=local_init_learn_info[agent],
                     init_rollout_info=local_init_rollout_info[agent],
                     rollout_1_info=local_rollout_1_info[agent],
@@ -165,5 +178,4 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
                 init_learn_info=local_init_learn_info[agent],
                 end_rollout_info=local_end_rollout_info[agent],
             )
-        self.reset_env = True
-        return steps_so_far
+        return steps_so_far, max(0,episodes_completed)

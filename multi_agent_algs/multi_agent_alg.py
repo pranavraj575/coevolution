@@ -14,7 +14,7 @@ class MultiAgentAlgorithm:
                  workers,
                  policy=MlpPolicy,
                  DefaultWorkerClass=WorkerPPO,
-                 worker_info_dict=None,
+                 worker_infos=None,
                  **worker_kwargs
                  ):
         """
@@ -27,7 +27,7 @@ class MultiAgentAlgorithm:
                     multi_agent_algs.off_policy:OffPolicyAlgorithm
                     or multi_agent_algs.on_policy:OnPolicyAlgorithm
                 untrainable workers must have a get_action (obs -> action) method
-            worker_info_dict: dict of agentid -> (worker info dict)
+            worker_infos: dict of agentid -> (worker info dict)
                 worker info dict contains
                     DICT_TRAIN: bool (whether or not to train worker)
 
@@ -37,11 +37,11 @@ class MultiAgentAlgorithm:
         """
         if workers is None:
             workers = dict()
-        if worker_info_dict is None:
-            worker_info_dict = dict()
+        if worker_infos is None:
+            worker_infos = dict()
         for agent in env.agents:
-            if agent not in worker_info_dict:
-                worker_info_dict[agent] = {
+            if agent not in worker_infos:
+                worker_infos[agent] = {
                     DICT_TRAIN: True
                 }
 
@@ -53,12 +53,12 @@ class MultiAgentAlgorithm:
                                                     env=dumenv,
                                                     **worker_kwargs,
                                                     )
-            elif worker_info_dict[agent].get(DICT_TRAIN, True):
+            elif worker_infos[agent].get(DICT_TRAIN, True):
                 # in this case, we should probably set the environment anyway
                 workers[agent].set_env(dumenv)
 
         self.workers = workers
-        self.worker_info = worker_info_dict
+        self.worker_info = worker_infos
         self.env = env
         self.reset_env = True  # should reset env next time
 
@@ -81,24 +81,28 @@ class MultiAgentAlgorithm:
             callbacks:
         Returns:
         """
+        # always start learning with resetting environment
+        self.reset_env = True
+        timestep_counter = 0
+        episode_counter = 0
         while True:
             local_num_eps = None
             if number_of_eps is not None:
                 local_num_eps = min(number_of_eps_per_learning_step, number_of_eps)
-                number_of_eps -= number_of_eps_per_learning_step
-            timesteps = self.learn_episode(total_timesteps=total_timesteps,
-                                           number_of_eps=local_num_eps,
-                                           strict_timesteps=strict_timesteps,
-                                           callbacks=callbacks,
-                                           )
-            total_timesteps -= timesteps
+            timesteps, episodes = self.learn_episode(total_timesteps=total_timesteps,
+                                                     number_of_eps=local_num_eps,
+                                                     strict_timesteps=strict_timesteps,
+                                                     callbacks=callbacks,
+                                                     )
+            timestep_counter += timesteps
+            episode_counter += episodes
             if number_of_eps is not None:
                 # if this is specified, train for this number of eps
-                if number_of_eps <= 0:
+                if episode_counter >= number_of_eps:
                     break
             else:
                 # otherwise, break if we run out of timesteps
-                if total_timesteps <= 0:
+                if timestep_counter >= total_timesteps:
                     break
 
     def _get_worker_iter(self, trainable):
@@ -132,6 +136,6 @@ class MultiAgentAlgorithm:
             number_of_eps: if specified, overrides total_timesteps, and instead collects this number of episodes
             strict_timesteps: if true, breaks an episode in the middle if timesteps are over
             callbacks:
-        Returns: number of collected timesteps
+        Returns: number of collected timesteps, number of collected episodes
         """
         raise NotImplementedError

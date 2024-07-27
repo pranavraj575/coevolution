@@ -19,3 +19,12 @@
    ```bash
    pip3 install -e .
    ```
+ * install example repos used (run in coevolution folder)
+   ```bash
+   pip3 install -e repos/*
+   ```
+   OR choose which repos to install
+   ```bash
+   pip3 install -e repos/pyquaticus
+   ```
+  

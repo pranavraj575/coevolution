@@ -287,6 +287,7 @@ class CaptianCoevolution(CoevolutionBase):
         # expected win probabilities, assuming the teams win probability is determined by captian elo
         expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
                                            dim=-1)
+        # team selection (pretty much does nothing if teams are size 1
         for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
             captian_pop_idx, _ = self.index_to_pop_index(global_idx=captian)
             valid_locations = self.pop_and_team_to_valid_locations[captian_pop_idx][team_idx]
@@ -414,7 +415,6 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  mutation_prob=.01,
                  protect_new=20,
                  team_idx_to_agent_id=None,
-                 worker_constructors_from_env_input=False,
                  ):
         """
         Args:
@@ -459,6 +459,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.env_constructor = env_constructor
 
         test_env = self.env_constructor()
+        test_env.reset()
 
         if team_idx_to_agent_id is not None:
             self.team_idx_to_agent_id = team_idx_to_agent_id
@@ -472,22 +473,20 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
         self.action_space = test_env.action_space
         self.observation_space = test_env.observation_space
-        if worker_constructors_from_env_input:
-            def pop_idx_to_dumenv(pop_idx):
-                idx = self.sample_team_member_from_pop(pop_idx=pop_idx)
-                agent_id = self.team_idx_to_agent_id(idx=idx)
-                return DumEnv(action_space=self.action_space(agent_id),
-                              obs_space=self.observation_space(agent_id),
-                              )
+        def pop_idx_to_dumenv(pop_idx):
+            idx = self.sample_team_member_from_pop(pop_idx=pop_idx)
+            agent_id = self.team_idx_to_agent_id(idx=idx)
+            return DumEnv(action_space=self.action_space(agent_id),
+                          obs_space=self.observation_space(agent_id),
+                          )
 
-            self.worker_constructors = lambda pop_idx: (lambda i:
-                                                        worker_constructors[pop_idx](i,
-                                                                                     env=pop_idx_to_dumenv(pop_idx)
-                                                                                     )
-                                                        )
+        self.worker_constructors = lambda pop_idx: (lambda i:
+                                                    worker_constructors[pop_idx](i,
+                                                                                 env=pop_idx_to_dumenv(pop_idx)
+                                                                                 )
+                                                    )
+        # self.worker_constructors is now (pos_idx -> (local idx -> agent))
 
-        else:
-            self.worker_constructors = lambda pos_idx: worker_constructors[pos_idx]
         self.zoo = [
             ZooCage(zoo_dir=os.path.join(zoo_dir, 'cage_' + str(i)),
                     overwrite_zoo=True,
@@ -742,12 +741,15 @@ if __name__ == '__main__':
     from stable_baselines3.dqn import MlpPolicy
     from pettingzoo.classic import tictactoe_v3
 
-    capzoo = PettingZooCaptianCoevolution(env_constructor=lambda: None,
+    def env_constructor():
+        return tictactoe_v3.env()
+
+    capzoo = PettingZooCaptianCoevolution(env_constructor=env_constructor,
                                           outcome_fn=MaxOutcome(),
                                           population_sizes=[3, 4, 5],
                                           team_trainer=TeamTrainer(num_agents=3 + 4 + 5),
-                                          worker_constructors=[lambda *_: (WorkerDQN(policy=MlpPolicy,
-                                                                                     env='CartPole-v1'), None)
+                                          worker_constructors=[lambda _,env: (WorkerDQN(policy=MlpPolicy,
+                                                                                     env=env), {})
                                                                for _ in range(3)],
                                           zoo_dir=os.path.join(DIR, 'data', 'coevolver_zoo_test'),
                                           )

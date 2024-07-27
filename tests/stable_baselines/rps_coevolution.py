@@ -58,22 +58,22 @@ class SingleZooOutcome(PettingZooOutcomeFn):
         b_info = b_info[0]
 
         alg = multi_agent_algorithm(policy=MlpPolicy,
-                                        env=env,
-                                        DefaultWorkerClass=Worker,
-                                        worker_info_dict={'player_0': a_info,
-                                                          'player_1': b_info
-                                                          },
-                                        workers={'player_0': a,
-                                                 'player_1': b
-                                                 },
-                                        )
+                                    env=env,
+                                    DefaultWorkerClass=Worker,
+                                    worker_infos={'player_0': a_info,
+                                                      'player_1': b_info
+                                                  },
+                                    workers={'player_0': a,
+                                             'player_1': b
+                                             },
+                                    )
         rec = [0, 0]
         obs = [[], []]
         for i in range(1):
             alg.learn_episode(total_timesteps=5)
             hist = alg.env.unwrapped.history
             for h in range(5):
-                game=hist[h*2:h*2+2]
+                game = hist[h*2:h*2 + 2]
                 diff = (game[0] - game[1])%3
                 if diff == 1:
                     rec[0] += 1
@@ -89,21 +89,21 @@ class SingleZooOutcome(PettingZooOutcomeFn):
                 print(rec)
         if rec[0] == rec[1]:  # the agents tied
             return [
-                (.5, [PlayerInfo(obs_preembed=obs[0])]),
-                (.5, [PlayerInfo(obs_preembed=obs[1])]),
+                (.5, [PlayerInfo()]),
+                (.5, [PlayerInfo()]),
             ]
         if rec[0] > rec[1]:
             # agent 0 won
             return [
-                (1, [PlayerInfo(obs_preembed=obs[0])]),
-                (0, [PlayerInfo(obs_preembed=obs[1])]),
+                (1, [PlayerInfo()]),
+                (0, [PlayerInfo()]),
             ]
 
         if rec[0] < rec[1]:
             # agent 1 won
             return [
-                (0, [PlayerInfo(obs_preembed=obs[0])]),
-                (1, [PlayerInfo(obs_preembed=obs[1])]),
+                (0, [PlayerInfo()]),
+                (1, [PlayerInfo()]),
             ]
 
 
@@ -137,7 +137,6 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                                            {})
                                        ],
                                        zoo_dir=os.path.join(DIR, 'data', '2rps_zoo_coevolution_test'),
-                                       worker_constructors_from_env_input=True,
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
 for epohc in range(1000):

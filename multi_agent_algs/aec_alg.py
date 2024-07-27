@@ -10,7 +10,7 @@ class AECAlgorithm(MultiAgentAlgorithm):
                  workers,
                  policy=MlpPolicy,
                  DefaultWorkerClass=WorkerPPO,
-                 worker_info_dict=None,
+                 worker_infos=None,
                  **worker_kwargs,
                  ):
         """
@@ -23,7 +23,7 @@ class AECAlgorithm(MultiAgentAlgorithm):
                     multi_agent_algs.off_policy:OffPolicyAlgorithm
                     or multi_agent_algs.on_policy:OnPolicyAlgorithm
                 untrainable workers must have a get_action (obs -> action) method
-            worker_info_dict: dict of agentid -> (worker info dict)
+            worker_infos: dict of agentid -> (worker info dict)
                 worker info dict contains
                     DICT_TRAIN: bool (whether or not to train worker)
 
@@ -36,7 +36,7 @@ class AECAlgorithm(MultiAgentAlgorithm):
             env=env,
             DefaultWorkerClass=DefaultWorkerClass,
             workers=workers,
-            worker_info_dict=worker_info_dict,
+            worker_infos=worker_infos,
             **worker_kwargs,
         )
         self.agent_records = dict()
@@ -78,11 +78,16 @@ class AECAlgorithm(MultiAgentAlgorithm):
             local_init_rollout_info[agent] = init_rollout_info
         steps_so_far = 0
         continue_rollout = True
+        if self.reset_env:
+            episodes_completed = -1
+            # if we are resetting immedieately, we should start at -1
+        else:
+            episodes_completed = 0
+
         while continue_rollout:
             if number_of_eps is not None:
                 # counter for number of episodes to do
-                number_of_eps -= 1
-                if number_of_eps <= 0:
+                if episodes_completed >= number_of_eps:
                     continue_rollout = False
             if strict_timesteps and steps_so_far >= total_timesteps:
                 continue_rollout = False
@@ -91,8 +96,11 @@ class AECAlgorithm(MultiAgentAlgorithm):
 
             continue_rollout = False
             if self.reset_env:
+                episodes_completed += 1
                 self.env.reset()
                 self.reset_env = False
+                # reset records
+                self.agent_records = dict()
 
             # inner loop, should run until env ends
             for agent in self.env.agent_iter():
@@ -167,7 +175,4 @@ class AECAlgorithm(MultiAgentAlgorithm):
                 end_rollout_info=local_end_rollout_info[agent],
             )
 
-        # reset env, clear the agent records as well
-        self.agent_records = dict()
-        self.reset_env = True
-        return steps_so_far
+        return steps_so_far, max(0,episodes_completed)
