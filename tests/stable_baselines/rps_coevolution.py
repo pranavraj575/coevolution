@@ -40,10 +40,9 @@ class easy_pred:
         self.choice = 0
         self.p = p
 
-    def get_action(self, *args, **kwargs):
-        if np.random.random() < self.p:
+    def get_action(self, obs, *args, **kwargs):
+        if obs==3 or np.random.random() < self.p:
             self.choice = np.random.randint(3)
-
         return self.choice
 
 
@@ -120,11 +119,11 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                        env_constructor=env_constructor,
                                        worker_constructors=[
                                            lambda i, env: (easy_pred(p=.01), {DICT_TRAIN: False,
-                                                                        DICT_CLONABLE: False,
-                                                                        DICT_CLONE_REPLACABLE: False,
-                                                                        DICT_MUTATION_REPLACABLE: False,
-                                                                        DICT_IS_WORKER: False,
-                                                                        }),
+                                                                              DICT_CLONABLE: False,
+                                                                              DICT_CLONE_REPLACABLE: False,
+                                                                              DICT_MUTATION_REPLACABLE: False,
+                                                                              DICT_IS_WORKER: False,
+                                                                              }),
                                            lambda i, env: (Worker(policy=MlpPolicy,
                                                                   env=env,
                                                                   n_steps=200,
