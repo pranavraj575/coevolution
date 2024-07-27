@@ -1,8 +1,8 @@
-from stable_baselines3.a2c import A2C
-from parallel_algs.on_policy import OnPolicy
+from stable_baselines3.ddpg import DDPG
+from multi_agent_algs.off_policy import OffPolicy
 
 
-class WorkerA2C(A2C, OnPolicy):
+class WorkerDDPG(DDPG, OffPolicy):
     """
     meant to work inside a parallel DQN
     specifially broke the .learn() and .collect_rollout() methods

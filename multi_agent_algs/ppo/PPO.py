@@ -1,5 +1,5 @@
 from stable_baselines3.ppo import PPO
-from parallel_algs.on_policy import OnPolicy
+from multi_agent_algs.on_policy import OnPolicy
 from stable_baselines3.common.utils import get_schedule_fn
 
 

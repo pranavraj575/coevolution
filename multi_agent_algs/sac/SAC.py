@@ -1,8 +1,8 @@
-from stable_baselines3.dqn import DQN
-from parallel_algs.off_policy import OffPolicy
+from stable_baselines3.sac import SAC
+from multi_agent_algs.on_policy import OnPolicy
 
 
-class WorkerDQN(DQN, OffPolicy):
+class WorkerSAC(SAC, OnPolicy):
     """
     meant to work inside a parallel DQN
     specifially broke the .learn() and .collect_rollout() methods

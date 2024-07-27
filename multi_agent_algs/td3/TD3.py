@@ -1,8 +1,8 @@
-from stable_baselines3.ddpg import DDPG
-from parallel_algs.off_policy import OffPolicy
+from stable_baselines3.td3 import TD3
+from multi_agent_algs.off_policy import OffPolicy
 
 
-class WorkerDDPG(DDPG, OffPolicy):
+class WorkerTD3(TD3, OffPolicy):
     """
     meant to work inside a parallel DQN
     specifially broke the .learn() and .collect_rollout() methods

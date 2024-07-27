@@ -8,19 +8,16 @@ from stable_baselines3.dqn.dqn import DQN
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
 from stable_baselines3.ppo.ppo import PPO
 
-from parallel_algs.dqn.DQN import WorkerDQN
-from parallel_algs.ppo.PPO import WorkerPPO
+from multi_agent_algs.dqn.DQN import WorkerDQN
+from multi_agent_algs.ppo.PPO import WorkerPPO
 
-from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from parallel_algs.parallel_alg import ParallelAlgorithm
+from multi_agent_algs.better_multi_alg import multi_agent_algorithm
 import os, sys, torch
 
-from src.zoo_cage import ZooCage
 from src.game_outcome import PettingZooOutcomeFn, PlayerInfo
 from src.utils.dict_keys import *
 from src.coevolver import PettingZooCaptianCoevolution
-from src.team_trainer import TeamTrainer
+from pettingzoo import AECEnv, ParallelEnv
 
 Worker = WorkerPPO
 
@@ -41,7 +38,7 @@ class easy_pred:
         self.p = p
 
     def get_action(self, obs, *args, **kwargs):
-        if obs==3 or np.random.random() < self.p:
+        if obs == 3 or np.random.random() < self.p:
             self.choice = np.random.randint(3)
         return self.choice
 
@@ -55,29 +52,31 @@ class SingleZooOutcome(PettingZooOutcomeFn):
         a_info = a_info[0]
         b_info = b_info[0]
 
-        par_alg = ParallelAlgorithm(policy=MlpPolicy,
-                                    parallel_env=env,
-                                    DefaultWorkerClass=Worker,
-                                    worker_info_dict={'player_0': a_info,
-                                                      'player_1': b_info
-                                                      },
-                                    workers={'player_0': a,
-                                             'player_1': b
-                                             },
-                                    )
+        alg = multi_agent_algorithm(policy=MlpPolicy,
+                                        env=env,
+                                        DefaultWorkerClass=Worker,
+                                        worker_info_dict={'player_0': a_info,
+                                                          'player_1': b_info
+                                                          },
+                                        workers={'player_0': a,
+                                                 'player_1': b
+                                                 },
+                                        )
         rec = [0, 0]
         obs = [[], []]
-        for i in range(10):
-            par_alg.learn_episode(total_timesteps=1)
-            hist = par_alg.env.unwrapped.history
-            game = hist[:2]
-            diff = (game[0] - game[1])%3
-            if diff == 1:
-                rec[0] += 1
-            elif diff == 2:
-                rec[1] += 1
-            obs[0].append(par_alg.last_observations['player_0'].item())
-            obs[1].append(par_alg.last_observations['player_1'].item())
+        for i in range(1):
+            alg.learn_episode(total_timesteps=5)
+            hist = alg.env.unwrapped.history
+            for h in range(5):
+                game=hist[h*2:h*2+2]
+                diff = (game[0] - game[1])%3
+                if diff == 1:
+                    rec[0] += 1
+                elif diff == 2:
+                    rec[1] += 1
+
+            obs[0].append(torch.rand(1))
+            obs[1].append(torch.rand(1))
 
         obs = [torch.tensor(oo).view((-1, 1)) for oo in obs]
         if True:
@@ -107,7 +106,7 @@ DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), 
 
 
 def env_constructor():
-    env = rps_v2.parallel_env()
+    env = rps_v2.env()
     env.agents = ['player_0', 'player_1']
     return env
 
@@ -138,4 +137,5 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                        )
 for epohc in range(1000):
     trainer.epoch()
+
 trainer.kill_zoo()

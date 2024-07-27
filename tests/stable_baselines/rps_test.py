@@ -8,12 +8,12 @@ from stable_baselines3.dqn.dqn import DQN
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
 from stable_baselines3.ppo.ppo import PPO
 
-from parallel_algs.dqn.DQN import WorkerDQN
-from parallel_algs.ppo.PPO import WorkerPPO
+from multi_agent_algs.dqn.DQN import WorkerDQN
+from multi_agent_algs.ppo.PPO import WorkerPPO
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from parallel_algs.parallel_alg import ParallelAlgorithm
+from multi_agent_algs.better_multi_alg import multi_agent_algorithm
 import os, sys
 
 from src.zoo_cage import ZooCage
@@ -49,17 +49,19 @@ class easy_pred:
         return self.choice
 
 
-thingy = ParallelAlgorithm(policy=MlpPolicy,
-                           parallel_env=env,
-                           DefaultWorkerClass=Worker,
-                           # buffer_size=1000,
-                           worker_info_dict={'player_1': {'train': False}},
-                           workers={'player_1': easy_pred()},
-                           # learning_starts=10,
-                           gamma=0.,
-                           # n_steps=200,
-                           # batch_size=100,
-                           )
+thingy = multi_agent_algorithm(policy=MlpPolicy,
+                               env=env,
+                               DefaultWorkerClass=Worker,
+                               worker_info_dict={'player_1': {'train': False}},
+                               workers={'player_1': easy_pred()},
+                               gamma=0.,
+
+                               # buffer_size=1000,
+                               # learning_starts=10,
+
+                               # n_steps=200,
+                               # batch_size=100,
+                               )
 
 zoo = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_test_rps'))
 
@@ -72,7 +74,7 @@ worker0: Worker
 zoo.overwrite_worker(worker=worker0, worker_key='0')
 zoo.overwrite_worker(worker=zoo.load_worker(worker_key='0')[0], worker_key='1')
 
-worker1, _ = zoo.load_worker(worker_key = '1')
+worker1, _ = zoo.load_worker(worker_key='1')
 
 if isinstance(worker0, OffPolicyAlgorithm):
     print(worker0.replay_buffer.size())
@@ -95,7 +97,7 @@ elif isinstance(worker0, OnPolicyAlgorithm):
 
 for _ in range(2):
     # pushes the 220 examples from worker1 into file of worker0
-    worker0,_ = zoo.update_worker_buffer(local_worker=worker1, worker_key='0')
+    worker0, _ = zoo.update_worker_buffer(local_worker=worker1, worker_key='0')
     if isinstance(worker0, OffPolicyAlgorithm):
         print(worker0.replay_buffer.size())
     elif isinstance(worker0, OnPolicyAlgorithm):

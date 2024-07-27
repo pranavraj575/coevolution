@@ -1,12 +1,12 @@
-import shutil
-
 import numpy as np
-import torch, os
+import torch, os, shutil
+
 from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
-from src.zoo_cage import ZooCage, DICT_IS_WORKER
+from src.zoo_cage import ZooCage
 from src.utils.dict_keys import *
-from parallel_algs.common import DumEnv
+
+from multi_agent_algs.common import DumEnv
 
 
 class CoevolutionBase:
@@ -667,10 +667,11 @@ if __name__ == '__main__':
     print(cap.captian_elos)
     print(agents)
 
-    from parallel_algs.dqn.DQN import WorkerDQN
+    from multi_agent_algs.dqn.DQN import WorkerDQN
     from stable_baselines3.dqn import MlpPolicy
+    from pettingzoo.classic import tictactoe_v3
 
-    capzoo = PettingZooCaptianCoevolution(env_constructor=lambda _: None,
+    capzoo = PettingZooCaptianCoevolution(env_constructor=lambda : None,
                                           outcome_fn=MaxOutcome(),
                                           population_sizes=[3, 4, 5],
                                           team_trainer=TeamTrainer(num_agents=3 + 4 + 5),

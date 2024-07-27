@@ -1,8 +1,8 @@
-from stable_baselines3.sac import SAC
-from parallel_algs.on_policy import OnPolicy
+from stable_baselines3.a2c import A2C
+from multi_agent_algs.on_policy import OnPolicy
 
 
-class WorkerSAC(SAC, OnPolicy):
+class WorkerA2C(A2C, OnPolicy):
     """
     meant to work inside a parallel DQN
     specifially broke the .learn() and .collect_rollout() methods

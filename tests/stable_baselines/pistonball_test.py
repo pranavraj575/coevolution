@@ -4,9 +4,9 @@ from pettingzoo import ParallelEnv
 from pettingzoo.butterfly import pistonball_v6
 
 from stable_baselines3.ppo.policies import MlpPolicy, CnnPolicy
-from parallel_algs.ppo.PPO import WorkerPPO as Worker
+from multi_agent_algs.ppo.PPO import WorkerPPO as Worker
 
-from parallel_algs.parallel_alg import ParallelAlgorithm
+from multi_agent_algs.parallel_alg import ParallelAlgorithm
 
 env = pistonball_v6.parallel_env()  # render_mode="human")
 observations, infos = env.reset()
