@@ -1,3 +1,3 @@
-[submodule "experiments/pyquaticus"]
-	path = experiments/pyquaticus
+[submodule "repos/pyquaticus"]
+	path = repos/pyquaticus
 	url = https://github.com/mit-ll-trusted-autonomy/pyquaticus
