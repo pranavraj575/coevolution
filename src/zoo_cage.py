@@ -4,7 +4,7 @@ from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
-from src.utils.dict_keys import *
+from src.utils.dict_keys import DICT_IS_WORKER
 
 
 class ZooCage:
@@ -162,6 +162,7 @@ class ZooCage:
         for i in range(local_buffer.size()):
             pos = (i + pos_0)%local_buffer.buffer_size
             if isinstance(local_buffer, DictReplayBuffer):
+                assert isinstance(buffer, DictReplayBuffer)
                 obs = {key: local_buffer.observations[key][pos]
                        for key in local_buffer.observations}
             else:
@@ -175,6 +176,7 @@ class ZooCage:
                 next_obs = local_buffer.observations[(pos + 1)%local_buffer.buffer_size]
             else:
                 if isinstance(local_buffer, DictReplayBuffer):
+                    assert isinstance(buffer, DictReplayBuffer)
                     next_obs = {key: local_buffer.next_observations[key][pos]
                                 for key in local_buffer.next_observations}
                 else:
@@ -202,6 +204,7 @@ class ZooCage:
         for i in range(local_buffer.size()):
             pos = (i + pos_0)%local_buffer.buffer_size
             if isinstance(local_buffer, DictRolloutBuffer):
+                assert isinstance(buffer, DictRolloutBuffer)
                 obs = {key: local_buffer.observations[key][pos]
                        for key in local_buffer.observations}
             else:
@@ -223,10 +226,30 @@ class ZooCage:
                 log_prob=log_prob,
             )
 
+    def clear_worker_buffer(self, worker_key: str, WorkerClass=None):
+        """
+        clears a saved worker's buffer
+        Args:
+            worker_key: folder to load from/save to
+            WorkerClass: class to use, if known
+        """
+        worker, worker_info = self.load_worker(worker_key=worker_key,
+                                               load_buffer=False,
+                                               WorkerClass=WorkerClass,
+                                               )
+
+        self.overwrite_worker(worker=worker,
+                              worker_key=worker_key,
+                              save_buffer=False,
+                              save_class=self.class_is_saved(worker_key=worker_key),
+                              worker_info=worker_info,
+                              )
+
     def update_worker_buffer(self, local_worker, worker_key: str, WorkerClass=None):
         """
         takes active agent's buffer and stores it into buffer of worker_key
             assumes buffer inherits BaseBuffer
+            only works if both both agents share a buffer type (i.e. both OnPolicy or both OffPolicy algorithms)
         Args:
             local_worker: worker to copy from
             worker_key: folder to load from/save to

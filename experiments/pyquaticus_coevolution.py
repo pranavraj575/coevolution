@@ -6,3 +6,6 @@ data_folder = os.path.join(DIR, 'data', 'pyquaticus_coevolution')
 
 print(DIR)
 PARSER = argparse.ArgumentParser()
+
+PARSER.add_argument("-a", '--algorithm', choices=['dqn','ppo'], required=False, default='ppo',
+                    help="algorithm ")

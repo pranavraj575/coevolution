@@ -4,7 +4,19 @@ import torch, os, shutil
 from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage
-from src.utils.dict_keys import *
+from src.utils.dict_keys import (DICT_AGE,
+                                 DICT_CLONABLE,
+                                 DICT_MUTATION_REPLACABLE,
+                                 DICT_CLONE_REPLACABLE,
+                                 DICT_POSITION_DEPENDENT,
+                                 DICT_KEEP_OLD_BUFFER,
+                                 DICT_UPDATE_WITH_OLD_BUFFER,
+                                 TEMP_DICT_CAPTIAN,
+                                 TEMP_DICT_CAPTIAN_UNIQUE,
+                                 )
+
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
+from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 
 from multi_agent_algs.common import DumEnv
 
@@ -126,10 +138,11 @@ class CoevolutionBase:
             pop_idx += 1
         return pop_idx, global_idx
 
-    def pop_index_to_index(self, pop_idx, local_idx):
+    def pop_index_to_index(self, pop_local_idx):
+        pop_idx, local_idx = pop_local_idx
         return self.cumsums[pop_idx] + local_idx
 
-    def get_info(self, pop_idx, local_idx):
+    def get_info(self, pop_local_idx):
         return dict()
 
     def create_random_captians(self):
@@ -298,10 +311,10 @@ class CaptianCoevolution(CoevolutionBase):
                 global_idx = member.item()
                 captian_pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
 
-                info = self.get_info(pop_idx=captian_pop_idx, local_idx=local_idx)
+                info = self.get_info(pop_local_idx=(captian_pop_idx, local_idx))
                 if i == pos:
                     info[TEMP_DICT_CAPTIAN] = True
-                    info[TEMP_DICT_UNIQUE] = unq
+                    info[TEMP_DICT_CAPTIAN_UNIQUE] = unq
                 else:
                     info[TEMP_DICT_CAPTIAN] = False
                 tinfo.append(info)
@@ -493,8 +506,164 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     def init_agents(self):
         for pop_idx, popsize in enumerate(self.population_sizes):
-            for i in range(popsize):
-                self.reset_agent(pop_idx=pop_idx, local_idx=i)
+            for local_idx in range(popsize):
+                self.reset_agent(pop_local_idx=(pop_idx, local_idx),
+                                 elo=torch.mean(self.captian_elos),
+                                 )
+
+    def reset_agent(self, pop_local_idx, elo=None):
+        pop_idx, local_idx = pop_local_idx
+        agent, info = self.worker_constructors(pop_idx)(local_idx)
+        cage = self.zoo[pop_idx]
+        cage.overwrite_animal(animal=agent,
+                              key=str(local_idx),
+                              info=info,
+                              save_buffer=True,
+                              save_class=True,
+                              )
+        if elo is not None:
+            self.captian_elos[
+                self.pop_index_to_index(pop_local_idx=pop_local_idx)
+            ] = torch.mean(self.captian_elos)
+
+    def get_info(self, pop_local_idx):
+        pop_idx, local_idx = pop_local_idx
+        return self.zoo[pop_idx].load_info(key=str(local_idx))
+
+    def breed(self):
+        valid_replacement_indices = []
+        elos = []
+        for global_idx in range(self.N):
+            pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+            info = self.get_info(pop_local_idx=(pop_idx, local_idx))
+            if info.get(DICT_CLONABLE, True):
+                valid_replacement_indices.append(global_idx)
+                elos.append(self.captian_elos[global_idx])
+        if not valid_replacement_indices:
+            # no clonable agents
+            return
+
+        dist = torch.softmax(torch.tensor(elos), dim=-1)
+        # sample from this distribution with replacements
+        replacements = list(torch.multinomial(dist, self.N, replacement=True))
+        for global_idx, rep_idx in enumerate(replacements):
+            # replace agent at global idx with agent at valid_replacement_indices[rep_idx]
+            pop_local_idx = self.index_to_pop_index(global_idx=global_idx)
+            info = self.get_info(pop_local_idx=pop_local_idx)
+            # only replace old agents
+
+            if info.get(DICT_CLONE_REPLACABLE, True) and (info.get(DICT_AGE, 0) > self.protect_new):
+                pop_idx_rep, local_idx_rep = self.index_to_pop_index(global_idx=valid_replacement_indices[rep_idx])
+                replacement_agent, replacement_info = self.zoo[pop_idx_rep].load_animal(
+                    key=str(local_idx_rep),
+                    load_buffer=True,
+                )
+                self.replace_agent(pop_local_idx=pop_local_idx,
+                                   replacement=(replacement_agent, replacement_info),
+                                   elo=elos[rep_idx],
+                                   keep_old_buff=replacement_info.get(DICT_KEEP_OLD_BUFFER, False),
+                                   update_with_old_buff=replacement_info.get(DICT_UPDATE_WITH_OLD_BUFFER, True),
+                                   )
+        self.rebase_elos()
+        self.age_up_all_agents()
+
+    def mutate(self):
+        if self.mutation_prob > 0:
+            for global_idx in range(self.N):
+                if torch.rand(1) < self.mutation_prob:
+                    pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+                    info = self.get_info(pop_local_idx=(pop_idx, local_idx))
+                    if info.get(DICT_MUTATION_REPLACABLE, True) and (info.get(DICT_AGE, 0) > self.protect_new):
+                        self.replace_agent(pop_local_idx=(pop_idx, local_idx),
+                                           replacement=self.worker_constructors(pop_idx)(local_idx),
+                                           keep_old_buff=info.get(DICT_KEEP_OLD_BUFFER, False),
+                                           update_with_old_buff=info.get(DICT_UPDATE_WITH_OLD_BUFFER, True),
+                                           )
+
+    def replace_agent(self,
+                      pop_local_idx,
+                      replacement,
+                      keep_old_buff=False,
+                      update_with_old_buff=True,
+                      elo=None,
+                      ):
+        """
+        replaces agent at specified idx with replacement agent
+        Args:
+            pop_local_idx: pop_idx,local_idx of agent to replace
+            replacement: (agent, agent info) to replace agent with
+                note that specified entries of info of old agent are carried over
+                    specifically, the entries in info[DICT_POSITION_DEPENDENT]
+            keep_old_buff: whether to just keep the buffer of old agent
+                only works if both both agents share a buffer type
+                    (i.e. both OnPolicyAlgorithm or both OffPolicyAlgorithm)
+            update_with_old_buff: whether to update replacement agent's buffer with old agent
+                only works if both both agents share a buffer type
+                    (i.e. both OnPolicyAlgorithm or both OffPolicyAlgorithm)
+            elo: elo to set new agent to
+        """
+        replacement_agent, replacement_info = replacement
+        old_worker = None
+        (pop_idx, local_idx) = pop_local_idx
+        if keep_old_buff or update_with_old_buff:
+            old_worker, _ = self.zoo[pop_idx].load_worker(worker_key=str(local_idx),
+                                                          WorkerClass=None,
+                                                          load_buffer=True,
+                                                          )
+            # if the types of the old worker and replacement worker buffers are not the same, we cannot load old buffer
+            if not (
+                    (isinstance(old_worker, OnPolicyAlgorithm) and
+                     isinstance(replacement_agent, OnPolicyAlgorithm) and
+                     type(replacement_agent.rollout_buffer) == type(old_worker.rollout_buffer)
+                    ) or
+                    (isinstance(old_worker, OffPolicyAlgorithm) and
+                     isinstance(replacement_agent, OffPolicyAlgorithm) and
+                     type(replacement_agent.replay_buffer) == type(old_worker.replay_buffer)
+                    )
+            ):
+                old_worker = None
+
+        info = self.get_info(pop_local_idx=(pop_idx, local_idx))
+        # keep these values
+        position_dependent_keys = info.get(DICT_POSITION_DEPENDENT,
+                                           # by default we want to keep replacability values
+                                           {
+                                               DICT_CLONE_REPLACABLE,
+                                               DICT_MUTATION_REPLACABLE,
+                                           },
+                                           )
+        position_dependent_keys.add(DICT_POSITION_DEPENDENT)
+
+        replacement_info[DICT_AGE] = 0
+        # update replacement dictionary with elements in position_dependent_keys dict
+        for key in position_dependent_keys:
+            if key in info:
+                # copy the key over
+                replacement_info[key] = info[key]
+            elif key in replacement_info:
+                # otherwise if key is in replacement info, remove it
+                replacement_info.pop(key)
+
+        self.zoo[pop_idx].overwrite_animal(animal=replacement_agent,
+                                           key=str(local_idx),
+                                           info=replacement_info,
+                                           save_buffer=True,
+                                           save_class=True,
+                                           )
+        if old_worker is not None:
+            if keep_old_buff:
+                # then clear the new buffer and update it with old_worker buffer
+                self.zoo[pop_idx].clear_worker_buffer(worker_key=str(local_idx),
+                                                      WorkerClass=None,
+                                                      )
+            self.zoo[pop_idx].update_worker_buffer(local_worker=old_worker,
+                                                   worker_key=str(local_idx),
+                                                   WorkerClass=None,
+                                                   )
+        if elo is not None:
+            global_idx = self.pop_index_to_index(pop_local_idx=pop_local_idx)
+            # replace elo as well
+            self.captian_elos[global_idx] = elo
 
     def save_zoo(self, save_dir):
         """
@@ -510,113 +679,15 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             zoo_cage.kill_cage()
         shutil.rmtree(self.zoo_dir)
 
-    def get_info(self, pop_idx, local_idx):
-        return self.zoo[pop_idx].load_info(key=str(local_idx))
-
-    def breed(self):
-        valid_replacement_indices = []
-        elos = []
-        for global_idx in range(self.N):
-            pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
-            info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
-            if info.get(DICT_CLONABLE, True):
-                valid_replacement_indices.append(global_idx)
-                elos.append(self.captian_elos[global_idx])
-        if not valid_replacement_indices:
-            # no clonable agents
-            return
-
-        dist = torch.softmax(torch.tensor(elos), dim=-1)
-        # sample from this distribution with replacements
-        replacements = list(torch.multinomial(dist, self.N, replacement=True))
-        for global_idx, rep_idx in enumerate(replacements):
-            # replace agent at global idx with agent at valid_replacement_indices[rep_idx]
-            pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
-            info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
-            # only replace old agents
-
-            if info.get(DICT_CLONE_REPLACABLE, True) and (info.get(DICT_AGE, 0) > self.protect_new):
-                # keep these values,
-                position_dependent_keys = info.get(DICT_POSITION_DEPENDENT, set())
-                position_dependent_keys.add(DICT_POSITION_DEPENDENT)
-
-                pop_idx_rep, i_rep = self.index_to_pop_index(global_idx=valid_replacement_indices[rep_idx])
-                replacement_agent, replacement_info = self.zoo[pop_idx_rep].load_animal(key=str(i_rep),
-                                                                                        load_buffer=True)
-                replacement_info[DICT_AGE] = 0
-                # update replacement dictionary with elements in position_dependent_keys dict
-                for key in position_dependent_keys:
-                    if key in info:
-                        # copy the key over
-                        replacement_info[key] = info[key]
-                    elif key in replacement_info:
-                        # otherwise if key is in replacement info, remove it
-                        replacement_info.pop(key)
-
-                self.zoo[pop_idx].overwrite_animal(animal=replacement_agent,
-                                                   key=str(local_idx),
-                                                   info=replacement_info,
-                                                   save_buffer=True,
-                                                   save_class=True,
-                                                   )
-                # replace elo as well
-                self.captian_elos[global_idx] = elos[rep_idx]
-        self.rebase_elos()
-        self.age_up_all_agents()
-
     def age_up_all_agents(self):
         for pop_idx, popsize in enumerate(self.population_sizes):
             for local_idx in range(popsize):
                 self.age_up_agent(pop_idx=pop_idx, local_idx=local_idx)
 
     def age_up_agent(self, pop_idx, local_idx):
-        info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
+        info = self.get_info(pop_local_idx=(pop_idx, local_idx))
         info[DICT_AGE] = info.get(DICT_AGE, 0) + 1
         self.zoo[pop_idx].save_info(key=str(local_idx), info=info)
-
-    def reset_agent(self, pop_idx, local_idx, keep_old_buffer=False):
-        agent, info = self.worker_constructors(pop_idx)(local_idx)
-        # info[PERSONAL_DICT_AGE] = 0
-        cage = self.zoo[pop_idx]
-
-        if info.get(DICT_IS_WORKER, True):
-            if keep_old_buffer and cage.worker_exists(worker_key=str(local_idx)):
-                old_worker, _ = cage.load_worker(worker_key=str(local_idx),
-                                                 WorkerClass=None,
-                                                 load_buffer=True,
-                                                 )
-            else:
-                old_worker = None
-            cage.overwrite_worker(worker=agent,
-                                  worker_key=str(local_idx),
-                                  save_buffer=True,
-                                  save_class=True,
-                                  worker_info=info,
-                                  )
-            if old_worker is not None:
-                cage.update_worker_buffer(local_worker=old_worker,
-                                          worker_key=str(local_idx),
-                                          WorkerClass=None,
-                                          )
-        else:
-            cage.overwrite_other(other=agent,
-                                 other_key=str(local_idx),
-                                 other_info=info,
-                                 )
-        # reset elo to average
-        self.captian_elos[self.pop_index_to_index(pop_idx=pop_idx, local_idx=local_idx)] = torch.mean(self.captian_elos)
-
-    def mutate(self):
-        if self.mutation_prob > 0:
-            for global_idx in range(self.N):
-                if torch.rand(1) < self.mutation_prob:
-                    pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
-                    info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
-                    if info.get(DICT_MUTATION_REPLACABLE, True) and (info.get(DICT_AGE, 0) > self.protect_new):
-                        self.reset_agent(pop_idx=pop_idx,
-                                         local_idx=local_idx,
-                                         keep_old_buffer=info.get(DICT_KEEP_OLD_BUFFER, True)
-                                         )
 
 
 if __name__ == '__main__':
@@ -671,7 +742,7 @@ if __name__ == '__main__':
     from stable_baselines3.dqn import MlpPolicy
     from pettingzoo.classic import tictactoe_v3
 
-    capzoo = PettingZooCaptianCoevolution(env_constructor=lambda : None,
+    capzoo = PettingZooCaptianCoevolution(env_constructor=lambda: None,
                                           outcome_fn=MaxOutcome(),
                                           population_sizes=[3, 4, 5],
                                           team_trainer=TeamTrainer(num_agents=3 + 4 + 5),

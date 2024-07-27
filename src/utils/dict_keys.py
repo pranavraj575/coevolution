@@ -1,20 +1,46 @@
+# keeps track of age of each agent
 DICT_AGE = 'age'
+
+# keeps track of whether each agent is a worker
+# i.e. inherits multi_agent_algs/off_policy:OffPolicy or multi_agent_algs/on_policy:OnPolicy
 DICT_IS_WORKER = 'is_worker'
 
-
+# whether agent is able to be trained/should be trained
 DICT_TRAIN = 'train'
 
+# whether an agent should only collect buffer examples, usually implies DICT_TRAIN is false
+DICT_COLLECT_ONLY = 'collect_only'
+
+# whether agent is clonable
 DICT_CLONABLE = 'clonable'
+
+# whether agent can be replaced by a clone
 DICT_CLONE_REPLACABLE = 'clone_replacable'
+
+# whether agent can be replaced by a mutation
 DICT_MUTATION_REPLACABLE = 'mutation_replacable'
+
+# when replacing, whether agent should update with the old agent's buffer
+DICT_UPDATE_WITH_OLD_BUFFER = 'update_with_old_buffer'
+
+# when replacing, whether agent should keep the old agent's buffer (overrides previous)
 DICT_KEEP_OLD_BUFFER = 'keep_old_buffer'
+
+# keys that are position dependent
+# i.e. if agent is replaced with a clone or mutated, these keys will be unchanged
+# by default, this is {DICT_CLONE_REPLACABLE, DICT_MUTATION_REPLACABLE}
 DICT_POSITION_DEPENDENT = 'position_dependent'
 
-
-
-DICT_COLLECT_ONLY = 'collect_only'
+# whether to save class of agent (mostly useless, and should always be true)
 DICT_SAVE_CLASS = 'save_class'
+
+# whether to save buffer of agent (mostly useless, and should always be true)
 DICT_SAVE_BUFFER = 'save_buffer'
 
+# these keys are reassigned upon each trial
+
+# whether an agent is a captian
 TEMP_DICT_CAPTIAN = 'captian'
-TEMP_DICT_UNIQUE = 'unique'
+
+# whether a captain is unique
+TEMP_DICT_CAPTIAN_UNIQUE = 'unique'

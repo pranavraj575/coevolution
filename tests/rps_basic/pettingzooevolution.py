@@ -1,7 +1,11 @@
 import torch
 from src.coevolver import PettingZooCaptianCoevolution
 from tests.rps_basic.game import plot_dist_evolution, SingleZooOutcome
-from src.utils.dict_keys import *
+from src.utils.dict_keys import (DICT_IS_WORKER,
+                                 DICT_TRAIN,
+                                 DICT_CLONABLE,
+                                 DICT_CLONE_REPLACABLE,
+                                 )
 
 if __name__ == '__main__':
     import os, sys

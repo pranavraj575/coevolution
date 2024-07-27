@@ -15,7 +15,12 @@ from multi_agent_algs.better_multi_alg import multi_agent_algorithm
 import os, sys, torch
 
 from src.game_outcome import PettingZooOutcomeFn, PlayerInfo
-from src.utils.dict_keys import *
+from src.utils.dict_keys import (DICT_TRAIN,
+                                 DICT_IS_WORKER,
+                                 DICT_CLONABLE,
+                                 DICT_CLONE_REPLACABLE,
+                                 DICT_MUTATION_REPLACABLE,
+                                 )
 from src.coevolver import PettingZooCaptianCoevolution
 from pettingzoo import AECEnv, ParallelEnv
 

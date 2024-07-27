@@ -1,6 +1,11 @@
 import torch
 from src.zoo_cage import ZooCage
-from src.utils.dict_keys import *
+from src.utils.dict_keys import (DICT_IS_WORKER,
+                                 DICT_TRAIN,
+                                 DICT_COLLECT_ONLY,
+                                 DICT_SAVE_BUFFER,
+                                 DICT_SAVE_CLASS,
+                                 )
 
 
 class PlayerInfo:
