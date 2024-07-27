@@ -68,7 +68,7 @@ class SingleZooOutcome(PettingZooOutcomeFn):
                                     )
         rec = [0, 0]
         obs = [[], []]
-        for i in range(3):
+        for i in range(10):
             par_alg.learn_episode(total_timesteps=1)
             hist = par_alg.env.unwrapped.history
             game = hist[:2]
@@ -80,17 +80,10 @@ class SingleZooOutcome(PettingZooOutcomeFn):
             obs[0].append(par_alg.last_observations['player_0'].item())
             obs[1].append(par_alg.last_observations['player_1'].item())
 
-        easy = [isinstance(c, easy_pred) or isinstance(c, always_0) for c in (a, b)]
-
         obs = [torch.tensor(oo).view((-1, 1)) for oo in obs]
         if True:
-            if sum(easy) == 1:
-                if not easy[0]:
-                    print(rec)
-                    print(a.rollout_buffer.size())
-                else:
-                    print(rec[::-1])
-                    print(b.rollout_buffer.size())
+            if any([isinstance(c, easy_pred) or isinstance(c, always_0) for c in (a, b)]):
+                print(rec)
         if rec[0] == rec[1]:  # the agents tied
             return [
                 (.5, [PlayerInfo(obs_preembed=obs[0])]),
@@ -120,13 +113,13 @@ def env_constructor():
     return env
 
 
-trainer = PettingZooCaptianCoevolution(population_sizes=[100,
+trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                                          3
                                                          ],
                                        outcome_fn=SingleZooOutcome(),
                                        env_constructor=env_constructor,
                                        worker_constructors=[
-                                           lambda i, env: (always_0(), {DICT_TRAIN: False,
+                                           lambda i, env: (easy_pred(p=.01), {DICT_TRAIN: False,
                                                                         DICT_CLONABLE: False,
                                                                         DICT_CLONE_REPLACABLE: False,
                                                                         DICT_MUTATION_REPLACABLE: False,
@@ -144,6 +137,6 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[100,
                                        worker_constructors_from_env_input=True,
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
-for _ in range(10000):
+for epohc in range(1000):
     trainer.epoch()
 trainer.kill_zoo()

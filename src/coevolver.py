@@ -105,7 +105,7 @@ class CoevolutionBase:
             for member_idx in range(team_size):
                 for pop_idx in self.member_to_pop[team_idx][member_idx]:
                     # every member drawn from this population is valid, so give it a 1
-                    valid_members[member_idx,list(pop_members[pop_idx])] = 1
+                    valid_members[member_idx, list(pop_members[pop_idx])] = 1
             self.team_to_valid_members.append(valid_members)
 
     def sample_team_member_from_pop(self, pop_idx):
@@ -162,6 +162,8 @@ class CoevolutionBase:
                 captains[team_idx] = cap
                 uniques[team_idx] = unique
             yield tuple(captains), tuple(uniques)
+            # remove captains from unused
+            unused.difference_update(captains)
 
     def epoch(self, rechoose=True):
         # TODO: parallelizable
@@ -323,6 +325,7 @@ class CaptianCoevolution(CoevolutionBase):
                                                 team=team,
                                                 obs_mask=player_info.obs_mask,
                                                 )
+
     def breed(self):
         if self.clone_fn is None:
             return
