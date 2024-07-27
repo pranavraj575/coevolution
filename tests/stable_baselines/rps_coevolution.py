@@ -80,12 +80,11 @@ class SingleZooOutcome(PettingZooOutcomeFn):
             obs[0].append(par_alg.last_observations['player_0'].item())
             obs[1].append(par_alg.last_observations['player_1'].item())
 
-
         easy = [isinstance(c, easy_pred) or isinstance(c, always_0) for c in (a, b)]
 
         obs = [torch.tensor(oo).view((-1, 1)) for oo in obs]
         if True:
-            if sum(easy)==1:
+            if sum(easy) == 1:
                 if not easy[0]:
                     print(rec)
                     print(a.rollout_buffer.size())
@@ -131,7 +130,7 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[100,
                                                                         DICT_CLONABLE: False,
                                                                         DICT_CLONE_REPLACABLE: False,
                                                                         DICT_MUTATION_REPLACABLE: False,
-                                                                        DICT_IS_WORKER:False,
+                                                                        DICT_IS_WORKER: False,
                                                                         }),
                                            lambda i, env: (Worker(policy=MlpPolicy,
                                                                   env=env,
@@ -143,6 +142,7 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[100,
                                        ],
                                        zoo_dir=os.path.join(DIR, 'data', '2rps_zoo_coevolution_test'),
                                        worker_constructors_from_env_input=True,
+                                       member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
 for _ in range(10000):
     trainer.epoch()

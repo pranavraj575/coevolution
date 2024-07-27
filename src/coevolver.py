@@ -30,7 +30,7 @@ class CoevolutionBase:
             team_sizes: tuple of number of agents in each team
                 i.e. (1,1) is a 1v1 game
 
-            TODO: help this is currently unused
+            TODO: this is mostly unused
             member_to_population: takes team member (team_idx, member_idx) and returns set of
                 populations (subset of (0<i<len(population_sizes))) that the member can be drawn from
                 by default, assumes each member can be drawn from each population
@@ -50,30 +50,67 @@ class CoevolutionBase:
         if self.N%self.num_teams != 0:
             print("WARNING: number of agents is not divisible by num teams")
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
-        if member_to_population is None:
-            self.member_to_population = lambda team_idx, member_idx: set(range(len(self.population_sizes)))
-        else:
-            self.member_to_population = member_to_population
 
-        self.build_pop_to_member()
+        self.build_pop_to_member_and_team(member_to_population)
 
-    def build_pop_to_member(self):
-        temp = [set() for _ in range(len(self.population_sizes))]
+    def build_pop_to_member_and_team(self, original_member_to_pop):
+        if original_member_to_pop is None:
+            original_member_to_pop = lambda team_idx, member_idx: set(range(len(self.population_sizes)))
+        self.pop_to_team = [set() for _ in self.population_sizes]
+        self.pop_to_member = [set() for _ in self.population_sizes]
+
+        self.team_to_pop = [set() for _ in self.team_sizes]
+        self.member_to_pop = [[set() for _ in range(team_size)] for team_size in self.team_sizes]
+
+        self.pop_and_team_to_valid_locations = [
+            [torch.zeros(team_size, dtype=torch.bool) for team_size in self.team_sizes]
+            for _ in self.population_sizes
+        ]
         for team_idx, team_size in enumerate(self.team_sizes):
             for member_idx in range(team_size):
-                populations = self.member_to_population(team_idx, member_idx)
+                populations = original_member_to_pop(team_idx, member_idx)
                 if populations is None:
-                    for item in temp:
-                        item.add((team_idx, member_idx))
-                else:
-                    for pop_idx in populations:
-                        temp[pop_idx].add((team_idx, member_idx))
-        temp = tuple(tuple(item) for item in temp)
-        self.pop_to_member = lambda pop_idx: temp[pop_idx]
+                    populations = set(range(len(self.population_sizes)))
+                for pop_idx in populations:
+                    self.pop_to_member[pop_idx].add((team_idx, member_idx))
+                    self.pop_to_team[pop_idx].add(team_idx)
+
+                    self.team_to_pop[team_idx].add(pop_idx)
+                    self.member_to_pop[team_idx][member_idx].add(pop_idx)
+
+                    self.pop_and_team_to_valid_locations[pop_idx][team_idx][member_idx] = True
+
+        self.pop_to_team = tuple(self.pop_to_team)
+        self.pop_to_member = tuple(self.pop_to_member)
+
+        self.team_to_pop = tuple(self.team_to_pop)
+        self.member_to_pop = tuple(tuple(t) for t in self.member_to_pop)
+
+        self.pop_and_team_to_valid_locations = tuple(tuple(t) for t in self.pop_and_team_to_valid_locations)
+
+        pop_members = [set(range(self.cumsums[i], self.cumsums[i + 1]))
+                       for i in range(len(self.population_sizes))]
+        self.team_to_choices = []
+        for team_idx in range(len(self.team_sizes)):
+            choices = set()
+            for pop_idx in self.team_to_pop[team_idx]:
+                choices.update(pop_members[pop_idx])
+            self.team_to_choices.append(choices)
+        self.team_to_choices = tuple(self.team_to_choices)
+
+        # for each team, is a (team members, self.N) array of which agents are valid choices
+        self.team_to_valid_members = []
+        for team_idx, team_size in enumerate(self.team_sizes):
+            valid_members = torch.zeros((team_size, self.N), dtype=torch.bool)
+            for member_idx in range(team_size):
+                for pop_idx in self.member_to_pop[team_idx][member_idx]:
+                    # every member drawn from this population is valid, so give it a 1
+                    valid_members[member_idx,list(pop_members[pop_idx])] = 1
+            self.team_to_valid_members.append(valid_members)
 
     def sample_team_member_from_pop(self, pop_idx):
-        for item in self.pop_to_member(pop_idx):
-            return item
+        for idx in self.pop_to_member[pop_idx]:
+            return idx
 
     def index_to_pop_index(self, global_idx):
         """
@@ -95,32 +132,36 @@ class CoevolutionBase:
     def get_info(self, pop_idx, local_idx):
         return dict()
 
-    def create_random_captians(self, N=None):
+    def create_random_captians(self):
         """
-        Args:
-            N: if None, uses self.N
         Returns: iterable of edges (i,j) that is a matching on (0,...,N)
             if N is not divisible by number of teams, a set of agents are chosen twice
             othewise, each agent is chosen once
         """
 
-        if N is None:
-            N = self.N
-        unused = set(range(N))
+        unused = set(range(self.N))
+        pop_members = [set(range(self.cumsums[i], self.cumsums[i + 1]))
+                       for i in range(len(self.population_sizes))]
+        # this will always terminate as long as every population is used by at least one team
+        # since then the unused set will always drop by at least one each time
+        while unused:
+            captains = [None for _ in range(self.num_teams)]
+            uniques = [None for _ in range(self.num_teams)]
+            for team_idx in torch.randperm(self.num_teams):
+                choices = self.team_to_choices[team_idx]
 
-        while len(unused) > self.num_teams:
-            choice = np.random.choice(list(unused), self.num_teams, replace=False)
-            for i in choice:
-                unused.remove(i)
-            yield tuple(choice), tuple(True for _ in choice)
-        if unused:
-            remaining = self.num_teams - len(unused)
-            unique = tuple(True for _ in range(len(unused))) + tuple(False for _ in range(remaining))
-
-            # randomly sort unused, and concatenate with a random choice of the other agent indices
-            choice = (tuple(np.random.choice(list(unused), len(unused), replace=False)) +
-                      tuple(np.random.choice(list(set(range(N)).difference(unused)), remaining, replace=False)))
-            yield choice, unique
+                unused_choices = choices.intersection(unused)
+                if unused_choices:
+                    # if there are unused agents, use them here
+                    cap = np.random.choice(list(unused_choices))
+                    unique = True
+                else:
+                    # otherwise, default to using a previous agent
+                    cap = np.random.choice(list(choices))
+                    unique = False
+                captains[team_idx] = cap
+                uniques[team_idx] = unique
+            yield tuple(captains), tuple(uniques)
 
     def epoch(self, rechoose=True):
         # TODO: parallelizable
@@ -231,24 +272,31 @@ class CaptianCoevolution(CoevolutionBase):
         # expected win probabilities, assuming the teams win probability is determined by captian elo
         expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
                                            dim=-1)
-        for captian, unq, team_size in zip(captian_choices, unique, self.team_sizes):
+        for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
+            captian_pop_idx, _ = self.index_to_pop_index(global_idx=captian)
+            valid_locations = self.pop_and_team_to_valid_locations[captian_pop_idx][team_idx]
+
             team = self.team_trainer.add_member_to_team(member=captian,
                                                         T=team_size,
                                                         N=1,
                                                         noise_model=self.noise_model,
+                                                        valid_locations=valid_locations.view((1, team_size)),
                                                         )
             pos = torch.where(team.view(-1) == captian)[0].item()
             captian_positions.append(pos)
+
+            valid_members = self.team_to_valid_members[team_idx]
             team = self.team_trainer.fill_in_teams(initial_teams=team,
                                                    noise_model=self.noise_model,
+                                                   valid_members=valid_members.view((1, team_size, self.N)),
                                                    )
             teams.append(team)
             tinfo = []
             for i, member in enumerate(team.flatten()):
                 global_idx = member.item()
-                pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+                captian_pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
 
-                info = self.get_info(pop_idx=pop_idx, local_idx=local_idx)
+                info = self.get_info(pop_idx=captian_pop_idx, local_idx=local_idx)
                 if i == pos:
                     info[TEMP_DICT_CAPTIAN] = True
                     info[TEMP_DICT_UNIQUE] = unq
@@ -275,7 +323,6 @@ class CaptianCoevolution(CoevolutionBase):
                                                 team=team,
                                                 obs_mask=player_info.obs_mask,
                                                 )
-
     def breed(self):
         if self.clone_fn is None:
             return
@@ -590,7 +637,7 @@ if __name__ == '__main__':
         return team with highest indices
         """
 
-        def get_outcome(self, team_choices, train_info=None):
+        def get_outcome(self, team_choices, train_infos=None, env=None):
             agent_choices = [agents[team[0]] for team in team_choices]
             if agent_choices[0] == agent_choices[1]:
                 return [(.5, [PlayerInfo()]), (.5, [PlayerInfo()])]
