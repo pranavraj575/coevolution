@@ -13,7 +13,7 @@ class ZooCage:
         if not os.path.exists(self.zoo_dir):
             os.makedirs(self.zoo_dir)
         elif overwrite_zoo:
-            self.kill_cage()
+            self.clear()
             os.makedirs(self.zoo_dir)
         self.saved_workers = set(os.listdir(self.zoo_dir))
 
@@ -44,15 +44,16 @@ class ZooCage:
             return self.load_other(other_key=key)
 
     ### info methods
-    def save_info(self,
-                  key: str,
-                  info,
-                  ):
-        if info is not None:
-            info_file = os.path.join(self.zoo_dir, key, 'info.pkl')
-            f = open(info_file, 'wb')
-            pickle.dump(info, f)
-            f.close()
+    def overwrite_info(self,
+                       key: str,
+                       info,
+                       ):
+        if info is None:
+            info = dict()
+        info_file = os.path.join(self.zoo_dir, key, 'info.pkl')
+        f = open(info_file, 'wb')
+        pickle.dump(info, f)
+        f.close()
 
     def load_info(self,
                   key: str,
@@ -137,9 +138,9 @@ class ZooCage:
         if worker_info is None:
             worker_info = dict()
         worker_info[DICT_IS_WORKER] = True
-        self.save_info(key=worker_key,
-                       info=worker_info,
-                       )
+        self.overwrite_info(key=worker_key,
+                            info=worker_info,
+                            )
         self.saved_workers.add(worker_key)
 
     def worker_exists(self, worker_key: str):
@@ -306,9 +307,9 @@ class ZooCage:
         pickle.dump(other, f)
         f.close()
 
-        self.save_info(key=other_key,
-                       info=other_info,
-                       )
+        self.overwrite_info(key=other_key,
+                            info=other_info,
+                            )
 
     def load_other(self,
                    other_key: str,
@@ -342,18 +343,17 @@ class ZooCage:
         return os.path.exists(os.path.join(self.zoo_dir, worker_key, 'class.pkl'))
 
     ### global methods
-    def save_cage(self, save_dir):
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        shutil.rmtree(save_dir)
+    def save(self, save_dir):
+        if os.path.exists(save_dir):
+            shutil.rmtree(save_dir)
         shutil.copytree(self.zoo_dir, save_dir)
 
-    def load_cage(self, save_dir):
-        self.kill_cage()
+    def load(self, save_dir):
+        self.clear()
         shutil.copytree(save_dir, self.zoo_dir)
         self.saved_workers = set(os.listdir(self.zoo_dir))
 
-    def kill_cage(self):
+    def clear(self):
         shutil.rmtree(self.zoo_dir)
 
 
@@ -369,10 +369,10 @@ if __name__ == '__main__':
                              worker_key=str(i),
                              )
     save_dir = os.path.join(DIR, 'data', 'zoo_cage_save', 'test', 'test', 'test')
-    zoo.save_cage(save_dir=save_dir)
+    zoo.save(save_dir=save_dir)
     zoo2 = ZooCage(zoo_dir=os.path.join(DIR, 'data', 'zoo_cage2'))
-    zoo2.load_cage(save_dir=save_dir)
+    zoo2.load(save_dir=save_dir)
     print(len(zoo2.saved_workers))
-    zoo.kill_cage()
-    zoo2.kill_cage()
+    zoo.clear()
+    zoo2.clear()
     shutil.rmtree(save_dir)

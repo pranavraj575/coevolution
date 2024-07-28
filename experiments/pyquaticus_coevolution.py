@@ -45,6 +45,8 @@ class CTFOutcome(PettingZooOutcomeFn):
                 (0, [PlayerInfo()]),
                 (1, [PlayerInfo()]),
             ]
+
+
 class RandPolicy:
     def __init__(self, action_space):
         self.action_space = action_space
@@ -52,12 +54,14 @@ class RandPolicy:
     def get_action(self, obs, *args, **kwargs):
         return self.action_space.sample()
 
+
 config_dict = config_dict_std
 config_dict["max_screen_size"] = (float('inf'), float('inf'))
 config_dict["max_time"] = 420.
 
-
 reward_config = {0: rew.sparse, 1: rew.sparse, 5: None}  # Example Reward Config
+
+
 def env_constructor(render_mode=None):
     return pyquaticus_v0.PyQuaticusEnv(render_mode=render_mode,
                                        reward_config=reward_config,
@@ -65,7 +69,8 @@ def env_constructor(render_mode=None):
                                        config_dict=config_dict,
                                        )
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
     data_folder = os.path.join(DIR, 'data', 'pyquaticus_coevolution')
@@ -78,6 +83,3 @@ if __name__=='__main__':
     args = PARSER.parse_args()
 
     RENDER_MODE = 'human' if args.render else None
-
-
-

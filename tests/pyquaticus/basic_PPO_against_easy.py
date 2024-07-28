@@ -32,7 +32,7 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                                          1
                                                          ],
                                        outcome_fn=CTFOutcome(),
-                                       env_constructor=lambda : env_constructor(render_mode=RENDER_MODE),
+                                       env_constructor=lambda: env_constructor(render_mode=RENDER_MODE),
                                        worker_constructors=[
                                            lambda i, env: (WorkerPPO(policy=MlpPolicy,
                                                                      env=env,
@@ -56,4 +56,14 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                        # ppo is always on the first team, random always second
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
-trainer.epoch()
+
+save_dir = os.path.join(DIR, 'data', 'saved_runs', 'test_ppo_coevloution')
+if os.path.exists(save_dir):
+    trainer.load(save_dir=save_dir)
+for episode in range(1000):
+    print('starting epoch', trainer.info['epochs'])
+    trainer.epoch()
+    print('saving')
+    trainer.save(save_dir)
+    print('done saving')
+trainer.clear()

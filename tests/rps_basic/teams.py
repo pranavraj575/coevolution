@@ -86,4 +86,4 @@ if __name__ == '__main__':
                 plot_dist_evolution([dist[k] for dist in cond_dists],
                                     save_dir=os.path.join(plot_dir, 'dist_against' + name + '.png'),
                                     title='Distribution against ' + name)
-    trainer.buffer.delete()
+    trainer.buffer.clear()

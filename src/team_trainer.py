@@ -1,4 +1,4 @@
-import torch
+import torch, os, shutil
 from torch import nn
 from torch.utils.data import DataLoader
 
@@ -13,6 +13,18 @@ class TeamTrainer:
     def __init__(self, num_agents, MASK=-1):
         self.num_agents = num_agents
         self.MASK = MASK
+
+    def clear(self):
+        """
+        clears any memory/data
+        """
+        pass
+
+    def save(self, save_dir):
+        pass
+
+    def load(self, save_dir):
+        pass
 
     def add_to_buffer(self, scalar, obs_preembed, team, obs_mask):
         pass
@@ -187,6 +199,28 @@ class MLMTeamTrainer(TeamTrainer):
         self.buffer = buffer
 
         self.optim = torch.optim.Adam(team_builder.parameters())
+
+    def clear(self):
+        """
+        clears any memory/data
+        """
+        super().clear()
+        self.buffer.clear()
+
+    def save(self, save_dir):
+        super().save(save_dir=save_dir)
+        self.buffer.save(os.path.join(save_dir, 'buffer'))
+        dic = {'model': self.team_builder.state_dict(),
+               'optim': self.optim.state_dict(),
+               }
+        torch.save(dic, os.path.join(save_dir, 'model.pkl'))
+
+    def load(self, save_dir):
+        super().load(save_dir=save_dir)
+        self.buffer.load(os.path.join(save_dir, 'buffer'))
+        dic = torch.load(os.path.join(save_dir, 'model.pkl'))
+        self.team_builder.load_state_dict(dic['model'])
+        self.optim.load_state_dict(dic['optim'])
 
     def add_to_buffer(self, scalar, obs_preembed, team, obs_mask):
         item = (scalar, obs_preembed, team, obs_mask)

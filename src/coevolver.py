@@ -1,5 +1,5 @@
 import numpy as np
-import torch, os, shutil
+import torch, os, shutil, pickle
 
 from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
@@ -64,6 +64,31 @@ class CoevolutionBase:
             print('\tthis is fine, but will have non-uniform game numbers for each agent')
 
         self.build_pop_to_member_and_team(member_to_population)
+        self.original_member_to_population = member_to_population
+        self.info = {'epochs': 0,
+                     'epoch_infos': [],
+                     }
+
+    def clear(self):
+        """
+        clears any disc storage
+        """
+        pass
+
+    def save(self, save_dir):
+
+        if os.path.exists(save_dir):
+            shutil.rmtree(save_dir)
+        os.makedirs(save_dir)
+
+        f = open(os.path.join(save_dir, 'info.pkl'), 'wb')
+        pickle.dump(self.info, f)
+        f.close()
+
+    def load(self, save_dir):
+        f = open(os.path.join(save_dir, 'info.pkl'), 'rb')
+        self.info.update(pickle.load(f))
+        f.close()
 
     def build_pop_to_member_and_team(self, original_member_to_pop):
         if original_member_to_pop is None:
@@ -153,8 +178,6 @@ class CoevolutionBase:
         """
 
         unused = set(range(self.N))
-        pop_members = [set(range(self.cumsums[i], self.cumsums[i + 1]))
-                       for i in range(len(self.population_sizes))]
         # this will always terminate as long as every population is used by at least one team
         # since then the unused set will always drop by at least one each time
         while unused:
@@ -178,13 +201,21 @@ class CoevolutionBase:
             # remove captains from unused
             unused.difference_update(captains)
 
-    def epoch(self, rechoose=True):
+    def epoch(self, rechoose=True, save_epoch_info=True):
         # TODO: parallelizable
+        epoch_info = {
+            'epoch': self.info['epochs'],
+            'episodes': []
+        }
         for choice, unique in self.create_random_captians():
-            self.train_and_update_results(captian_choices=choice, unique=unique)
+            episode_info = self.train_and_update_results(captian_choices=choice, unique=unique)
+            epoch_info['episodes'].append(episode_info)
         if rechoose:
-            self.breed()
-            self.mutate()
+            epoch_info['breeding'] = self.breed()
+            epoch_info['mutation'] = self.mutate()
+        self.info['epochs'] += 1
+        if save_epoch_info:
+            self.info['epoch_infos'].append(epoch_info)
 
     def breed(self):
         """
@@ -192,10 +223,17 @@ class CoevolutionBase:
             can also replace through sexual reproduction, if that is possible
 
         also updates internal variables to reflect the new agents
+        Returns:
+            breeding info
         """
         raise NotImplementedError
 
     def mutate(self):
+        """
+        mutates/reinitializes agents at random
+        Returns:
+            mutation info
+        """
         pass
 
     def train_and_update_results(self, captian_choices, unique):
@@ -205,6 +243,7 @@ class CoevolutionBase:
         Args:
             captian_choices: tuple of self.num_teams indices
             unique: whether each captian is unique (each captian will be marked unique exactly once
+        Returns: info
         """
         raise NotImplementedError
 
@@ -265,10 +304,24 @@ class CaptianCoevolution(CoevolutionBase):
         self.team_trainer = team_trainer
         self.noise_model = noise_model
         self.clone_fn = clone_fn
-        self.captian_elos = torch.zeros(self.N)
-        self.elo_update = elo_update
         self.mutation_fn = mutation_fn
-        self.elo_conversion = elo_conversion
+        self.info.update({
+            'captian_elos': torch.zeros(self.N),
+            'elo_update': elo_update,
+            'elo_conversion': elo_conversion,
+        })
+
+    def clear(self):
+        super().clear()
+        self.team_trainer.clear()
+
+    def save(self, save_dir):
+        super().save(save_dir=save_dir)
+        self.team_trainer.save(save_dir=os.path.join(save_dir, 'team_trainer'))
+
+    def load(self, save_dir):
+        super().load(save_dir=save_dir)
+        self.team_trainer.load(save_dir=os.path.join(save_dir, 'team_trainer'))
 
     def set_noise_model(self, noise_model):
         self.noise_model = noise_model
@@ -281,11 +334,14 @@ class CaptianCoevolution(CoevolutionBase):
             captian_choices: tuple of self.num_teams indices
             unique: whether each captian is unique (each captian will be marked unique exactly once
         """
+        episode_info = {'captian_choices': captian_choices,
+                        'unique_captians': unique
+                        }
         teams = []
         train_infos = []
         captian_positions = []
         # expected win probabilities, assuming the teams win probability is determined by captian elo
-        expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
+        expected_win_probs = torch.softmax(self.info['captian_elos'][captian_choices,],
                                            dim=-1)
         # team selection (pretty much does nothing if teams are size 1
         for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
@@ -320,10 +376,12 @@ class CaptianCoevolution(CoevolutionBase):
                     info[TEMP_DICT_CAPTIAN] = False
                 tinfo.append(info)
             train_infos.append(tinfo)
+        episode_info['teams'] = tuple(team.detach().numpy() for team in teams)
         team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
                                                     train_infos=train_infos,
                                                     env=self.env_constructor(),
                                                     )
+        episode_info['team_outcomes'] = tuple(t for t, _ in team_outcomes)
         for (captian,
              team,
              (team_outcome, player_infos),
@@ -331,7 +389,7 @@ class CaptianCoevolution(CoevolutionBase):
                                       teams,
                                       team_outcomes,
                                       expected_win_probs):
-            self.captian_elos[captian] += self.elo_update*(team_outcome - expected_outcome)
+            self.info['captian_elos'][captian] += self.info['elo_update']*(team_outcome - expected_outcome)
             for player_info in player_infos:
                 player_info: PlayerInfo
                 self.team_trainer.add_to_buffer(scalar=team_outcome,
@@ -339,15 +397,16 @@ class CaptianCoevolution(CoevolutionBase):
                                                 team=team,
                                                 obs_mask=player_info.obs_mask,
                                                 )
+        return episode_info
 
     def breed(self):
         if self.clone_fn is None:
             return
-        dist = torch.softmax(self.captian_elos, dim=-1)
+        dist = torch.softmax(self.info['captian_elos'], dim=-1)
         # sample from this distribution with replacements
         replacements = torch.multinomial(dist, self.N, replacement=True)
         self.clone_fn(torch.arange(self.N), replacements)
-        for arr in (self.captian_elos,):
+        for arr in (self.info['captian_elos'],):
             temp_arr = arr.clone()
             arr[np.arange(self.N)] = temp_arr[replacements]
         self.rebase_elos()
@@ -375,7 +434,7 @@ class CaptianCoevolution(CoevolutionBase):
         Args:
             base_elo: elo to make the 'average' elo
         """
-        self.captian_elos = self._get_rebased_elos(elos=self.captian_elos, base_elo=base_elo)
+        self.info['captian_elos'] = self._get_rebased_elos(elos=self.info['captian_elos'], base_elo=base_elo)
 
     def get_classic_elo(self, base_elo=None):
         """
@@ -384,11 +443,11 @@ class CaptianCoevolution(CoevolutionBase):
             base_elo: if specified, rebases the elos so this is the average elo
         Returns:
             'classic' elos, such that for players with 'classic' elos Ra', Rb', the win probability of a is
-                1/(1+e^{(Rb'-Ra')/self.elo_conversion})
+                1/(1+e^{(Rb'-Ra')/self.info['elo_conversion']})
             i.e. if the default elo_conversion is used, this is  1/(1+10^{(Rb'-Ra')/400}), the standard value
         """
 
-        scaled_elos = self.captian_elos*self.elo_conversion
+        scaled_elos = self.info['captian_elos']*self.info['elo_conversion']
         if base_elo is not None:
             scaled_elos = self._get_rebased_elos(elos=scaled_elos, base_elo=base_elo)
         return scaled_elos
@@ -473,6 +532,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
         self.action_space = test_env.action_space
         self.observation_space = test_env.observation_space
+
         def pop_idx_to_dumenv(pop_idx):
             idx = self.sample_team_member_from_pop(pop_idx=pop_idx)
             agent_id = self.team_idx_to_agent_id(idx=idx)
@@ -503,11 +563,23 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.mutation_prob = mutation_prob
         self.protect_new = protect_new
 
+    def clear(self):
+        super().clear()
+        self.clear_zoo()
+
+    def save(self, save_dir):
+        super().save(save_dir=save_dir)
+        self.save_zoo(save_dir=os.path.join(save_dir, 'zoo'))
+
+    def load(self, save_dir):
+        super().load(save_dir=save_dir)
+        self.load_zoo(save_dir=os.path.join(save_dir, 'zoo'))
+
     def init_agents(self):
         for pop_idx, popsize in enumerate(self.population_sizes):
             for local_idx in range(popsize):
                 self.reset_agent(pop_local_idx=(pop_idx, local_idx),
-                                 elo=torch.mean(self.captian_elos),
+                                 elo=torch.mean(self.info['captian_elos']),
                                  )
 
     def reset_agent(self, pop_local_idx, elo=None):
@@ -521,9 +593,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                               save_class=True,
                               )
         if elo is not None:
-            self.captian_elos[
+            self.info['captian_elos'][
                 self.pop_index_to_index(pop_local_idx=pop_local_idx)
-            ] = torch.mean(self.captian_elos)
+            ] = torch.mean(self.info['captian_elos'])
 
     def get_info(self, pop_local_idx):
         pop_idx, local_idx = pop_local_idx
@@ -537,7 +609,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             info = self.get_info(pop_local_idx=(pop_idx, local_idx))
             if info.get(DICT_CLONABLE, True):
                 valid_replacement_indices.append(global_idx)
-                elos.append(self.captian_elos[global_idx])
+                elos.append(self.info['captian_elos'][global_idx])
         if not valid_replacement_indices:
             # no clonable agents
             return
@@ -662,7 +734,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         if elo is not None:
             global_idx = self.pop_index_to_index(pop_local_idx=pop_local_idx)
             # replace elo as well
-            self.captian_elos[global_idx] = elo
+            self.info['captian_elos'][global_idx] = elo
 
     def save_zoo(self, save_dir):
         """
@@ -671,11 +743,20 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             save_dir: dir to save to
         """
         for zoo_cage in self.zoo:
-            zoo_cage.save_cage(os.path.join(save_dir, os.path.basename(zoo_cage.zoo_dir)))
+            zoo_cage.save(save_dir=os.path.join(save_dir, os.path.basename(zoo_cage.zoo_dir)))
 
-    def kill_zoo(self):
+    def load_zoo(self, save_dir):
+        """
+        loads all zoo cages from specified dir
+        Args:
+            save_dir: dir to save to
+        """
         for zoo_cage in self.zoo:
-            zoo_cage.kill_cage()
+            zoo_cage.load(save_dir=os.path.join(save_dir, os.path.basename(zoo_cage.zoo_dir)))
+
+    def clear_zoo(self):
+        for zoo_cage in self.zoo:
+            zoo_cage.clear()
         shutil.rmtree(self.zoo_dir)
 
     def age_up_all_agents(self):
@@ -686,7 +767,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
     def age_up_agent(self, pop_idx, local_idx):
         info = self.get_info(pop_local_idx=(pop_idx, local_idx))
         info[DICT_AGE] = info.get(DICT_AGE, 0) + 1
-        self.zoo[pop_idx].save_info(key=str(local_idx), info=info)
+        self.zoo[pop_idx].overwrite_info(key=str(local_idx), info=info)
 
 
 if __name__ == '__main__':
@@ -730,27 +811,29 @@ if __name__ == '__main__':
     for _ in range(20):
         for _ in range(2):
             cap.epoch(rechoose=False)
-        print(cap.captian_elos)
+        print(cap.info['captian_elos'])
         print(agents)
         cap.epoch(rechoose=True)
 
-    print(cap.captian_elos)
+    print(cap.info['captian_elos'])
     print(agents)
 
     from multi_agent_algs.dqn.DQN import WorkerDQN
     from stable_baselines3.dqn import MlpPolicy
     from pettingzoo.classic import tictactoe_v3
 
+
     def env_constructor():
         return tictactoe_v3.env()
+
 
     capzoo = PettingZooCaptianCoevolution(env_constructor=env_constructor,
                                           outcome_fn=MaxOutcome(),
                                           population_sizes=[3, 4, 5],
                                           team_trainer=TeamTrainer(num_agents=3 + 4 + 5),
-                                          worker_constructors=[lambda _,env: (WorkerDQN(policy=MlpPolicy,
-                                                                                     env=env), {})
+                                          worker_constructors=[lambda _, env: (WorkerDQN(policy=MlpPolicy,
+                                                                                         env=env), {})
                                                                for _ in range(3)],
                                           zoo_dir=os.path.join(DIR, 'data', 'coevolver_zoo_test'),
                                           )
-    capzoo.kill_zoo()
+    capzoo.clear_zoo()

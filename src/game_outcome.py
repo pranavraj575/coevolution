@@ -219,7 +219,7 @@ class PettingZooOutcomeFn(OutcomeFn):
                                               save_class=train_dict.get(DICT_SAVE_CLASS, True),
                                               worker_info=train_dict,
                                               )
-                cage.save_info(key=str(local_idx), info=train_dict)
+                cage.overwrite_info(key=str(local_idx), info=train_dict)
 
     def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos, env):
         """

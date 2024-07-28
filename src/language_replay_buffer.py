@@ -19,8 +19,14 @@ class LangReplayBuffer:
     def sample_one(self):
         raise NotImplementedError
 
-    def delete(self):
-        raise NotImplementedError
+    def clear(self):
+        pass
+
+    def save(self, save_dir):
+        pass
+
+    def load(self, save_dir):
+        pass
 
     def sample(self, batch):
         for _ in range(batch):
@@ -42,12 +48,24 @@ class ReplayBufferDiskStorage(LangReplayBuffer):
         self.reset_storage()
         self.device = device
 
-    def delete(self):
+    def clear(self):
+        super().clear()
         if os.path.exists(self.storage_dir):
             shutil.rmtree(self.storage_dir)
 
+    def save(self, save_dir):
+        super().save(save_dir=save_dir)
+        if os.path.exists(save_dir):
+            shutil.rmtree(save_dir)
+        shutil.copytree(src=self.storage_dir, dst=save_dir)
+
+    def load(self, save_dir):
+        super().load(save_dir=save_dir)
+        self.clear()
+        shutil.copytree(src=save_dir, dst=self.storage_dir)
+
     def reset_storage(self):
-        self.delete()
+        self.clear()
         os.makedirs(self.storage_dir)
         self.size = 0
         self.idx = 0

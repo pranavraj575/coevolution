@@ -142,4 +142,4 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
 for epohc in range(1000):
     trainer.epoch()
 
-trainer.kill_zoo()
+trainer.clear_zoo()
