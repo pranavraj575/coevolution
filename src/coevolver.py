@@ -13,6 +13,9 @@ from src.utils.dict_keys import (DICT_AGE,
                                  DICT_UPDATE_WITH_OLD_BUFFER,
                                  TEMP_DICT_CAPTIAN,
                                  TEMP_DICT_CAPTIAN_UNIQUE,
+                                 COEVOLUTION_DICT_CAPTIAN_ELO,
+                                 COEVOLUTION_DICT_ELO_UPDATE,
+                                 COEVOLUTION_DICT_ELO_CONVERSION,
                                  )
 
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
@@ -306,9 +309,9 @@ class CaptianCoevolution(CoevolutionBase):
         self.clone_fn = clone_fn
         self.mutation_fn = mutation_fn
         self.info.update({
-            'captian_elos': torch.zeros(self.N),
-            'elo_update': elo_update,
-            'elo_conversion': elo_conversion,
+            COEVOLUTION_DICT_CAPTIAN_ELO: torch.zeros(self.N),
+            COEVOLUTION_DICT_ELO_UPDATE: elo_update,
+            COEVOLUTION_DICT_ELO_CONVERSION: elo_conversion,
         })
 
     def clear(self):
@@ -341,7 +344,7 @@ class CaptianCoevolution(CoevolutionBase):
         train_infos = []
         captian_positions = []
         # expected win probabilities, assuming the teams win probability is determined by captian elo
-        expected_win_probs = torch.softmax(self.info['captian_elos'][captian_choices,],
+        expected_win_probs = torch.softmax(self.info[COEVOLUTION_DICT_CAPTIAN_ELO][captian_choices,],
                                            dim=-1)
         # team selection (pretty much does nothing if teams are size 1
         for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
@@ -389,7 +392,9 @@ class CaptianCoevolution(CoevolutionBase):
                                       teams,
                                       team_outcomes,
                                       expected_win_probs):
-            self.info['captian_elos'][captian] += self.info['elo_update']*(team_outcome - expected_outcome)
+            self.info[COEVOLUTION_DICT_CAPTIAN_ELO][captian] += (
+                    self.info[COEVOLUTION_DICT_ELO_UPDATE]*(team_outcome - expected_outcome)
+            )
             for player_info in player_infos:
                 player_info: PlayerInfo
                 self.team_trainer.add_to_buffer(scalar=team_outcome,
@@ -402,11 +407,11 @@ class CaptianCoevolution(CoevolutionBase):
     def breed(self):
         if self.clone_fn is None:
             return
-        dist = torch.softmax(self.info['captian_elos'], dim=-1)
+        dist = torch.softmax(self.info[COEVOLUTION_DICT_CAPTIAN_ELO], dim=-1)
         # sample from this distribution with replacements
         replacements = torch.multinomial(dist, self.N, replacement=True)
         self.clone_fn(torch.arange(self.N), replacements)
-        for arr in (self.info['captian_elos'],):
+        for arr in (self.info[COEVOLUTION_DICT_CAPTIAN_ELO],):
             temp_arr = arr.clone()
             arr[np.arange(self.N)] = temp_arr[replacements]
         self.rebase_elos()
@@ -434,7 +439,10 @@ class CaptianCoevolution(CoevolutionBase):
         Args:
             base_elo: elo to make the 'average' elo
         """
-        self.info['captian_elos'] = self._get_rebased_elos(elos=self.info['captian_elos'], base_elo=base_elo)
+        self.info[COEVOLUTION_DICT_CAPTIAN_ELO] = self._get_rebased_elos(
+            elos=self.info[COEVOLUTION_DICT_CAPTIAN_ELO],
+            base_elo=base_elo,
+        )
 
     def get_classic_elo(self, base_elo=None):
         """
@@ -447,7 +455,7 @@ class CaptianCoevolution(CoevolutionBase):
             i.e. if the default elo_conversion is used, this is  1/(1+10^{(Rb'-Ra')/400}), the standard value
         """
 
-        scaled_elos = self.info['captian_elos']*self.info['elo_conversion']
+        scaled_elos = self.info[COEVOLUTION_DICT_CAPTIAN_ELO]*self.info[COEVOLUTION_DICT_ELO_CONVERSION]
         if base_elo is not None:
             scaled_elos = self._get_rebased_elos(elos=scaled_elos, base_elo=base_elo)
         return scaled_elos
@@ -579,7 +587,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         for pop_idx, popsize in enumerate(self.population_sizes):
             for local_idx in range(popsize):
                 self.reset_agent(pop_local_idx=(pop_idx, local_idx),
-                                 elo=torch.mean(self.info['captian_elos']),
+                                 elo=torch.mean(self.info[COEVOLUTION_DICT_CAPTIAN_ELO]),
                                  )
 
     def reset_agent(self, pop_local_idx, elo=None):
@@ -593,9 +601,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                               save_class=True,
                               )
         if elo is not None:
-            self.info['captian_elos'][
+            self.info[COEVOLUTION_DICT_CAPTIAN_ELO][
                 self.pop_index_to_index(pop_local_idx=pop_local_idx)
-            ] = torch.mean(self.info['captian_elos'])
+            ] = torch.mean(self.info[COEVOLUTION_DICT_CAPTIAN_ELO])
 
     def get_info(self, pop_local_idx):
         pop_idx, local_idx = pop_local_idx
@@ -609,7 +617,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             info = self.get_info(pop_local_idx=(pop_idx, local_idx))
             if info.get(DICT_CLONABLE, True):
                 valid_replacement_indices.append(global_idx)
-                elos.append(self.info['captian_elos'][global_idx])
+                elos.append(self.info[COEVOLUTION_DICT_CAPTIAN_ELO][global_idx])
         if not valid_replacement_indices:
             # no clonable agents
             return
@@ -639,6 +647,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.age_up_all_agents()
 
     def mutate(self):
+        # TODO: mutate based on elo perhaps
         if self.mutation_prob > 0:
             for global_idx in range(self.N):
                 if torch.rand(1) < self.mutation_prob:
@@ -649,6 +658,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                            replacement=self.worker_constructors(pop_idx)(local_idx),
                                            keep_old_buff=info.get(DICT_KEEP_OLD_BUFFER, False),
                                            update_with_old_buff=info.get(DICT_UPDATE_WITH_OLD_BUFFER, True),
+                                           elo=torch.mean(self.info[COEVOLUTION_DICT_CAPTIAN_ELO])
                                            )
 
     def replace_agent(self,
@@ -734,7 +744,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         if elo is not None:
             global_idx = self.pop_index_to_index(pop_local_idx=pop_local_idx)
             # replace elo as well
-            self.info['captian_elos'][global_idx] = elo
+            self.info[COEVOLUTION_DICT_CAPTIAN_ELO][global_idx] = elo
 
     def save_zoo(self, save_dir):
         """
@@ -811,11 +821,11 @@ if __name__ == '__main__':
     for _ in range(20):
         for _ in range(2):
             cap.epoch(rechoose=False)
-        print(cap.info['captian_elos'])
+        print(cap.info[COEVOLUTION_DICT_CAPTIAN_ELO])
         print(agents)
         cap.epoch(rechoose=True)
 
-    print(cap.info['captian_elos'])
+    print(cap.info[COEVOLUTION_DICT_CAPTIAN_ELO])
     print(agents)
 
     from multi_agent_algs.dqn.DQN import WorkerDQN

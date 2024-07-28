@@ -61,7 +61,7 @@ class SingleZooOutcome(PettingZooOutcomeFn):
                                     env=env,
                                     DefaultWorkerClass=Worker,
                                     worker_infos={'player_0': a_info,
-                                                      'player_1': b_info
+                                                  'player_1': b_info
                                                   },
                                     workers={'player_0': a,
                                              'player_1': b
@@ -136,10 +136,18 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                                                   ),
                                                            {})
                                        ],
-                                       zoo_dir=os.path.join(DIR, 'data', '2rps_zoo_coevolution_test'),
+                                       zoo_dir=os.path.join(DIR, 'data', 'rps_zoo_coevolution_test'),
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
+save_dir = os.path.join(DIR, 'data', 'save', 'rps_coevolution')
+if os.path.exists(save_dir):
+    trainer.load(save_dir=save_dir)
 for epohc in range(1000):
+    print('starting epoch', trainer.info['epochs'])
     trainer.epoch()
+    if not (epohc + 1)%100:
+        print('saving')
+        trainer.save(save_dir)
+        print('done saving')
 
-trainer.clear_zoo()
+trainer.clear()

@@ -37,10 +37,17 @@ DICT_SAVE_CLASS = 'save_class'
 # whether to save buffer of agent (mostly useless, and should always be true)
 DICT_SAVE_BUFFER = 'save_buffer'
 
-# these keys are reassigned upon each trial
+###### these keys are reassigned upon each trial
 
 # whether an agent is a captian
 TEMP_DICT_CAPTIAN = 'captian'
 
 # whether a captain is unique
 TEMP_DICT_CAPTIAN_UNIQUE = 'unique'
+
+
+###### these keys are for coevolution dict
+
+COEVOLUTION_DICT_CAPTIAN_ELO='captian_elos'
+COEVOLUTION_DICT_ELO_UPDATE='elo_update'
+COEVOLUTION_DICT_ELO_CONVERSION='elo_conversion'

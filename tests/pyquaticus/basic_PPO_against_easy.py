@@ -57,7 +57,7 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
 
-save_dir = os.path.join(DIR, 'data', 'saved_runs', 'test_ppo_coevloution')
+save_dir = os.path.join(DIR, 'data', 'save', 'test_ppo_coevloution')
 if os.path.exists(save_dir):
     trainer.load(save_dir=save_dir)
 for episode in range(1000):
