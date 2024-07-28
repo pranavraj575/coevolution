@@ -16,6 +16,48 @@ from stable_baselines3.ppo import MlpPolicy
 from multi_agent_algs.better_multi_alg import multi_agent_algorithm
 
 
+def custom_rew(self, params, prev_params):
+    reward = 0
+    if params["agent_tagged"][params["agent_id"]]:
+        return 0
+    if params['has_flag']:
+        return .1 + min(.9, .9/params['team_flag_home'])
+    if params['opponent_flag_distance'] > 0:
+        return min(.1, .1/params['opponent_flag_distance'])
+    else:
+        return .1 +min(.9, .9/params['team_flag_home'])
+    # Penalize player for opponent grabbing team flag
+    if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
+        reward += -50
+    # Penalize player for opponent successfully capturing team flag
+    if params["opponent_flag_capture"] and not prev_params["opponent_flag_capture"]:
+        reward += -100
+    # Reward player for grabbing opponents flag
+    if params["team_flag_pickup"] and not prev_params["team_flag_pickup"]:
+        reward += 50
+    # Reward player for capturing opponents flag
+    if params["team_flag_capture"] and not prev_params["team_flag_capture"]:
+        reward += 100
+    # Check to see if agent was tagged
+    if params["agent_tagged"][params["agent_id"]]:
+        if prev_params["has_flag"]:
+            reward += -100
+        else:
+            reward += -50
+    # Check to see if agent tagged an opponent
+    tagged_opponent = params["agent_captures"][params["agent_id"]]
+    if tagged_opponent is not None:
+        if prev_params["opponent_" + str(tagged_opponent) + "_has_flag"]:
+            reward += 50
+        else:
+            reward += 100
+    # Penalize agent if it went out of bounds (Hit border wall)
+    if params["agent_oob"][params["agent_id"]] == 1:
+        reward -= 100
+
+    return reward
+
+
 class CTFOutcome(PettingZooOutcomeFn):
     def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos, env):
         agent_choices = agent_choices[0] + agent_choices[1]
@@ -29,7 +71,8 @@ class CTFOutcome(PettingZooOutcomeFn):
         alg.learn(total_timesteps=10000,
                   number_of_eps=1,
                   )
-        score = (env.unwrapped.blue_team_score, env.unwrapped.red_team_score)
+        score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
+        print(score)
         if score[0] == score[1]:
             return [
                 (.5, [PlayerInfo()]),
@@ -58,8 +101,8 @@ class RandPolicy:
 config_dict = config_dict_std
 config_dict["max_screen_size"] = (float('inf'), float('inf'))
 config_dict["max_time"] = 420.
-
-reward_config = {0: rew.sparse, 1: rew.sparse, 5: None}  # Example Reward Config
+config_dict["sim_speedup_factor"] = 40
+reward_config = {0: custom_rew, 2: None, 5: None}  # Example Reward Config
 
 
 def env_constructor(render_mode=None):

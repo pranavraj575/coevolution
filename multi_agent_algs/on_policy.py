@@ -105,7 +105,6 @@ class OnPolicy:
                   rollout_2_info,
                   rollout_buffer=None,
                   ):
-        # print(reward)
         if rollout_buffer is None:
             rollout_buffer = self.rollout_buffer
         values, log_probs = rollout_2_info
