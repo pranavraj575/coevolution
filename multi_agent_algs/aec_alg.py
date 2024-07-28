@@ -85,6 +85,10 @@ class AECAlgorithm(MultiAgentAlgorithm):
             episodes_completed = 0
 
         while continue_rollout:
+            if self.reset_env:
+                # if we have just completed an episode, increase the episode counter
+                # we want to terminate the loop before resetting env if possible
+                episodes_completed += 1
             if number_of_eps is not None:
                 # counter for number of episodes to do
                 if episodes_completed >= number_of_eps:
@@ -96,7 +100,6 @@ class AECAlgorithm(MultiAgentAlgorithm):
 
             continue_rollout = False
             if self.reset_env:
-                episodes_completed += 1
                 self.env.reset()
                 self.reset_env = False
                 # reset records
@@ -175,4 +178,4 @@ class AECAlgorithm(MultiAgentAlgorithm):
                 end_rollout_info=local_end_rollout_info[agent],
             )
 
-        return steps_so_far, max(0,episodes_completed)
+        return steps_so_far, max(0, episodes_completed)

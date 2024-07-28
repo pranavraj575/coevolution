@@ -20,7 +20,8 @@ DICT_CLONE_REPLACABLE = 'clone_replacable'
 # whether agent can be replaced by a mutation
 DICT_MUTATION_REPLACABLE = 'mutation_replacable'
 
-# when replacing, whether agent should update with the old agent's buffer
+# when replacing, whether agent should update with the old agent's buffe
+# i.e. the info dict of the agent that is about to replace the other agent determines this
 DICT_UPDATE_WITH_OLD_BUFFER = 'update_with_old_buffer'
 
 # when replacing, whether agent should keep the old agent's buffer (overrides previous)

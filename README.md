@@ -9,7 +9,7 @@
 * Install [conda](https://docs.anaconda.com/miniconda/#quick-command-line-install)
   * create conda env
     ```bash
-    conda create --name coevolution
+    conda create --name coevolution python=3.10
     ```
   * OR run in coevolution folder
     ```bash

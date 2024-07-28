@@ -13,9 +13,6 @@ from multi_agent_algs.ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
 from experiments.pyquaticus_coevolution import env_constructor, CTFOutcome, RandPolicy
 
-
-
-
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
 print(DIR)
@@ -38,8 +35,12 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                        worker_constructors=[
                                            lambda i, env: (WorkerPPO(policy=MlpPolicy,
                                                                      env=env,
-                                                                     #batch_size=100,
-                                                                     #n_steps=100,
+                                                                     # batch_size=100,
+                                                                     # n_steps=100,
+                                                                     policy_kwargs={
+                                                                         'net_arch': dict(pi=[128, 64],
+                                                                                          vf=[128, 64])
+                                                                     }
                                                                      ),
                                                            {DICT_TRAIN: True,
                                                             DICT_CLONABLE: False,
@@ -64,11 +65,15 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
 save_dir = os.path.join(DIR, 'data', 'save', 'test_ppo_coevloution')
 if os.path.exists(save_dir):
     trainer.load(save_dir=save_dir)
-for episode in range(1000):
+
+for episode in range(10000):
     print('starting epoch', trainer.info['epochs'])
     trainer.epoch()
-    if not (episode+1)%10:
+
+    print('elos:', trainer.get_classic_elo(1000))
+    if not (episode + 1)%10:
         print('saving')
         trainer.save(save_dir)
         print('done saving')
+    print()
 trainer.clear()

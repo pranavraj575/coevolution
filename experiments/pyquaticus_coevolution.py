@@ -20,12 +20,17 @@ def custom_rew(self, params, prev_params):
     reward = 0
     if params["agent_tagged"][params["agent_id"]]:
         return 0
+    if params["team_flag_capture"] and not prev_params["team_flag_capture"]:
+        return 10
     if params['has_flag']:
-        return .1 + min(.9, .9/params['team_flag_home'])
+        diff = prev_params['team_flag_home'] - params['team_flag_home']
+        diff=diff/5
+        return .1 + min(.9, .9*diff)
     if params['opponent_flag_distance'] > 0:
-        return min(.1, .1/params['opponent_flag_distance'])
-    else:
-        return .1 +min(.9, .9/params['team_flag_home'])
+        diff = prev_params['opponent_flag_distance'] - params['opponent_flag_distance']
+        diff=diff/5
+        return min(.1, .1*diff)
+    return 0
     # Penalize player for opponent grabbing team flag
     if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
         reward += -50

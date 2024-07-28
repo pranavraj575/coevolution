@@ -88,6 +88,10 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
             episodes_completed = 0
 
         while continue_rollout:
+            if self.reset_env:
+                # if we have just completed an episode, increase the episode counter
+                # we want to terminate the loop before resetting env if possible
+                episodes_completed += 1
             if number_of_eps is not None:
                 if episodes_completed >= number_of_eps:
                     continue_rollout = False
@@ -99,7 +103,6 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
             continue_rollout = False
 
             if self.reset_env:
-                episodes_completed += 1
                 reset_obj = self.env.reset()
                 # sometimes the environment does not send infos as a tuple, we must set them manually in this case
                 if type(reset_obj) == tuple:
@@ -162,6 +165,7 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
             if term:
                 # environment terminated and must be reset next time
                 self.reset_env = True
+
             steps_so_far += 1
 
         # end rollout
@@ -178,4 +182,4 @@ class ParallelAlgorithm(MultiAgentAlgorithm):
                 init_learn_info=local_init_learn_info[agent],
                 end_rollout_info=local_end_rollout_info[agent],
             )
-        return steps_so_far, max(0,episodes_completed)
+        return steps_so_far, max(0, episodes_completed)
