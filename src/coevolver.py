@@ -392,13 +392,17 @@ class CaptianCoevolution(CoevolutionBase):
                                       team_outcomes,
                                       expected_win_probs):
             self.captian_elos[captian] += self.elo_update*(team_outcome - expected_outcome)
+
+            # combine all player observations into one (can also just add each individual PlayerInfo)
+            combined_obs = PlayerInfo()
             for player_info in player_infos:
-                player_info: PlayerInfo
-                self.team_trainer.add_to_buffer(scalar=team_outcome,
-                                                obs_preembed=player_info.obs_preembed,
-                                                team=team,
-                                                obs_mask=player_info.obs_mask,
-                                                )
+                combined_obs.union_obs(other_player_info=player_info)
+
+            self.team_trainer.add_to_buffer(scalar=team_outcome,
+                                            obs_preembed=combined_obs.obs_preembed,
+                                            team=team,
+                                            obs_mask=combined_obs.obs_mask,
+                                            )
         return episode_info
 
     def breed(self):
