@@ -391,7 +391,7 @@ class CaptianCoevolution(CoevolutionBase):
                                       teams,
                                       team_outcomes,
                                       expected_win_probs):
-            self.captian_elos[captian] += self.captian_elos*(team_outcome - expected_outcome)
+            self.captian_elos[captian] += self.elo_update*(team_outcome - expected_outcome)
             for player_info in player_infos:
                 player_info: PlayerInfo
                 self.team_trainer.add_to_buffer(scalar=team_outcome,
@@ -484,6 +484,10 @@ class CaptianCoevolution(CoevolutionBase):
         # i.e. self.captian_elos[2]=3 mutates self.captian_elos
         # self.captian_elos=torch.rand(2) does not mutate captian_elos
         return self.info[COEVOLUTION_DICT_CAPTIAN_ELO]
+
+    @property
+    def elo_update(self):
+        return self.info[COEVOLUTION_DICT_ELO_UPDATE]
 
     @property
     def elo_conversion(self):
