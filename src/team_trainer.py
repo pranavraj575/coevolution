@@ -72,7 +72,7 @@ class TeamTrainer:
             conditional_dist = noise_model(conditional_dist)
 
         # set all non-masked or invalid entries to 0
-        conditional_dist[torch.where(init_team != self.MASK)] = 0
+        conditional_dist[torch.where(torch.not_equal(init_team, self.MASK))] = 0
         if valid_locations is not None:
             conditional_dist = conditional_dist*valid_locations  # sets invalid locations to 0
 
@@ -149,7 +149,7 @@ class TeamTrainer:
         if indices is None:
             indices = [[], []]
             for i in range(N):
-                potential = torch.where(initial_teams[i] == self.MASK)[0]
+                potential = torch.where(torch.eq(initial_teams[i], self.MASK))[0]
                 if len(potential) > 0:
                     indices[0].append(i)
                     indices[1].append(potential[torch.randint(0, len(potential), (1,))])

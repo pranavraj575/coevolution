@@ -80,18 +80,18 @@ class CTFOutcome(PettingZooOutcomeFn):
         print(score)
         if score[0] == score[1]:
             return [
-                (.5, [PlayerInfo()]),
-                (.5, [PlayerInfo()]),
+                (.5, []),
+                (.5, []),
             ]
         if score[0] > score[1]:
             return [
-                (1, [PlayerInfo()]),
-                (0, [PlayerInfo()]),
+                (1, []),
+                (0, []),
             ]
         if score[0] < score[1]:
             return [
-                (0, [PlayerInfo()]),
-                (1, [PlayerInfo()]),
+                (0, []),
+                (1, []),
             ]
 
 
@@ -107,7 +107,7 @@ config_dict = config_dict_std
 config_dict["max_screen_size"] = (float('inf'), float('inf'))
 config_dict["max_time"] = 420.
 config_dict["sim_speedup_factor"] = 40
-reward_config = {0: custom_rew, 2: None, 5: None}  # Example Reward Config
+reward_config = {0: rew.sparse, 1: None, 5: None}  # Example Reward Config
 
 
 def env_constructor(render_mode=None):

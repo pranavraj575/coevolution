@@ -53,7 +53,7 @@ class CoevolutionBase:
         self.population_sizes = population_sizes
         self.team_sizes = team_sizes
         self.num_teams = len(team_sizes)
-        self.env_constructor = lambda: None
+        self.env_constructor = lambda infos: None
 
         # cumulative population sizes
         self.cumsums = np.cumsum(np.concatenate(([0], self.population_sizes)))
@@ -356,7 +356,7 @@ class CaptianCoevolution(CoevolutionBase):
                                                         noise_model=self.noise_model,
                                                         valid_locations=valid_locations.view((1, team_size)),
                                                         )
-            pos = torch.where(team.view(-1) == captian)[0].item()
+            pos = torch.where(torch.eq(team.view(-1), captian))[0].item()
             captian_positions.append(pos)
 
             valid_members = self.team_to_valid_members[team_idx]
@@ -381,7 +381,7 @@ class CaptianCoevolution(CoevolutionBase):
         episode_info['teams'] = tuple(team.detach().numpy() for team in teams)
         team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
                                                     train_infos=train_infos,
-                                                    env=self.env_constructor(),
+                                                    env=self.env_constructor(train_infos),
                                                     )
         episode_info['team_outcomes'] = tuple(t for t, _ in team_outcomes)
         for (captian,
@@ -522,7 +522,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  ):
         """
         Args:
-            env_constructor:
+            env_constructor: train_infos -> environment
+                train_infos is a list of teams, each team is a list of train info dicts (corresponding to players)
+                usually train_infos is ignored, unless we are changing the environment wrt the ages of players or something
             outcome_fn:
             population_sizes: list of K ints, size of each population
             team_trainer:
@@ -562,7 +564,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
         self.env_constructor = env_constructor
 
-        test_env = self.env_constructor()
+        test_env = self.env_constructor(None)
         test_env.reset()
 
         if team_idx_to_agent_id is not None:
@@ -951,13 +953,13 @@ if __name__ == '__main__':
         def get_outcome(self, team_choices, train_infos=None, env=None):
             agent_choices = [agents[team[0]] for team in team_choices]
             if agent_choices[0] == agent_choices[1]:
-                return [(.5, [PlayerInfo()]), (.5, [PlayerInfo()])]
+                return [(.5, []), (.5, [])]
 
             if agent_choices[0] > agent_choices[1]:
-                return [(1, [PlayerInfo()]), (0, [PlayerInfo()])]
+                return [(1, []), (0, [])]
 
             if agent_choices[0] < agent_choices[1]:
-                return [(0, [PlayerInfo()]), (1, [PlayerInfo()])]
+                return [(0, []), (1, [])]
 
 
     cap = CaptianCoevolution(outcome_fn=MaxOutcome(),
@@ -980,7 +982,7 @@ if __name__ == '__main__':
     from pettingzoo.classic import tictactoe_v3
 
 
-    def env_constructor():
+    def env_constructor(train_infos):
         return tictactoe_v3.env()
 
 

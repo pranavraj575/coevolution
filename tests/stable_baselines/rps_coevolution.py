@@ -14,7 +14,7 @@ from multi_agent_algs.ppo.PPO import WorkerPPO
 from multi_agent_algs.better_multi_alg import multi_agent_algorithm
 import os, sys, torch
 
-from src.game_outcome import PettingZooOutcomeFn, PlayerInfo
+from src.game_outcome import PettingZooOutcomeFn
 from src.utils.dict_keys import (DICT_TRAIN,
                                  DICT_IS_WORKER,
                                  DICT_CLONABLE,
@@ -89,28 +89,28 @@ class SingleZooOutcome(PettingZooOutcomeFn):
                 print(rec)
         if rec[0] == rec[1]:  # the agents tied
             return [
-                (.5, [PlayerInfo()]),
-                (.5, [PlayerInfo()]),
+                (.5, []),
+                (.5, []),
             ]
         if rec[0] > rec[1]:
             # agent 0 won
             return [
-                (1, [PlayerInfo()]),
-                (0, [PlayerInfo()]),
+                (1, []),
+                (0, []),
             ]
 
         if rec[0] < rec[1]:
             # agent 1 won
             return [
-                (0, [PlayerInfo()]),
-                (1, [PlayerInfo()]),
+                (0, []),
+                (1, []),
             ]
 
 
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
 
-def env_constructor():
+def env_constructor(train_infos):
     env = rps_v2.env()
     env.agents = ['player_0', 'player_1']
     return env

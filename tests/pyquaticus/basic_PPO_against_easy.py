@@ -11,7 +11,7 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  )
 from multi_agent_algs.ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
-from experiments.pyquaticus_coevolution import env_constructor, CTFOutcome, RandPolicy
+from experiments.pyquaticus_coevolution import reward_config, config_dict, CTFOutcome, RandPolicy
 
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
@@ -27,11 +27,20 @@ args = PARSER.parse_args()
 
 RENDER_MODE = 'human' if args.render else None
 
+
+def env_constructor(train_infos):
+    return pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE,
+                                       reward_config=reward_config,
+                                       team_size=1,
+                                       config_dict=config_dict,
+                                       )
+
+
 trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                                          1
                                                          ],
                                        outcome_fn=CTFOutcome(),
-                                       env_constructor=lambda: env_constructor(render_mode=RENDER_MODE),
+                                       env_constructor=env_constructor,
                                        worker_constructors=[
                                            lambda i, env: (WorkerPPO(policy=MlpPolicy,
                                                                      env=env,

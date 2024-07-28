@@ -131,6 +131,7 @@ class OutcomeFn:
                     obs_preembed=player observation (None or size (S,*) seq of observations);
                     obs_mask=observation mask (None or size (S,) boolean array of which items to mask;
                     )
+                list can be empty, this will correspond to an empty observation
             ]
         """
         raise NotImplementedError
