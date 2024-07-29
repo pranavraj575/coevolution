@@ -3,7 +3,7 @@ from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
 
 from src.game_outcome import PettingZooOutcomeFn
-from unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
 
 
 def custom_rew(self, params, prev_params):

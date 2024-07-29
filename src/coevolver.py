@@ -29,7 +29,7 @@ from src.utils.dict_keys import (DICT_AGE,
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 
-from unstable_baselines3.common.common import DumEnv
+from unstable_baselines3.unstable_baselines3.common.common import DumEnv
 
 
 class CoevolutionBase:
@@ -584,7 +584,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             worker_constructors: if specified, list of K functions, size of population
                 each funciton goes from (index, enviornment) into
                     (a worker with the specified action and obs space, worker_info) tuple
-                info dicts keys are found in src.utils.dict_keys
+                info dicts keys are found in unstable_baselines3.utils.dict_keys
 
                 worker_info relevant keys:
                     DICT_IS_WORKER: whether agent is a worker class

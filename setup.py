@@ -11,6 +11,7 @@ setup(
         'pettingzoo',
         'torch',
         'stable-baselines3',
+        'unstable-baselines3',
     ],
     license='Liscence to Krill',
 )

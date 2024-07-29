@@ -359,7 +359,7 @@ class ZooCage:
 
 if __name__ == '__main__':
     import sys
-    from multi_agent_algs.ppo.PPO import WorkerPPO
+    from unstable_baselines3.unstable_baselines3.ppo.PPO import WorkerPPO
     from stable_baselines3.ppo import MlpPolicy
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
