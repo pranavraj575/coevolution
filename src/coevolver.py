@@ -362,9 +362,6 @@ class CaptianCoevolution(CoevolutionBase):
         teams = []
         train_infos = []
         captian_positions = []
-        # expected win probabilities, assuming the teams win probability is determined by captian elo
-        expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
-                                           dim=-1)
         for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
             captian_pop_idx, _ = self.index_to_pop_index(global_idx=captian)
             valid_locations = self.pop_and_team_to_valid_locations[captian_pop_idx][team_idx]
@@ -383,7 +380,7 @@ class CaptianCoevolution(CoevolutionBase):
                                                    noise_model=self.noise_model,
                                                    valid_members=valid_members.view((1, team_size, self.N)),
                                                    )
-            teams.append(team)
+            teams.append(team.detach())
             tinfo = []
             for i, member in enumerate(team.flatten()):
                 global_idx = member.item()
@@ -397,7 +394,7 @@ class CaptianCoevolution(CoevolutionBase):
                     info[TEMP_DICT_CAPTIAN] = False
                 tinfo.append(info)
             train_infos.append(tinfo)
-        episode_info['teams'] = tuple(team.detach().numpy() for team in teams)
+        episode_info['teams'] = tuple(team.numpy() for team in teams)
 
         # collect result
         team_outcomes = outcome_fn.get_outcome(team_choices=teams,
@@ -407,17 +404,29 @@ class CaptianCoevolution(CoevolutionBase):
         episode_info['team_outcomes'] = tuple(t for t, _ in team_outcomes)
 
         # save things
+        # dict contains all info needed to save current run
+        # TODO: parallelization should do code above this line in parallel, and do the rest in sequence
+        items_to_save = {
+            'outcome_local_mem': outcome_fn.pop_local_mem(),
+            'captian_choices': captian_choices,
+            'teams': teams,
+            'team_outcomes': team_outcomes,
+            'episode_info': episode_info,
+        }
 
         # save trained agents, if applicable
-        self.save_trained_agents(outcome_fn.pop_local_mem())
+        self.save_trained_agents(items_to_save['outcome_local_mem'])
 
+        # expected win probabilities, assuming the teams win probability is determined by captian elo
+        expected_win_probs = torch.softmax(self.captian_elos[items_to_save['captian_choices'],],
+                                           dim=-1)
         # save to team selection buffer
         for (captian,
              team,
              (team_outcome, player_infos),
-             expected_outcome) in zip(captian_choices,
-                                      teams,
-                                      team_outcomes,
+             expected_outcome) in zip(items_to_save['captian_choices'],
+                                      items_to_save['teams'],
+                                      items_to_save['team_outcomes'],
                                       expected_win_probs):
             self.captian_elos[captian] += self.elo_update*(team_outcome - expected_outcome)
 
@@ -431,7 +440,7 @@ class CaptianCoevolution(CoevolutionBase):
                                             team=team,
                                             obs_mask=combined_obs.obs_mask,
                                             )
-        return episode_info
+        return items_to_save['episode_info']
 
     def save_trained_agents(self, outcome_fn_local_mem):
         """
