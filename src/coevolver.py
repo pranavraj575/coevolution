@@ -453,13 +453,20 @@ class CaptianCoevolution(CoevolutionBase):
     def breed(self):
         if self.clone_fn is None:
             return
-        dist = torch.softmax(self.captian_elos, dim=-1)
-        # sample from this distribution with replacements
-        replacements = torch.multinomial(dist, self.N, replacement=True)
+        replacements = []
+        k = 0
+        for popsize in self.population_sizes:
+            dist = torch.softmax(self.captian_elos[k:k + popsize], dim=-1)
+            # sample from this distribution with replacements
+            rep_sample = torch.multinomial(dist, popsize, replacement=True)
+            rep_sample += k  # shift the indices to the start of this population
+            replacements = replacements + [t.item() for t in rep_sample]
+
+            k += popsize
+
         self.clone_fn(torch.arange(self.N), replacements)
-        for arr in (self.captian_elos,):
-            temp_arr = arr.clone()
-            arr[np.arange(self.N)] = temp_arr[replacements]
+        temp_arr = self.captian_elos.clone()
+        self.captian_elos[np.arange(self.N)] = temp_arr[replacements]
         self.rebase_elos()
         return
 
@@ -734,25 +741,29 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
     def breed(self):
         return self.classic_breed()
 
-    def _get_valid_idxs(self, validity_fn):
+    def _get_valid_idxs(self, validity_fn, indices=None):
         """
         returns indexes of all 'valid agents' according to check
         Args:
             validity_fn: (info dict -> whether to return agent)
+            indices: indices to filter (if None, uses all indices)
         Returns:
             iterable of global indexes of replacable agents
         """
+        if indices is None:
+            indices = range(self.N)
 
-        for global_idx in range(self.N):
+        for global_idx in indices:
             pop_local_idx = self.index_to_pop_index(global_idx=global_idx)
             info = self.get_info(pop_local_idx=pop_local_idx)
             if validity_fn(info):
                 yield global_idx
 
-    def conservative_breed(self, number_to_replace, base_elo=0., force_replacements=True):
+    def conservative_breed(self, number_to_replace: [int], base_elo=0., force_replacements=True):
         """
         Args:
-            number_to_replace: max number of agents to try to replace (must be in range [0,self.N])
+            number_to_replace: max number of agents to try to replace in each population (must be in range [0,self.N])
+                if iterable, must be of size (number of populations)
             base_elo: if not None, rebases all elos so this value is average
             force_replacements: if True, always replaces number_to_replace
                 (unless there are fewer potential target agents than number_to_replace)
@@ -763,81 +774,89 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
             chooses replacements with softmax of standard ELO
         """
-        breed_dic = {'number_replaced': 0}
-        if number_to_replace <= 0:
-            return breed_dic
+        breed_dic = {'number_replaced': [0 for _ in self.population_sizes],
+                     'target_agents': [],
+                     'target_elos': [],
+                     'cloned_agents': [],
+                     'cloned_elos': [],
+                     }
 
-        # pick the agents to potentially clone
-        candidate_clone_idxs = list(self._get_valid_idxs(validity_fn=
-                                                         lambda info:
-                                                         info.get(DICT_CLONABLE, True)
-                                                         )
-                                    )
-        if not candidate_clone_idxs:
-            # no clonable agents
-            return breed_dic
+        if type(number_to_replace) == int:
+            number_to_replace = [number_to_replace for _ in self.population_sizes]
+        k = 0
+        for pop_idx, popsize in enumerate(self.population_sizes):
 
-        # pick the agents to potentially replace with a clone
-        if force_replacements:
-            candidate_target_idxs = list(
-                self._get_valid_idxs(validity_fn=lambda info: info.get(DICT_CLONE_REPLACABLE, True) and
-                                                              (info.get(DICT_AGE, 0) > self.protect_new)
-                                     ))
-        else:
-            candidate_target_idxs = list(range(self.N))
-        # can replace at most this number
-        number_to_replace = min(number_to_replace, len(candidate_target_idxs))
-        if not candidate_target_idxs:
-            return breed_dic
-        # distribution of agents based on how bad they are
-        candidate_target_dist = self.get_inverted_distribution(elos=self.captian_elos[candidate_target_idxs])
-        # pick a random subset of target agents to replace based on this distribution
-        target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace, replacement=False)
-        # these are the global indexes of the targets
-        target_global_idxs = [candidate_target_idxs[target_idx_idx] for target_idx_idx in target_idx_idxs]
-        target_elos = [self.captian_elos[target_global_idx] for target_global_idx in target_global_idxs]
+            if number_to_replace[pop_idx] <= 0:
+                continue
 
-        # now pick which agents to clone based on elo
-        candidate_clone_elos = self.captian_elos[candidate_clone_idxs]
-        clone_dist = torch.softmax(candidate_clone_elos, dim=-1)
-        # sample from this distribution with replacement
-        clone_idx_idxs = list(torch.multinomial(clone_dist, len(target_global_idxs), replacement=True))
-        # element clone_idx_idx in clone_idx_idxs denotes that candidate_clone_idxs[clone_idx_idx] should be cloned
-        # also candidate_clone_idxs[clone_idx_idx] has elo clone_elos[clone_idx_idx]
+            # pick the agents to potentially clone
+            candidate_clone_idxs = list(self._get_valid_idxs(validity_fn=
+                                                             lambda info:
+                                                             info.get(DICT_CLONABLE, True),
+                                                             indices=range(k, k + popsize),
+                                                             )
+                                        )
+            if not candidate_clone_idxs:
+                # no clonable agents
+                continue
 
-        # global indexes of clones, as well as elos of the clones
-        clone_global_idxs = [candidate_clone_idxs[clone_idx_idx] for clone_idx_idx in clone_idx_idxs]
-        clone_elos = [candidate_clone_elos[clone_idx_idx] for clone_idx_idx in clone_idx_idxs]
+            # pick the agents to potentially replace with a clone
+            if force_replacements:
+                candidate_target_idxs = list(
+                    self._get_valid_idxs(validity_fn=lambda info: info.get(DICT_CLONE_REPLACABLE, True) and
+                                                                  (info.get(DICT_AGE, 0) > self.protect_new),
+                                         indices=range(k, k + popsize),
+                                         ))
+            else:
+                candidate_target_idxs = list(range(k, k + popsize))
+            # can replace at most this number
+            number_to_replace[pop_idx] = min(len(candidate_target_idxs), number_to_replace[pop_idx])
+            if not candidate_target_idxs:
+                continue
+            # distribution of agents based on how bad they are
+            candidate_target_dist = self.get_inverted_distribution(elos=self.captian_elos[candidate_target_idxs])
+            # pick a random subset of target agents to replace based on this distribution
+            target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace, replacement=False)
+            # these are the global indexes of the targets
+            target_global_idxs = [candidate_target_idxs[target_idx_idx] for target_idx_idx in target_idx_idxs]
+            target_elos = [self.captian_elos[target_global_idx] for target_global_idx in target_global_idxs]
 
-        breed_dic['target_agents'] = []
-        breed_dic['target_elos'] = []
-        breed_dic['cloned_agents'] = []
-        breed_dic['cloned_elos'] = []
+            # now pick which agents to clone based on elo
+            candidate_clone_elos = self.captian_elos[candidate_clone_idxs]
+            clone_dist = torch.softmax(candidate_clone_elos, dim=-1)
+            # sample from this distribution with replacement
+            clone_idx_idxs = list(torch.multinomial(clone_dist, len(target_global_idxs), replacement=True))
+            # element clone_idx_idx in clone_idx_idxs denotes that candidate_clone_idxs[clone_idx_idx] should be cloned
+            # also candidate_clone_idxs[clone_idx_idx] has elo clone_elos[clone_idx_idx]
 
-        for target_global_idx, target_elo, clone_global_idx, clone_elo in zip(target_global_idxs,
-                                                                              target_elos,
-                                                                              clone_global_idxs,
-                                                                              clone_elos):
-            target_info = self.get_info(pop_local_idx=self.index_to_pop_index(global_idx=target_global_idx))
-            # check if target is actually replacable by a clone
-            if target_info.get(DICT_CLONE_REPLACABLE, True) and (target_info.get(DICT_AGE, 0) > self.protect_new):
-                # in that case, replace target with clone
-                clone_pop_local_idx = self.index_to_pop_index(global_idx=clone_global_idx)
-                clone_agent, clone_info = self.load_animal(pop_local_idx=clone_pop_local_idx, load_buffer=True)
-                self.replace_agent(pop_local_idx=self.index_to_pop_index(global_idx=target_global_idx),
-                                   replacement=(clone_agent, clone_info),
-                                   elo=clone_elo,
-                                   keep_old_buff=clone_info.get(DICT_KEEP_OLD_BUFFER, False),
-                                   update_with_old_buff=clone_info.get(DICT_UPDATE_WITH_OLD_BUFFER, True),
-                                   )
-                breed_dic['number_replaced'] += 1
-                breed_dic['target_agents'].append(target_global_idx)
-                breed_dic['cloned_agents'].append(clone_global_idx)
-                breed_dic['cloned_elos'].append(clone_elo)
-                breed_dic['target_elos'].append(target_elo)
-                # note: it is probably necessary to save clone_elo and target_elo lists beforehand as self.captain_elos
-                # are being reassigned with self.replace_agent
+            # global indexes of clones, as well as elos of the clones
+            clone_global_idxs = [candidate_clone_idxs[clone_idx_idx] for clone_idx_idx in clone_idx_idxs]
+            clone_elos = [candidate_clone_elos[clone_idx_idx] for clone_idx_idx in clone_idx_idxs]
 
+            for target_global_idx, target_elo, clone_global_idx, clone_elo in zip(target_global_idxs,
+                                                                                  target_elos,
+                                                                                  clone_global_idxs,
+                                                                                  clone_elos):
+                target_info = self.get_info(pop_local_idx=self.index_to_pop_index(global_idx=target_global_idx))
+                # check if target is actually replacable by a clone
+                if target_info.get(DICT_CLONE_REPLACABLE, True) and (target_info.get(DICT_AGE, 0) > self.protect_new):
+                    # in that case, replace target with clone
+                    clone_pop_local_idx = self.index_to_pop_index(global_idx=clone_global_idx)
+                    clone_agent, clone_info = self.load_animal(pop_local_idx=clone_pop_local_idx, load_buffer=True)
+                    self.replace_agent(pop_local_idx=self.index_to_pop_index(global_idx=target_global_idx),
+                                       replacement=(clone_agent, clone_info),
+                                       elo=clone_elo,
+                                       keep_old_buff=clone_info.get(DICT_KEEP_OLD_BUFFER, False),
+                                       update_with_old_buff=clone_info.get(DICT_UPDATE_WITH_OLD_BUFFER, True),
+                                       )
+                    breed_dic['number_replaced'] += 1
+                    breed_dic['target_agents'].append(target_global_idx)
+                    breed_dic['cloned_agents'].append(clone_global_idx)
+                    breed_dic['cloned_elos'].append(clone_elo)
+                    breed_dic['target_elos'].append(target_elo)
+                    # note: it is probably necessary to save clone_elo and target_elo lists beforehand as self.captain_elos
+                    # are being reassigned with self.replace_agent
+            k += popsize
         breed_dic['based_elos'] = base_elo
         if base_elo is not None:
             self.rebase_elos(base_elo=base_elo)
@@ -869,10 +888,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                  ))
         # get the number to mutate, choose each with probability self.mutation_prob
         # equivalent to the sum of a bunch of bernoulli variables
-        num_to_mutate = torch.sum(torch.bernoulli(
-            torch.tensor([self.mutation_prob for _ in mutatable_idxs]
-                         )
-        )).item()
+        num_to_mutate = int(torch.sum(
+            torch.bernoulli(torch.tensor([self.mutation_prob for _ in mutatable_idxs]))
+        ).item())
         mutation_dict['num_mutated'] = num_to_mutate
         if num_to_mutate > 0:
             # distribution based on how bad each agent is
@@ -1020,9 +1038,9 @@ if __name__ == '__main__':
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     torch.random.manual_seed(69)
-    popsize = 20
+    popsizes = [2, 2, 20]
 
-    agents = torch.arange(popsize)%6
+    agents = torch.arange(sum(popsizes))%6
 
 
     def clone_fn(original, replacements):
@@ -1035,7 +1053,7 @@ if __name__ == '__main__':
         return team with highest indices
         """
 
-        def get_outcome(self, team_choices, train_infos=None, env=None):
+        def get_outcome(self, team_choices, updated_train_infos=None, env=None):
             agent_choices = [agents[team[0]] for team in team_choices]
             if agent_choices[0] == agent_choices[1]:
                 return [(.5, []), (.5, [])]
@@ -1048,8 +1066,7 @@ if __name__ == '__main__':
 
 
     cap = CaptianCoevolution(outcome_fn_gen=MaxOutcome,
-                             population_sizes=[popsize],
-                             team_trainer=TeamTrainer(num_agents=popsize, ),
+                             population_sizes=popsizes,
                              clone_fn=clone_fn
                              )
     for _ in range(20):

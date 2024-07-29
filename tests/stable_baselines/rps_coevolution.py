@@ -83,7 +83,6 @@ class SingleZooOutcome(PettingZooOutcomeFn):
             obs[0].append(torch.rand(1))
             obs[1].append(torch.rand(1))
 
-        obs = [torch.tensor(oo).view((-1, 1)) for oo in obs]
         if True:
             if any([isinstance(c, easy_pred) or isinstance(c, always_0) for c in (a, b)]):
                 print(rec)
@@ -130,11 +129,11 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                                                               }),
                                            lambda i, env: (Worker(policy=MlpPolicy,
                                                                   env=env,
-                                                                  n_steps=200,
-                                                                  batch_size=100,
+                                                                  n_steps=64,
+                                                                  batch_size=64,
                                                                   gamma=0.,
                                                                   ),
-                                                           {})
+                                                           {DICT_MUTATION_REPLACABLE: False, })
                                        ],
                                        zoo_dir=os.path.join(DIR, 'data', 'rps_zoo_coevolution_test'),
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
@@ -143,11 +142,11 @@ save_dir = os.path.join(DIR, 'data', 'save', 'rps_coevolution')
 if os.path.exists(save_dir):
     trainer.load(save_dir=save_dir)
 for epohc in range(1000):
-    print('starting epoch', trainer.info['epochs'])
+    # print('starting epoch', trainer.info['epochs'])
     trainer.epoch()
     if not (epohc + 1)%100:
-        print('saving')
+        # print('saving')
         trainer.save(save_dir)
-        print('done saving')
+        # print('done saving')
 
 trainer.clear()
