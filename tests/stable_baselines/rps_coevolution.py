@@ -6,12 +6,10 @@ from stable_baselines3.dqn.policies import MlpPolicy as DQNPolicy
 from stable_baselines3.dqn.dqn import DQN
 
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
-from stable_baselines3.ppo.ppo import PPO
 
-from unstable_baselines3.dqn.DQN import WorkerDQN
 from unstable_baselines3.ppo.PPO import WorkerPPO
 
-from unstable_baselines3.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
 import os, sys, torch
 
 from src.game_outcome import PettingZooOutcomeFn
@@ -22,7 +20,6 @@ from src.utils.dict_keys import (DICT_TRAIN,
                                  DICT_MUTATION_REPLACABLE,
                                  )
 from src.coevolver import PettingZooCaptianCoevolution
-from pettingzoo import AECEnv, ParallelEnv
 
 Worker = WorkerPPO
 

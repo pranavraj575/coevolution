@@ -1,8 +1,8 @@
 import numpy as np
-import torch, os, shutil, pickle
+import torch, shutil, pickle, os
 
 from src.team_trainer import TeamTrainer
-from src.game_outcome import PlayerInfo, OutcomeFn, PettingZooOutcomeFn
+from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_AGE,
                                  DICT_CLONABLE,
@@ -29,7 +29,7 @@ from src.utils.dict_keys import (DICT_AGE,
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 
-from unstable_baselines3.common import DumEnv
+from unstable_baselines3.common.common import DumEnv
 
 
 class CoevolutionBase:

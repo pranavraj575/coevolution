@@ -1,19 +1,9 @@
 import argparse, os, sys
 from repos.pyquaticus.pyquaticus import pyquaticus_v0
-import repos.pyquaticus.pyquaticus.utils.rewards as rew
 from repos.pyquaticus.pyquaticus.config import config_dict_std
 
-from src.coevolver import PettingZooCaptianCoevolution
-from src.game_outcome import PettingZooOutcomeFn, PlayerInfo
-from src.utils.dict_keys import (DICT_IS_WORKER,
-                                 DICT_TRAIN,
-                                 DICT_CLONABLE,
-                                 DICT_CLONE_REPLACABLE,
-                                 DICT_MUTATION_REPLACABLE,
-                                 )
-from stable_baselines3.ppo import MlpPolicy
-from unstable_baselines3.ppo.PPO import WorkerPPO
-from unstable_baselines3.better_multi_alg import multi_agent_algorithm
+from src.game_outcome import PettingZooOutcomeFn
+from unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
 
 
 def custom_rew(self, params, prev_params):
