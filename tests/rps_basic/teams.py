@@ -45,7 +45,7 @@ if __name__ == '__main__':
     )
 
     coevolver = CaptianCoevolution(population_sizes=[3],
-                                   outcome_fn=SingleOutcome(agents=torch.arange(3)),
+                                   outcome_fn_gen=lambda: SingleOutcome(agents=torch.arange(3)),
                                    team_trainer=trainer,
                                    clone_fn=lambda: None,
                                    mutation_fn=None,

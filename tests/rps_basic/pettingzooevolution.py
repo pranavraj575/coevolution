@@ -24,7 +24,7 @@ if __name__ == '__main__':
     popsize = sum(popsizes)
 
     trainer = PettingZooCaptianCoevolution(population_sizes=popsizes,
-                                           outcome_fn=SingleZooOutcome(),
+                                           outcome_fn_gen=SingleZooOutcome,
                                            team_trainer=TeamTrainer(num_agents=popsize),
                                            worker_constructors=[lambda i, env: (1, {DICT_IS_WORKER: False,
                                                                                     DICT_CLONABLE: True,

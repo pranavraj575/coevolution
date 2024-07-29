@@ -42,7 +42,7 @@ class DualPreMappedOutcome(OutcomeFn):
     def __init__(self, agents):
         self.agents = agents
 
-    def get_outcome(self, team_choices, train_infos=None,env=None):
+    def get_outcome(self, team_choices, updated_train_infos=None, env=None):
         result = double_game_outcome(team_choices[0], team_choices[1])
         if result == 0:
             return [(.5, [PlayerInfo(obs_preembed=team_choices[1]),
@@ -80,7 +80,7 @@ class DualPairOutcome(OutcomeFn):
             return torch.tensor(5)
         return torch.tensor(4)
 
-    def get_outcome(self, team_choices, train_infos=None,env=None):
+    def get_outcome(self, team_choices, updated_train_infos=None, env=None):
         result = double_game_outcome(self.map_to_number(team_choices[0]),
                                      self.map_to_number(team_choices[1]),
                                      )

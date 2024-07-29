@@ -38,7 +38,7 @@ def env_constructor(train_infos):
 trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                                          1
                                                          ],
-                                       outcome_fn=CTFOutcome(),
+                                       outcome_fn_gen=CTFOutcome,
                                        env_constructor=env_constructor,
                                        worker_constructors=[
                                            lambda i, env: (WorkerPPO(policy=MlpPolicy,
@@ -70,7 +70,7 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[1,
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
                                        )
 
-save_dir = os.path.join(DIR, 'data', 'save', 'test_ppo_coevloution')
+save_dir = os.path.join(DIR, 'data', 'save', 'basic_ppo_against_easy')
 if os.path.exists(save_dir):
     trainer.load(save_dir=save_dir)
 

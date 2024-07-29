@@ -11,8 +11,16 @@ from src.utils.dict_keys import (DICT_AGE,
                                  DICT_POSITION_DEPENDENT,
                                  DICT_KEEP_OLD_BUFFER,
                                  DICT_UPDATE_WITH_OLD_BUFFER,
+
+                                 DICT_TRAIN,
+                                 DICT_IS_WORKER,
+                                 DICT_COLLECT_ONLY,
+                                 DICT_SAVE_BUFFER,
+                                 DICT_SAVE_CLASS,
+
                                  TEMP_DICT_CAPTIAN,
                                  TEMP_DICT_CAPTIAN_UNIQUE,
+
                                  COEVOLUTION_DICT_CAPTIAN_ELO,
                                  COEVOLUTION_DICT_ELO_UPDATE,
                                  COEVOLUTION_DICT_ELO_CONVERSION,
@@ -30,14 +38,15 @@ class CoevolutionBase:
     """
 
     def __init__(self,
-                 outcome_fn: OutcomeFn,
+                 outcome_fn_gen,
                  population_sizes,
                  team_sizes=(1, 1),
                  member_to_population=None,
                  ):
         """
         Args:
-            outcome_fn: collect outcomes and do RL training
+            outcome_fn_gen: constructs outcome_fn outcomes and do RL training
+                ()-> OutcomeFn
             population_sizes: list of number of agents in each population
                 usually can just be a list of one element
                 multiple populations are useful if there are different 'types' of agents
@@ -49,7 +58,7 @@ class CoevolutionBase:
                 populations (subset of (0<i<len(population_sizes))) that the member can be drawn from
                 by default, assumes each member can be drawn from each population
         """
-        self.outcome_fn = outcome_fn
+        self.outcome_fn_gen = outcome_fn_gen
         self.population_sizes = population_sizes
         self.team_sizes = team_sizes
         self.num_teams = len(team_sizes)
@@ -76,6 +85,13 @@ class CoevolutionBase:
         clears any disc storage
         """
         pass
+
+    def create_outcome_fn(self):
+        """
+        creates outcome function using self.outcome_fn_gen
+        Returns: OutcomeFn
+        """
+        return self.outcome_fn_gen()
 
     def save(self, save_dir):
 
@@ -261,7 +277,7 @@ class CaptianCoevolution(CoevolutionBase):
     """
 
     def __init__(self,
-                 outcome_fn: OutcomeFn,
+                 outcome_fn_gen,
                  population_sizes,
                  team_trainer: TeamTrainer = None,
                  clone_fn=None,
@@ -274,7 +290,8 @@ class CaptianCoevolution(CoevolutionBase):
                  ):
         """
         Args:
-            outcome_fn: handles training agents and returning game results
+            outcome_fn_gen: constructs outcome_fn outcomes and do RL training
+                ()-> OutcomeFn
             population_sizes:
             team_trainer: model to select teams given a captian, may be trained alongside coevolution
                 in games with 1 captain, this mostly does nothing, and can just be the default TeamTrainer class
@@ -296,7 +313,7 @@ class CaptianCoevolution(CoevolutionBase):
                 updated with set_noise_model
 
         """
-        super().__init__(outcome_fn=outcome_fn,
+        super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
                          team_sizes=team_sizes,
                          member_to_population=member_to_population,
@@ -339,13 +356,15 @@ class CaptianCoevolution(CoevolutionBase):
         episode_info = {'captian_choices': captian_choices,
                         'unique_captians': unique
                         }
+
+        outcome_fn = self.create_outcome_fn()
+        # team selection (pretty much does nothing if teams are size 1
         teams = []
         train_infos = []
         captian_positions = []
         # expected win probabilities, assuming the teams win probability is determined by captian elo
         expected_win_probs = torch.softmax(self.captian_elos[captian_choices,],
                                            dim=-1)
-        # team selection (pretty much does nothing if teams are size 1
         for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
             captian_pop_idx, _ = self.index_to_pop_index(global_idx=captian)
             valid_locations = self.pop_and_team_to_valid_locations[captian_pop_idx][team_idx]
@@ -379,11 +398,20 @@ class CaptianCoevolution(CoevolutionBase):
                 tinfo.append(info)
             train_infos.append(tinfo)
         episode_info['teams'] = tuple(team.detach().numpy() for team in teams)
-        team_outcomes = self.outcome_fn.get_outcome(team_choices=teams,
-                                                    train_infos=train_infos,
-                                                    env=self.env_constructor(train_infos),
-                                                    )
+
+        # collect result
+        team_outcomes = outcome_fn.get_outcome(team_choices=teams,
+                                               updated_train_infos=train_infos,
+                                               env=self.env_constructor(train_infos),
+                                               )
         episode_info['team_outcomes'] = tuple(t for t, _ in team_outcomes)
+
+        # save things
+
+        # save trained agents, if applicable
+        self.save_trained_agents(outcome_fn.pop_local_mem())
+
+        # save to team selection buffer
         for (captian,
              team,
              (team_outcome, player_infos),
@@ -404,6 +432,14 @@ class CaptianCoevolution(CoevolutionBase):
                                             obs_mask=combined_obs.obs_mask,
                                             )
         return episode_info
+
+    def save_trained_agents(self, outcome_fn_local_mem):
+        """
+        saves trained agents, if applicable
+        Args:
+            outcome_fn_local_mem: output of OutcomeFn.pop_local_mem()
+        """
+        pass
 
     def breed(self):
         if self.clone_fn is None:
@@ -505,7 +541,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     def __init__(self,
                  env_constructor,
-                 outcome_fn: PettingZooOutcomeFn,
+                 outcome_fn_gen,
                  population_sizes,
                  zoo_dir,
                  worker_constructors,
@@ -525,7 +561,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             env_constructor: train_infos -> environment
                 train_infos is a list of teams, each team is a list of train info dicts (corresponding to players)
                 usually train_infos is ignored, unless we are changing the environment wrt the ages of players or something
-            outcome_fn:
+            outcome_fn_gen: constructs outcome_fn outcomes and do RL training
+                ()-> PettingZooOutcomeFn
             population_sizes: list of K ints, size of each population
             team_trainer:
             worker_constructors: if specified, list of K functions, size of population
@@ -550,7 +587,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             mutation_prob: probability an agent randomly reinitializes each epoch
             protect_new: protect agents younger than this
         """
-        super().__init__(outcome_fn=outcome_fn,
+        super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
                          team_trainer=team_trainer,
                          team_sizes=team_sizes,
@@ -601,14 +638,53 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             for i in range(len(self.population_sizes))
         ]
 
-        self.outcome_fn: PettingZooOutcomeFn
-        self.outcome_fn.set_zoo(self.zoo)
-        self.outcome_fn.set_index_conversion(index_conversion=self.index_to_pop_index)
         self.zoo_dir = zoo_dir
         if reinit_agents:
             self.init_agents()
         self.mutation_prob = mutation_prob
         self.protect_new = protect_new
+
+    def create_outcome_fn(self):
+        """
+        creates outcome function using self.outcome_fn_gen
+            this version also tells PettingZooOutcomeFn where our self.zoo is and what our idx conversion is
+        Returns: PettingZooOutcomeFn
+        """
+        outcome_fn = super().create_outcome_fn()
+
+        outcome_fn.set_zoo(self.zoo)
+        outcome_fn.set_index_conversion(index_conversion=self.index_to_pop_index)
+        return outcome_fn
+
+    def save_trained_agents(self, outcome_fn_local_mem):
+        """
+        saves trained agents
+        Args:
+            outcome_fn_local_mem: output of PettingZooOutcomeFn.pop_local_mem()
+                is a dict of (global idx -> (trained agent, updated agent info))
+        """
+        for global_idx in outcome_fn_local_mem:
+            for agent, updated_train_dict in outcome_fn_local_mem[global_idx]:
+
+                pop_idx, local_idx = self.index_to_pop_index(global_idx)
+                cage: ZooCage = self.zoo[pop_idx]
+                if updated_train_dict.get(DICT_IS_WORKER, True):
+                    if updated_train_dict.get(DICT_COLLECT_ONLY, False):
+                        cage.update_worker_buffer(local_worker=agent,
+                                                  worker_key=str(local_idx),
+                                                  WorkerClass=None,
+                                                  )
+                    elif updated_train_dict.get(DICT_TRAIN, True):
+                        cage.overwrite_worker(worker=agent,
+                                              worker_key=str(local_idx),
+                                              save_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
+                                              save_class=updated_train_dict.get(DICT_SAVE_CLASS, True),
+                                              worker_info=updated_train_dict,
+                                              )
+                cage.overwrite_info(key=str(local_idx), info=updated_train_dict)
+                if updated_train_dict[TEMP_DICT_CAPTIAN]:
+                    # TODO: right now switching agents immediately after seeing captian, probably can do better
+                    break
 
     def clear(self):
         super().clear()
@@ -962,7 +1038,7 @@ if __name__ == '__main__':
                 return [(0, []), (1, [])]
 
 
-    cap = CaptianCoevolution(outcome_fn=MaxOutcome(),
+    cap = CaptianCoevolution(outcome_fn_gen=MaxOutcome,
                              population_sizes=[popsize],
                              team_trainer=TeamTrainer(num_agents=popsize, ),
                              clone_fn=clone_fn
@@ -987,7 +1063,7 @@ if __name__ == '__main__':
 
 
     capzoo = PettingZooCaptianCoevolution(env_constructor=env_constructor,
-                                          outcome_fn=MaxOutcome(),
+                                          outcome_fn_gen=MaxOutcome,
                                           population_sizes=[3, 4, 5],
                                           team_trainer=TeamTrainer(num_agents=3 + 4 + 5),
                                           worker_constructors=[lambda _, env: (WorkerDQN(policy=MlpPolicy,

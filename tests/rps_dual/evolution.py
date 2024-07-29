@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
 
     trainer = CaptianCoevolution(population_sizes=[popsize],
-                                 outcome_fn=DualPreMappedOutcome(agents=agents),
+                                 outcome_fn_gen=lambda: DualPreMappedOutcome(agents=agents),
                                  clone_fn=clone,
                                  mutation_fn=mutate,
                                  team_trainer=TeamTrainer(num_agents=popsize),

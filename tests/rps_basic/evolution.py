@@ -27,14 +27,13 @@ if __name__ == '__main__':
 
     def mutate():
         global agents
-        idc=torch.randint(0, len(agents), (1,))
+        idc = torch.randint(0, len(agents), (1,))
         agents[idc] = torch.randint(0, 3, (1,))
         return idc
 
 
-
     trainer = CaptianCoevolution(population_sizes=[popsize],
-                                 outcome_fn=SingleOutcome(agents=agents),
+                                 outcome_fn_gen=lambda: SingleOutcome(agents=agents),
                                  team_trainer=TeamTrainer(num_agents=popsize),
                                  clone_fn=clone,
                                  mutation_fn=mutate,

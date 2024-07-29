@@ -49,11 +49,11 @@ class easy_pred:
 
 
 class SingleZooOutcome(PettingZooOutcomeFn):
-    def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos, env):
+    def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
         a, b = agent_choices
         a = a[0]
         b = b[0]
-        a_info, b_info = train_infos
+        a_info, b_info = updated_train_infos
         a_info = a_info[0]
         b_info = b_info[0]
 
@@ -119,7 +119,7 @@ def env_constructor(train_infos):
 trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                                          3
                                                          ],
-                                       outcome_fn=SingleZooOutcome(),
+                                       outcome_fn_gen=SingleZooOutcome,
                                        env_constructor=env_constructor,
                                        worker_constructors=[
                                            lambda i, env: (easy_pred(p=.01), {DICT_TRAIN: False,

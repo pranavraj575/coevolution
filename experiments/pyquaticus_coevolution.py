@@ -73,14 +73,14 @@ def custom_rew2(self, params, prev_params):
 
 
 class CTFOutcome(PettingZooOutcomeFn):
-    def _get_outcome_from_agents(self, agent_choices, index_choices, train_infos, env):
+    def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
         agent_choices = agent_choices[0] + agent_choices[1]
-        train_infos = train_infos[0] + train_infos[1]
+        updated_train_infos = updated_train_infos[0] + updated_train_infos[1]
 
         # env is set up so the first k agents are team blue and the last k agents are team red
         alg = multi_agent_algorithm(env=env,
                                     workers={i: agent_choices[i] for i in range(len(agent_choices))},
-                                    worker_infos={i: train_infos[i] for i in range(len(agent_choices))},
+                                    worker_infos={i: updated_train_infos[i] for i in range(len(agent_choices))},
                                     )
         alg.learn(total_timesteps=10000,
                   number_of_eps=1,
@@ -119,15 +119,6 @@ config_dict["sim_speedup_factor"] = 40
 # config_dict['tag_on_wall_collision']=True
 reward_config = {0: custom_rew2, 1: None, 5: None}  # Example Reward Config
 
-
-def env_constructor(render_mode=None):
-    return pyquaticus_v0.PyQuaticusEnv(render_mode=render_mode,
-                                       reward_config=reward_config,
-                                       team_size=1,
-                                       config_dict=config_dict,
-                                       )
-
-
 if __name__ == '__main__':
     DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
@@ -137,7 +128,20 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
+    PARSER.add_argument('--max-time', type=float, required=False, default=420.,
+                        help="max sim time of each episode")
+    PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
+                        help="skips frames to speed up episodes")
 
     args = PARSER.parse_args()
-
+    config_dict["sim_speedup_factor"] = args.sim_speedup_factor
+    config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render else None
+
+
+    def env_constructor():
+        return pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE,
+                                           reward_config=reward_config,
+                                           team_size=1,
+                                           config_dict=config_dict,
+                                           )

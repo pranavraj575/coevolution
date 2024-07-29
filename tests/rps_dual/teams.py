@@ -76,11 +76,11 @@ if __name__ == '__main__':
                                        device=None,
                                    ),
                                    )
-    coevolver = CaptianCoevolution(outcome_fn=DualPairOutcome(agents=agents),
+    coevolver = CaptianCoevolution(outcome_fn_gen=lambda: DualPairOutcome(agents=agents),
                                    population_sizes=[3],
                                    team_trainer=trainer,
                                    clone_fn=None,
-                                   team_sizes=(2,2),
+                                   team_sizes=(2, 2),
                                    )
 
     N = 100
