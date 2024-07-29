@@ -2,7 +2,7 @@ import numpy as np
 
 from stable_baselines3.dqn import DQN
 from stable_baselines3.common.type_aliases import TrainFreq
-from multi_agent_algs.common import conform_shape
+from common import conform_shape
 
 
 class OffPolicy:

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from gymnasium import spaces
 
-from multi_agent_algs.common import conform_shape, conform_act_shape
+from common import conform_shape, conform_act_shape
 from stable_baselines3.common.utils import obs_as_tensor
 
 

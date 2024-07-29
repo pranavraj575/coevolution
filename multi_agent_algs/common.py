@@ -1,7 +1,8 @@
 import gymnasium
 from gymnasium import spaces
 import numpy as np
-
+from stable_baselines3.common.preprocessing import check_for_nested_spaces, is_image_space, \
+    is_image_space_channels_first
 
 def conform_shape(obs, obs_space):
     if len(obs.shape) == 1:

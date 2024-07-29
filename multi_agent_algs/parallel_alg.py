@@ -1,7 +1,9 @@
 from pettingzoo import ParallelEnv
-from multi_agent_algs.common import conform_act_shape
-from multi_agent_algs.multi_agent_alg import MultiAgentAlgorithm
-from multi_agent_algs.ppo.PPO import WorkerPPO
+
+from common import conform_act_shape
+from multi_agent_alg import MultiAgentAlgorithm
+from ppo.PPO import WorkerPPO
+
 from stable_baselines3.ppo import MlpPolicy
 
 

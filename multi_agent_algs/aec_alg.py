@@ -1,6 +1,6 @@
 from pettingzoo import AECEnv
-from multi_agent_algs.multi_agent_alg import MultiAgentAlgorithm
-from multi_agent_algs.ppo.PPO import WorkerPPO
+from multi_agent_alg import MultiAgentAlgorithm
+from ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
 
 

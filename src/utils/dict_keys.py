@@ -1,12 +1,11 @@
+from multi_agent_algs.utils.dict_keys import *
+
 # keeps track of age of each agent
 DICT_AGE = 'age'
 
 # keeps track of whether each agent is a worker
 # i.e. inherits multi_agent_algs/off_policy:OffPolicy or multi_agent_algs/on_policy:OnPolicy
 DICT_IS_WORKER = 'is_worker'
-
-# whether agent is able to be trained/should be trained
-DICT_TRAIN = 'train'
 
 # whether an agent should only collect buffer examples, usually implies DICT_TRAIN is false
 DICT_COLLECT_ONLY = 'collect_only'

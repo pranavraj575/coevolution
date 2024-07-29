@@ -1,10 +1,8 @@
 from pettingzoo import AECEnv, ParallelEnv
-from multi_agent_algs.common import DumEnv
-from stable_baselines3.common.preprocessing import check_for_nested_spaces, is_image_space, \
-    is_image_space_channels_first
-from src.utils.dict_keys import DICT_TRAIN
+from common import DumEnv
+from utils.dict_keys import DICT_TRAIN
 from typing import Union
-from multi_agent_algs.ppo.PPO import WorkerPPO
+from ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
 
 
