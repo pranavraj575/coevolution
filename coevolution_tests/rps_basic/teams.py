@@ -3,8 +3,8 @@ from src.team_trainer import DiscreteInputTrainer
 from src.coevolver import CaptianCoevolution
 from src.language_replay_buffer import ReplayBufferDiskStorage
 from matplotlib import pyplot as plt
-from tests.rps_basic.game import plot_dist_evolution
-from tests.rps_basic.game import SingleOutcome
+from coevolution_tests.rps_basic.game import plot_dist_evolution
+from coevolution_tests.rps_basic.game import SingleOutcome
 
 
 def loss_plot(losses, save_dir=None, show=False):

@@ -185,6 +185,7 @@ class PettingZooOutcomeFn(OutcomeFn):
         """
         pop_idx, local_idx = self.index_conversion(idx)
         collect_only = training_dict.get(DICT_COLLECT_ONLY, False)
+
         agent, saved_info = self.zoo[pop_idx].load_animal(key=str(local_idx),
                                                           load_buffer=not collect_only,
                                                           )
@@ -213,12 +214,14 @@ class PettingZooOutcomeFn(OutcomeFn):
                     )
             ]
         """
+
         if updated_train_infos is None:
             updated_train_infos = [[dict() for _ in team] for team in team_choices]
 
         agent_choices = [
             [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
             for t in zip(team_choices, updated_train_infos)]
+
         index_choices = [[member.item() for member in t] for t in team_choices]
         out = self._get_outcome_from_agents(agent_choices=agent_choices,
                                             index_choices=index_choices,

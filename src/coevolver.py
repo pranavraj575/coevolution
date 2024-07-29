@@ -1,6 +1,6 @@
 import numpy as np
 import torch, shutil, pickle, os
-
+from multiprocessing import Pool
 from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage
@@ -29,7 +29,7 @@ from src.utils.dict_keys import (DICT_AGE,
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 
-from unstable_baselines3.unstable_baselines3.common.common import DumEnv
+from unstable_baselines3.common.common import DumEnv
 
 
 class CoevolutionBase:
@@ -42,6 +42,7 @@ class CoevolutionBase:
                  population_sizes,
                  team_sizes=(1, 1),
                  member_to_population=None,
+                 processes=1,
                  ):
         """
         Args:
@@ -53,7 +54,8 @@ class CoevolutionBase:
                     in the game that take different inputs/have access to different actions
             team_sizes: tuple of number of agents in each team
                 i.e. (1,1) is a 1v1 game
-
+            processes: if >1, uses multiprocessing
+                note that for most display gui stuff, 1 is necessary
             member_to_population: takes team member (team_idx, member_idx) and returns set of
                 populations (subset of (0<i<len(population_sizes))) that the member can be drawn from
                 by default, assumes each member can be drawn from each population
@@ -79,6 +81,7 @@ class CoevolutionBase:
         self.info = {'epochs': 0,
                      'epoch_infos': [],
                      }
+        self.processes = processes
 
     def clear(self):
         """
@@ -222,18 +225,27 @@ class CoevolutionBase:
     def epoch(self, rechoose=True, save_epoch_info=True):
         # TODO: parallelizable
         epoch_info = {
-            'epoch': self.info['epochs'],
+            'epoch': self.epochs,
             'episodes': []
         }
-        for choice, unique in self.create_random_captians():
-            episode_info = self.train_and_update_results(captian_choices=choice, unique=unique)
+        captian_and_unique_choices = list(self.create_random_captians())
+        if self.processes > 1:
+            # TODO: This does not work for some reason
+            with Pool(processes=self.processes) as pool:
+                all_items_to_save = list(pool.map(self._split_train_choice, captian_and_unique_choices))
+        else:
+            all_items_to_save = [self._split_train_choice(choice) for choice in captian_and_unique_choices]
+
+        for items_to_save in all_items_to_save:
+            print('here')
+            episode_info = self.update_results(items_to_save=items_to_save)
             epoch_info['episodes'].append(episode_info)
         if rechoose:
             epoch_info['breeding'] = self.breed()
             epoch_info['mutation'] = self.mutate()
         self.info['epochs'] += 1
         if save_epoch_info:
-            self.info['epoch_infos'].append(epoch_info)
+            self.epoch_infos.append(epoch_info)
 
     def breed(self):
         """
@@ -254,16 +266,38 @@ class CoevolutionBase:
         """
         pass
 
-    def train_and_update_results(self, captian_choices, unique):
+    def _split_train_choice(self, cap_unique):
+        captian_choices, unique = cap_unique
+        return self.train_choice(captian_choices=captian_choices, unique=unique)
+
+    def train_choice(self, captian_choices, unique):
         """
         takes a choice of team captians and trains them in RL environment
         updates variables to reflect result of game(s)
         Args:
             captian_choices: tuple of self.num_teams indices
             unique: whether each captian is unique (each captian will be marked unique exactly once
-        Returns: info
+        Returns: info to be passed to update_results
         """
         raise NotImplementedError
+
+    def update_results(self, items_to_save):
+        """
+        updates results from the output of self.train_choice
+        Args:
+            items_to_save: output of self.train_choice
+        Returns:
+            dict, episode info
+        """
+        raise NotImplementedError
+
+    @property
+    def epochs(self):
+        return self.info['epochs']
+
+    @property
+    def epoch_infos(self):
+        return self.info['epoch_infos']
 
 
 class CaptianCoevolution(CoevolutionBase):
@@ -287,6 +321,7 @@ class CaptianCoevolution(CoevolutionBase):
                  mutation_fn=None,
                  noise_model=None,
                  member_to_population=None,
+                 processes=1,
                  ):
         """
         Args:
@@ -317,6 +352,7 @@ class CaptianCoevolution(CoevolutionBase):
                          population_sizes=population_sizes,
                          team_sizes=team_sizes,
                          member_to_population=member_to_population,
+                         processes=processes,
                          )
         if team_trainer is None:
             team_trainer = TeamTrainer(num_agents=self.N)
@@ -345,10 +381,9 @@ class CaptianCoevolution(CoevolutionBase):
     def set_noise_model(self, noise_model):
         self.noise_model = noise_model
 
-    def train_and_update_results(self, captian_choices, unique):
+    def train_choice(self, captian_choices, unique):
         """
         takes a choice of team captians and trains them in RL environment
-        updates variables to reflect result of game(s)
         Args:
             captian_choices: tuple of self.num_teams indices
             unique: whether each captian is unique (each captian will be marked unique exactly once
@@ -413,7 +448,9 @@ class CaptianCoevolution(CoevolutionBase):
             'team_outcomes': team_outcomes,
             'episode_info': episode_info,
         }
+        return items_to_save
 
+    def update_results(self, items_to_save):
         # save trained agents, if applicable
         self.save_trained_agents(items_to_save['outcome_local_mem'])
 
@@ -571,6 +608,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  mutation_prob=.01,
                  protect_new=20,
                  team_idx_to_agent_id=None,
+                 processes=1,
                  ):
         """
         Args:
@@ -602,6 +640,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             noise_model:
             mutation_prob: probability an agent randomly reinitializes each epoch
             protect_new: protect agents younger than this
+            processes: if >1, uses multiprocessing
+
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
@@ -613,6 +653,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          clone_fn=None,
                          noise_model=noise_model,
                          member_to_population=member_to_population,
+                         processes=processes,
                          )
 
         self.env_constructor = env_constructor

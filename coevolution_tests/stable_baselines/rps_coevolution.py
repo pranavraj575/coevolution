@@ -7,9 +7,9 @@ from stable_baselines3.dqn.dqn import DQN
 
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
 
-from unstable_baselines3.unstable_baselines3.ppo.PPO import WorkerPPO
+from unstable_baselines3.ppo.PPO import WorkerPPO
 
-from unstable_baselines3.unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 import os, sys, torch
 
 from src.game_outcome import PettingZooOutcomeFn
@@ -54,16 +54,16 @@ class SingleZooOutcome(PettingZooOutcomeFn):
         a_info = a_info[0]
         b_info = b_info[0]
 
-        alg = multi_agent_algorithm(policy=MlpPolicy,
-                                    env=env,
-                                    DefaultWorkerClass=Worker,
-                                    worker_infos={'player_0': a_info,
-                                                  'player_1': b_info
-                                                  },
-                                    workers={'player_0': a,
-                                             'player_1': b
-                                             },
-                                    )
+        alg = AutoMultiAgentAlgorithm(policy=MlpPolicy,
+                                      env=env,
+                                      DefaultWorkerClass=Worker,
+                                      worker_infos={'player_0': a_info,
+                                                    'player_1': b_info
+                                                    },
+                                      workers={'player_0': a,
+                                               'player_1': b
+                                               },
+                                      )
         rec = [0, 0]
         obs = [[], []]
         for i in range(1):

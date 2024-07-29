@@ -1,6 +1,6 @@
 import torch
 from src.coevolver import CaptianCoevolution
-from tests.rps_basic.game import plot_dist_evolution, SingleOutcome
+from coevolution_tests.rps_basic.game import plot_dist_evolution, SingleOutcome
 
 if __name__ == '__main__':
     import os, sys

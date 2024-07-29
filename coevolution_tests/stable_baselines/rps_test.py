@@ -7,11 +7,13 @@ from stable_baselines3.dqn.dqn import DQN
 
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
 
-from unstable_baselines3.unstable_baselines3.ppo.PPO import WorkerPPO
+from unstable_baselines3.ppo.PPO import WorkerPPO
+from unstable_baselines3.dqn.DQN import WorkerDQN
+
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from unstable_baselines3.unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 import os, sys
 
 from src.zoo_cage import ZooCage
@@ -47,7 +49,7 @@ class easy_pred:
         return self.choice
 
 
-thingy = multi_agent_algorithm(policy=MlpPolicy,
+thingy = AutoMultiAgentAlgorithm(policy=MlpPolicy,
                                env=env,
                                DefaultWorkerClass=Worker,
                                worker_infos={'player_1': {'train': False}},

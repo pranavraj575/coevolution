@@ -2,7 +2,7 @@ import torch
 from src.team_trainer import DiscreteInputTrainer
 from src.language_replay_buffer import ReplayBufferDiskStorage
 from src.coevolver import CaptianCoevolution
-from tests.rps_dual.game import DualPairOutcome
+from coevolution_tests.rps_dual.game import DualPairOutcome
 import numpy as np
 import itertools
 
@@ -51,7 +51,7 @@ def dist_from_trainer(trainer: DiscreteInputTrainer,
 
 if __name__ == '__main__':
     import os, sys
-    from tests.rps_basic.teams import plot_dist_evolution, loss_plot
+    from coevolution_tests.rps_basic.teams import plot_dist_evolution, loss_plot
     import time
 
     torch.random.manual_seed(69)

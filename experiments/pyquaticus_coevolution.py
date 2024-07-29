@@ -3,7 +3,13 @@ from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
 
 from src.game_outcome import PettingZooOutcomeFn
-from unstable_baselines3.unstable_baselines3.common.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
+from src.coevolver import PettingZooCaptianCoevolution
+
+from unstable_baselines3.ppo import WorkerPPO
+from unstable_baselines3.ppo import MlpPolicy
+
+from src.utils.dict_keys import *
 
 
 def custom_rew(self, params, prev_params):
@@ -68,10 +74,10 @@ class CTFOutcome(PettingZooOutcomeFn):
         updated_train_infos = updated_train_infos[0] + updated_train_infos[1]
 
         # env is set up so the first k agents are team blue and the last k agents are team red
-        alg = multi_agent_algorithm(env=env,
-                                    workers={i: agent_choices[i] for i in range(len(agent_choices))},
-                                    worker_infos={i: updated_train_infos[i] for i in range(len(agent_choices))},
-                                    )
+        alg = AutoMultiAgentAlgorithm(env=env,
+                                      workers={i: agent_choices[i] for i in range(len(agent_choices))},
+                                      worker_infos={i: updated_train_infos[i] for i in range(len(agent_choices))},
+                                      )
         alg.learn(total_timesteps=10000,
                   number_of_eps=1,
                   )
@@ -129,9 +135,38 @@ if __name__ == '__main__':
     RENDER_MODE = 'human' if args.render else None
 
 
-    def env_constructor():
+    def env_constructor(train_infos):
         return pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE,
                                            reward_config=reward_config,
                                            team_size=1,
                                            config_dict=config_dict,
                                            )
+
+
+    trainer = PettingZooCaptianCoevolution(population_sizes=[10,
+                                                             ],
+                                           outcome_fn_gen=CTFOutcome,
+                                           env_constructor=env_constructor,
+                                           worker_constructors=[
+                                               lambda i, env: (WorkerPPO(policy=MlpPolicy,
+                                                                         env=env,
+                                                                         # batch_size=100,
+                                                                         # n_steps=100,
+                                                                         policy_kwargs={
+                                                                             'net_arch': dict(pi=[64, 64],
+                                                                                              vf=[64, 64])
+                                                                         }
+                                                                         ),
+                                                               {DICT_TRAIN: True,
+                                                                DICT_CLONABLE: True,
+                                                                DICT_CLONE_REPLACABLE: True,
+                                                                DICT_MUTATION_REPLACABLE: True,
+                                                                DICT_IS_WORKER: True,
+                                                                }
+                                                               ),
+                                           ],
+                                           zoo_dir=os.path.join(data_folder, 'zoo'),
+                                           protect_new=1000,
+                                           )
+    while trainer.epochs < 5:
+        trainer.epoch()

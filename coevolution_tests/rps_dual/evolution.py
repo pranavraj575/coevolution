@@ -1,7 +1,8 @@
 import torch
 from src.coevolver import CaptianCoevolution
-from tests.rps_basic.game import plot_dist_evolution
-from tests.rps_dual.game import DualPreMappedOutcome
+from coevolution_tests.rps_basic.game import plot_dist_evolution
+from coevolution_tests.rps_dual.game import DualPreMappedOutcome
+
 from src.team_trainer import TeamTrainer
 
 if __name__ == '__main__':
