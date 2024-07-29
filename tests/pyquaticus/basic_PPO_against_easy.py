@@ -15,7 +15,6 @@ from experiments.pyquaticus_coevolution import reward_config, config_dict, CTFOu
 
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
 
-print(DIR)
 data_folder = os.path.join(DIR, 'data', 'basic_ppo_against_easy')
 
 PARSER = argparse.ArgumentParser()
