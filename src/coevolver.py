@@ -29,7 +29,7 @@ from src.utils.dict_keys import (DICT_AGE,
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 
-from multi_agent_algs.common import DumEnv
+from unstable_baselines3.common import DumEnv
 
 
 class CoevolutionBase:

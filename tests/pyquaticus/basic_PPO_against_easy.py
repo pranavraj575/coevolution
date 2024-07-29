@@ -9,7 +9,7 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_CLONE_REPLACABLE,
                                  DICT_MUTATION_REPLACABLE,
                                  )
-from multi_agent_algs.ppo.PPO import WorkerPPO
+from unstable_baselines3.ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
 from experiments.pyquaticus_coevolution import reward_config, config_dict, CTFOutcome, RandPolicy
 

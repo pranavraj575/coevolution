@@ -8,12 +8,12 @@ from stable_baselines3.dqn.dqn import DQN
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
 from stable_baselines3.ppo.ppo import PPO
 
-from multi_agent_algs.dqn.DQN import WorkerDQN
-from multi_agent_algs.ppo.PPO import WorkerPPO
+from unstable_baselines3.dqn.DQN import WorkerDQN
+from unstable_baselines3.ppo.PPO import WorkerPPO
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from multi_agent_algs.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.better_multi_alg import multi_agent_algorithm
 import os, sys
 
 from src.zoo_cage import ZooCage

@@ -11,9 +11,9 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_CLONE_REPLACABLE,
                                  DICT_MUTATION_REPLACABLE,
                                  )
-from multi_agent_algs.ppo.PPO import WorkerPPO
 from stable_baselines3.ppo import MlpPolicy
-from multi_agent_algs.better_multi_alg import multi_agent_algorithm
+from unstable_baselines3.ppo.PPO import WorkerPPO
+from unstable_baselines3.better_multi_alg import multi_agent_algorithm
 
 
 def custom_rew(self, params, prev_params):

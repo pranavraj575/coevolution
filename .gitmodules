@@ -1,3 +1,6 @@
 [submodule "repos/pyquaticus"]
 	path = repos/pyquaticus
 	url = https://github.com/mit-ll-trusted-autonomy/pyquaticus
+[submodule "unstable_baselines3"]
+	path = unstable_baselines3
+	url = https://github.com/pranavraj575/unstable_baselines3

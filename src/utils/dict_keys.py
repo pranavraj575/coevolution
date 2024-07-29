@@ -1,4 +1,8 @@
-from multi_agent_algs.utils.dict_keys import *
+from unstable_baselines3.utils.dict_keys import *
+
+# whether agent is able to be trained/should be trained
+#DICT_TRAIN = DICT_TRAIN
+
 
 # keeps track of age of each agent
 DICT_AGE = 'age'
