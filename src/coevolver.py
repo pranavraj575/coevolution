@@ -304,11 +304,13 @@ class CoevolutionBase:
         else:
             par_pre_ep_dicts, seq_pre_ep_dicts = [], pre_ep_dicts
         # parallel run
-        if par_pre_ep_dicts:
+        if len(par_pre_ep_dicts) > 1:
             # TODO: This does not work when training? (check tests/multiproc)
+            print('parallelizing', len(par_pre_ep_dicts), 'episodes')
             with Pool(processes=self.processes) as pool:
                 par_items_to_save = pool.map(train_episode, par_pre_ep_dicts)
         else:
+            seq_pre_ep_dicts = seq_pre_ep_dicts + par_pre_ep_dicts
             par_items_to_save = []
 
         # seq runs
