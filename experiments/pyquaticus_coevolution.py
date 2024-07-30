@@ -139,7 +139,7 @@ if __name__ == '__main__':
                         help="max sim time of each episode")
     PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
                         help="skips frames to speed up episodes")
-    PARSER.add_argument('--processes', type=int, required=False, default=1,
+    PARSER.add_argument('--processes', type=int, required=False, default=0,
                         help="number of processes to use")
     PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
                         help='identification to add to folder')
@@ -209,7 +209,7 @@ if __name__ == '__main__':
 
         print('elos:', classic_elos[1:])
         print('elo of random agent:', classic_elos[0])
-        if not (trainer.info['epochs'])%10:
+        if not (trainer.info['epochs'])%100:
             print('saving')
             trainer.save(save_dir)
             print('done saving')

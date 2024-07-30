@@ -1,5 +1,5 @@
 import numpy as np
-import torch, shutil, pickle, os,sys
+import torch, shutil, pickle, os, sys
 # from multiprocessing import Pool
 from pathos.multiprocessing import Pool
 from src.team_trainer import TeamTrainer
@@ -27,7 +27,6 @@ from src.utils.dict_keys import (DICT_AGE,
                                  COEVOLUTION_DICT_ELO_CONVERSION,
                                  )
 from src.utils.savele_baselines import load_worker
-
 
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
@@ -105,7 +104,7 @@ class CoevolutionBase:
                  population_sizes,
                  team_sizes=(1, 1),
                  member_to_population=None,
-                 processes=1,
+                 processes=0,
                  ):
         """
         Args:
@@ -117,8 +116,8 @@ class CoevolutionBase:
                     in the game that take different inputs/have access to different actions
             team_sizes: tuple of number of agents in each team
                 i.e. (1,1) is a 1v1 game
-            processes: if >1, uses multiprocessing
-                note that for most display gui stuff, 1 is necessary
+            processes: if positive, uses multiprocessing
+                note that for most display gui stuff, 0 is necessary
             member_to_population: takes team member (team_idx, member_idx) and returns set of
                 populations (subset of (0<i<len(population_sizes))) that the member can be drawn from
                 by default, assumes each member can be drawn from each population
@@ -284,6 +283,7 @@ class CoevolutionBase:
                 uniques[team_idx] = unique
             yield tuple(captains), tuple(uniques)
             # remove captains from unused
+
     def epoch(self, rechoose=True, save_epoch_info=True):
         # TODO: parallelizable
         epoch_info = {
@@ -295,11 +295,11 @@ class CoevolutionBase:
         for i, pre_ep_dict in enumerate(pre_ep_dicts):
             pre_ep_dict['ident'] = str(i)
 
-        if self.processes > 1:
-            # TODO: This is very suspicious
-            with Pool(processes=self.processes) as pool:
-                all_items_to_save = pool.map(train_episode, pre_ep_dicts)
-
+        if self.processes > 0:
+            # TODO: This does not work (check tests/multiproc)
+            #with Pool(processes=self.processes) as pool:
+            #    all_items_to_save = pool.map(train_episode, pre_ep_dicts)
+            raise NotImplementedError
         else:
             all_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in pre_ep_dicts]
 
@@ -382,7 +382,7 @@ class CaptianCoevolution(CoevolutionBase):
                  mutation_fn=None,
                  noise_model=None,
                  member_to_population=None,
-                 processes=1,
+                 processes=0,
                  ):
         """
         Args:
@@ -407,6 +407,7 @@ class CaptianCoevolution(CoevolutionBase):
                 takes T-element multinomial distributions and returns another (with added noise)
                     ((N,T) -> (N,T))
                 updated with set_noise_model
+            processes: if positive, uses multiprocessing
 
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
@@ -666,7 +667,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  protect_new=20,
                  clone_replacements=None,
                  team_idx_to_agent_id=None,
-                 processes=1,
+                 processes=0,
                  temp_zoo_dir=None,
                  ):
         """
@@ -701,7 +702,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             clone_replacements: max number of agents to replace with clones each epoch
                 if None, replaces all potentially
             protect_new: protect agents younger than this
-            processes: if >1, uses multiprocessing
+            processes: if positive, uses multiprocessing
             temp_zoo_dir: place to store temp files
                 if None, uses zoo_dir/temp_cage
 
