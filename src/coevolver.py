@@ -6,6 +6,7 @@ from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_AGE,
+                                 DICT_MUTATION_AGE,
                                  DICT_CLONABLE,
                                  DICT_MUTATION_REPLACABLE,
                                  DICT_CLONE_REPLACABLE,
@@ -686,7 +687,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  team_idx_to_agent_id=None,
                  processes=0,
                  temp_zoo_dir=None,
-                 max_per_ep=float('inf'),
+                 max_steps_per_ep=float('inf'),
                  ):
         """
         Args:
@@ -723,6 +724,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             processes: if positive, uses multiprocessing
             temp_zoo_dir: place to store temp files
                 if None, uses zoo_dir/temp_cage
+            max_steps_per_ep: maximum steps per episode, used to decide whether to parallelize
 
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
@@ -785,23 +787,38 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             os.makedirs(self.temp_zoo_dir)
         if reinit_agents:
             self.init_agents()
+        self.set_mutation_prob(mutation_prob=mutation_prob)
+        self.set_protect_new(protect_new=protect_new)
+        self.set_clone_replacements(clone_replacements=clone_replacements)
+        self.set_max_steps_per_ep(max_steps_per_ep=max_steps_per_ep)
 
-        self.info['mutation_prob'] = mutation_prob
-        self.info['protect_new'] = protect_new
-        self.info['clone_replacements'] = clone_replacements
-        self.max_per_ep = max_per_ep
+    @property
+    def max_steps_per_ep(self):
+        return self.info['max_steps_per_ep']
+
+    def set_max_steps_per_ep(self, max_steps_per_ep):
+        self.info['max_steps_per_ep'] = max_steps_per_ep
 
     @property
     def clone_replacements(self):
         return self.info['clone_replacements']
 
+    def set_clone_replacements(self, clone_replacements):
+        self.info['clone_replacements'] = clone_replacements
+
     @property
     def mutation_prob(self):
         return self.info['mutation_prob']
 
+    def set_mutation_prob(self, mutation_prob):
+        self.info['mutation_prob'] = mutation_prob
+
     @property
     def protect_new(self):
         return self.info['protect_new']
+
+    def set_protect_new(self, protect_new):
+        self.info['protect_new'] = protect_new
 
     def create_outcome_fn(self):
         """
@@ -1067,7 +1084,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
         mutatable_idxs = list(
             self._get_valid_idxs(validity_fn=lambda info: info.get(DICT_MUTATION_REPLACABLE, True) and
-                                                          (info.get(DICT_AGE, 0) > self.protect_new)
+                                                          (info.get(DICT_MUTATION_AGE, 0) > self.protect_new)
                                  ))
         # get the number to mutate, choose each with probability self.mutation_prob
         # equivalent to the sum of a bunch of bernoulli variables
@@ -1105,6 +1122,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                       keep_old_buff=False,
                       update_with_old_buff=True,
                       elo=None,
+                      mutated=False,
                       ):
         """
         replaces agent at specified idx with replacement agent
@@ -1120,6 +1138,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 only works if both both agents share a buffer type
                     (i.e. both OnPolicyAlgorithm or both OffPolicyAlgorithm)
             elo: elo to set new agent to
+            mutated: whether agent was mutated
         """
         replacement_agent, replacement_info = replacement
         old_worker = None
@@ -1151,6 +1170,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         position_dependent_keys.add(DICT_POSITION_DEPENDENT)
 
         replacement_info[DICT_AGE] = 0
+        if mutated:
+            replacement_info[DICT_MUTATION_AGE] = 0
         # update replacement dictionary with elements in position_dependent_keys dict
         for key in position_dependent_keys:
             if key in info:
@@ -1212,6 +1233,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
     def age_up_agent(self, pop_idx, local_idx):
         info = self.get_info(pop_local_idx=(pop_idx, local_idx))
         info[DICT_AGE] = info.get(DICT_AGE, 0) + 1
+        info[DICT_MUTATION_AGE] = info.get(DICT_MUTATION_AGE, 0) + 1
         self.zoo[pop_idx].overwrite_info(key=str(local_idx), info=info)
 
     def parallel_seq_split(self, all_items_to_save):
@@ -1237,7 +1259,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                             capacity = agent.rollout_buffer.buffer_size - agent.rollout_buffer.size()
                         else:
                             raise Exception("what alg is this", type(agent))
-                        if self.max_per_ep >= capacity:
+                        if self.max_steps_per_ep >= capacity:
                             seq = True
                             break
                 if seq:

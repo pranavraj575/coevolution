@@ -7,6 +7,9 @@ from unstable_baselines3.utils.dict_keys import *
 # keeps track of age of each agent
 DICT_AGE = 'age'
 
+# keeps track of time since last mutation for each agent
+DICT_MUTATION_AGE = 'mutation_age'
+
 # keeps track of whether each agent is a worker
 # i.e. inherits multi_agent_algs/off_policy:OffPolicy or multi_agent_algs/on_policy:OnPolicy
 DICT_IS_WORKER = 'is_worker'

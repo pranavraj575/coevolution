@@ -1,7 +1,4 @@
-import argparse
-import os
-import sys
-
+import argparse, os, sys, ast
 import torch.random
 from unstable_baselines3 import WorkerPPO, WorkerDQN
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
@@ -113,8 +110,6 @@ class RandPolicy:
 
 config_dict = config_dict_std
 config_dict["max_screen_size"] = (float('inf'), float('inf'))
-config_dict["max_time"] = 420.
-config_dict["sim_speedup_factor"] = 40
 # config_dict['tag_on_wall_collision']=True
 reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
 
@@ -139,6 +134,9 @@ if __name__ == '__main__':
     PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
                         help="checkpoint freq")
 
+    PARSER.add_argument('--epochs', type=int, required=False, default=5000,
+                        help="epochs to train for")
+
     PARSER.add_argument('--rand-agents', type=int, required=False, default=25,
                         help="number of random agents to use")
     PARSER.add_argument('--ppo-agents', type=int, required=False, default=25,
@@ -147,6 +145,9 @@ if __name__ == '__main__':
                         help="number of dqn agents to use")
     PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
                         help="replay buffer capacity")
+
+    PARSER.add_argument('--net-arch', action='store', required=False, default='128,64',
+                        help="hidden layers of network, should be readable as a list or tuple")
 
     PARSER.add_argument('--split-learners', action='store_true', required=False,
                         help="learning agents types each go in their own population to avoid interspecies replacement")
@@ -174,13 +175,16 @@ if __name__ == '__main__':
     ppo_cnt = args.ppo_agents
     dqn_cnt = args.dqn_agents
     buffer_cap = args.replay_buffer_capacity
+    net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
+
     ident = (args.ident +
              '_rand_agents_' + str(rand_cnt) +
              '_ppo_agents_' + str(ppo_cnt) +
              '_dqn_agents_' + str(dqn_cnt) +
              '_replay_buffer_capacity_' + str(buffer_cap) +
              '_split_learners_' + str(args.split_learners) +
-             '_protect_new_' + str(args.protect_new)
+             '_protect_new_' + str(args.protect_new) +
+             '_net_arch_' + '_'.join([str(s) for s in net_arch])
              )
 
     data_folder = os.path.join(DIR, 'data', ident)
@@ -208,8 +212,10 @@ if __name__ == '__main__':
                  DICT_IS_WORKER: True,
                  }
     ppokwargs = dict()
-    # ppokwargs['n_steps'] = 64
-    # ppokwargs['batch_size'] = 64
+    policy_kwargs = {
+        'net_arch': dict(pi=net_arch,
+                         vf=net_arch),
+    }
     create_ppo = lambda i, env: (WorkerPPO(policy=PPOMlp,
                                            env=env,
                                            policy_kwargs={
@@ -256,9 +262,9 @@ if __name__ == '__main__':
 
     max_cores = len(os.sched_getaffinity(0))
     if args.display:
-        proc=0
+        proc = 0
     else:
-        proc=args.processes
+        proc = args.processes
     trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
@@ -267,8 +273,8 @@ if __name__ == '__main__':
                                            protect_new=args.protect_new,
                                            processes=proc,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
-                                           max_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
-                                                       config_dict['sim_speedup_factor'])
+                                           max_steps_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
+                                                             config_dict['sim_speedup_factor'])
                                            )
 
     if not args.reset and os.path.exists(save_dir):
@@ -312,7 +318,7 @@ if __name__ == '__main__':
                       pre_ep_dicts=[ep],
                       )
     else:
-        while trainer.epochs < 5000:
+        while trainer.epochs < args.epochs:
             tim = time.time()
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
             trainer.epoch()
