@@ -305,7 +305,7 @@ class CoevolutionBase:
             par_pre_ep_dicts, seq_pre_ep_dicts = self.parallel_seq_split(pre_ep_dicts)
         else:
             par_pre_ep_dicts, seq_pre_ep_dicts = [], pre_ep_dicts
-        print(len(par_pre_ep_dicts), len(seq_pre_ep_dicts))
+
         # parallel run
         if par_pre_ep_dicts:
             # TODO: This does not work when training? (check tests/multiproc)
