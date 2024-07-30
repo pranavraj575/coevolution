@@ -279,8 +279,9 @@ if __name__ == '__main__':
 
     if args.display:
         elos = trainer.classic_elos.numpy().copy()
-        best = np.argmax(elos)
         worst = np.argmin(elos)
+        elos[worst] = -np.inf
+        best = np.argmax(elos)
         elos[best] = -np.inf
         second_best = np.argmax(elos)
         print()
