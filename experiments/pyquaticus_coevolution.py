@@ -116,7 +116,7 @@ config_dict["max_screen_size"] = (float('inf'), float('inf'))
 config_dict["max_time"] = 420.
 config_dict["sim_speedup_factor"] = 40
 # config_dict['tag_on_wall_collision']=True
-reward_config = {0: custom_rew2, 1: None, 5: None}  # Example Reward Config
+reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
 
 if __name__ == '__main__':
     import time
@@ -289,14 +289,14 @@ if __name__ == '__main__':
         print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
         print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
 
-        print('playing worst (blue) against best (red)')
+        print('playing worst (blue, '+typer(worst)+') against best (red, '+typer(best)+')')
 
         ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
         trainer.epoch(rechoose=False,
                       save_epoch_info=False,
                       pre_ep_dicts=[ep],
                       )
-        print('playing second best (blue) against best (red)')
+        print('playing second best (blue, '+typer(second_best)+') against best (red, '+typer(best)+')')
         ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
         trainer.epoch(rechoose=False,
                       save_epoch_info=False,
