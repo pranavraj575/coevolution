@@ -144,6 +144,8 @@ if __name__ == '__main__':
     PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
                         help='identification to add to folder')
 
+    PARSER.add_argument('--display', action='store_true', required=False,
+                        help="skip training and display saved model (prob should use with --render and --processes 0)")
     args = PARSER.parse_args()
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
@@ -200,38 +202,35 @@ if __name__ == '__main__':
                                            protect_new=300,
                                            processes=args.processes,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
-                                           max_per_ep=(1+config_dict['render_fps']*config_dict['max_time']/
+                                           max_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
                                                        config_dict['sim_speedup_factor'])
                                            )
 
     if os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
-    # trainer.info['protect_new']=200
-    while trainer.epochs < 5000:
-        tim = time.time()
-        print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
-        trainer.epoch()
-        classic_elos = trainer.classic_elos
 
-        print('elos:', classic_elos[1:])
-        print('elo of random agent:', classic_elos[0])
-        if not (trainer.info['epochs'])%10:
-            print('saving')
-            trainer.save(save_dir)
-            print('done saving')
-        print('time', time.time() - tim)
-        print()
+    if args.display:
+        best = np.argmax(trainer.classic_elos)
+        ep = trainer.pre_episode_generation(captian_choices=(0, best), unique=(True, True))
+        trainer.epoch(rechoose=False,
+                      save_epoch_info=False,
+                      pre_ep_dicts=[ep],
+                      )
+    else:
+        while trainer.epochs < 5000:
+            tim = time.time()
+            print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
+            trainer.epoch()
+            classic_elos = trainer.classic_elos
 
+            print('elos:', classic_elos[1:])
+            print('elo of random agent:', classic_elos[0])
+            if not (trainer.info['epochs'])%10:
+                print('saving')
+                trainer.save(save_dir)
+                print('done saving')
+            print('time', time.time() - tim)
+            print()
 
-    def env_constructor2(train_infos):
-        return pyquaticus_v0.PyQuaticusEnv(render_mode='human',
-                                           reward_config=reward_config,
-                                           team_size=1,
-                                           config_dict=config_dict,
-                                           )
-
-
-    trainer.env_constructor = env_constructor2
-    trainer.epoch()
     trainer.clear()

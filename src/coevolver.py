@@ -288,14 +288,15 @@ class CoevolutionBase:
     def parallel_seq_split(self, all_items_to_save):
         return all_items_to_save, []
 
-    def epoch(self, rechoose=True, save_epoch_info=True):
+    def epoch(self, rechoose=True, save_epoch_info=True, pre_ep_dicts=None):
         # TODO: parallelizable
         epoch_info = {
             'epoch': self.epochs,
             'episodes': []
         }
-        pre_ep_dicts = [self.pre_episode_generation(captian_choices=cap_choice, unique=unq)
-                        for cap_choice, unq in self.create_random_captians()]
+        if pre_ep_dicts is None:
+            pre_ep_dicts = [self.pre_episode_generation(captian_choices=cap_choice, unique=unq)
+                            for cap_choice, unq in self.create_random_captians()]
         for i, pre_ep_dict in enumerate(pre_ep_dicts):
             pre_ep_dict['ident'] = str(i)
 
