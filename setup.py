@@ -10,7 +10,7 @@ setup(
         'matplotlib',
         'pettingzoo',
         'pathos',
-        'torch',
+        'torch==2.3.1',# TODO: test which versions of torch work with pathos
         'stable-baselines3',
         'unstable-baselines3',
     ],

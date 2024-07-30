@@ -1,5 +1,5 @@
 import numpy as np
-import torch, shutil, pickle, os
+import torch, shutil, pickle, os,sys
 # from multiprocessing import Pool
 from pathos.multiprocessing import Pool
 from src.team_trainer import TeamTrainer
@@ -32,6 +32,7 @@ from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 
 from unstable_baselines3.common.common import DumEnv
 
+sys.setrecursionlimit(2000)
 
 def train_episode(pre_episode_dict):
     """
@@ -54,20 +55,24 @@ def train_episode(pre_episode_dict):
         pre_episode_dict: object passed from pre_episode_generation
     Returns: info to be passed to update_results
     """
-    (teams,
+    (ident,
+     teams,
      agents,
      train_infos,
      env,
      outcome_fn,
      episode_info,
-     captian_choices) = (pre_episode_dict[key] for key in ('teams',
-                                                           'agents',
-                                                           'train_infos',
-                                                           'env',
-                                                           'outcome_fn',
-                                                           'episode_info',
-                                                           'captian_choices',))
-
+     captian_choices,
+     ) = (pre_episode_dict[key] for key in ('ident',
+                                            'teams',
+                                            'agents',
+                                            'train_infos',
+                                            'env',
+                                            'outcome_fn',
+                                            'episode_info',
+                                            'captian_choices',
+                                            ))
+    outcome_fn.set_ident(ident=ident)  # sets a unique save directory
     # collect result
     team_outcomes = outcome_fn.get_outcome(team_choices=teams,
                                            agent_choices=agents,
@@ -286,6 +291,8 @@ class CoevolutionBase:
         }
         pre_ep_dicts = [self.pre_episode_generation(captian_choices=cap_choice, unique=unq)
                         for cap_choice, unq in self.create_random_captians()]
+        for i, pre_ep_dict in enumerate(pre_ep_dicts):
+            pre_ep_dict['ident'] = str(i)
 
         if self.processes > 1:
             # TODO: This is very suspicious
@@ -484,7 +491,8 @@ class CaptianCoevolution(CoevolutionBase):
         outcome_fn = self.create_outcome_fn()
         env = self.env_constructor(train_infos)
 
-        return {'teams': teams,
+        return {'ident': 0,
+                'teams': teams,
                 'agents': None,
                 'train_infos': train_infos,
                 'env': env,
@@ -657,6 +665,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  clone_replacements=None,
                  team_idx_to_agent_id=None,
                  processes=1,
+                 temp_zoo_dir=None,
                  ):
         """
         Args:
@@ -691,6 +700,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 if None, replaces all potentially
             protect_new: protect agents younger than this
             processes: if >1, uses multiprocessing
+            temp_zoo_dir: place to store temp files
+                if None, uses zoo_dir/temp_cage
 
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
@@ -746,6 +757,11 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         ]
 
         self.zoo_dir = zoo_dir
+        self.temp_zoo_dir = temp_zoo_dir
+        if self.temp_zoo_dir is None:
+            self.temp_zoo_dir = os.path.join(zoo_dir, 'temp_cage')
+        if not os.path.exists(self.temp_zoo_dir):
+            os.makedirs(self.temp_zoo_dir)
         if reinit_agents:
             self.init_agents()
 
@@ -776,6 +792,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         outcome_fn.set_zoo_dirs_and_pop_sizes(zoo_dirs=[zoocage.zoo_dir for zoocage in self.zoo],
                                               population_sizes=self.population_sizes,
                                               )
+        outcome_fn.set_dir(self.temp_zoo_dir)
         return outcome_fn
 
     def index_to_agent(self, idx, training_dict):
@@ -814,11 +831,16 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 is a dict of (global idx -> (trained agent, updated agent info))
         """
         for global_idx in outcome_fn_local_mem:
-            for agent, updated_train_dict in outcome_fn_local_mem[global_idx]:
-
+            for agent_dir, agent, updated_train_dict in outcome_fn_local_mem[global_idx]:
                 pop_idx, local_idx = self.index_to_pop_index(global_idx)
                 cage: ZooCage = self.zoo[pop_idx]
                 if updated_train_dict.get(DICT_IS_WORKER, True):
+                    if agent is None:
+                        f = open(os.path.join(agent_dir, 'class.pkl'), 'rb')
+                        WorkerClass=pickle.load(f)
+                        f.close()
+                        agent=WorkerClass.load(os.path.join(agent_dir, 'model.zip'))
+
                     if updated_train_dict.get(DICT_COLLECT_ONLY, False):
                         cage.update_worker_buffer(local_worker=agent,
                                                   worker_key=str(local_idx),
@@ -838,6 +860,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     def clear(self):
         super().clear()
+        shutil.rmtree(self.temp_zoo_dir)
         self.clear_zoo()
 
     def save(self, save_dir):

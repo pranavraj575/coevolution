@@ -1,4 +1,4 @@
-import torch
+import torch, os, pickle
 from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_TRAIN,
@@ -6,7 +6,7 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_SAVE_BUFFER,
                                  DICT_SAVE_CLASS,
                                  )
-from collections import defaultdict
+from stable_baselines3.common.base_class import BaseAlgorithm
 
 
 class PlayerInfo:
@@ -117,6 +117,10 @@ class OutcomeFn:
         usually 1 is win, 0.5 is tie (for two team games) and 0 is loss
     """
 
+    def __init__(self):
+        super().__init__()
+        self.ident = 0
+
     def get_outcome(self, team_choices, agent_choices, updated_train_infos=None, env=None):
         """
         Args:
@@ -147,6 +151,12 @@ class OutcomeFn:
         """
         return None
 
+    def set_ident(self, ident):
+        self.ident = ident
+
+    def set_dir(self, dir):
+        self.dir = dir
+
 
 class PettingZooOutcomeFn(OutcomeFn):
     """
@@ -156,6 +166,7 @@ class PettingZooOutcomeFn(OutcomeFn):
     def __init__(self):
         super().__init__()
         self.local_mem = dict()
+        self.counter = 0
 
     def set_zoo_dirs_and_pop_sizes(self, zoo_dirs, population_sizes):
         """
@@ -219,10 +230,10 @@ class PettingZooOutcomeFn(OutcomeFn):
 
         if updated_train_infos is None:
             updated_train_infos = [[dict() for _ in team] for team in team_choices]
-
-        #agent_choices = [
-        #    [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
-        #    for t in zip(team_choices, updated_train_infos)]
+        if agent_choices is None:
+            agent_choices = [
+                [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
+                for t in zip(team_choices, updated_train_infos)]
 
         index_choices = [[member.item() for member in t] for t in team_choices]
         out = self._get_outcome_from_agents(agent_choices=agent_choices,
@@ -244,6 +255,7 @@ class PettingZooOutcomeFn(OutcomeFn):
         """
         local_local_mem = self.local_mem
         self.local_mem = dict()
+        self.counter = 0
         return local_local_mem
 
     def _save_agents_to_local_mem(self, agent_choices, index_choices, updated_train_infos):
@@ -257,9 +269,26 @@ class PettingZooOutcomeFn(OutcomeFn):
         """
         for t in zip(agent_choices, index_choices, updated_train_infos):
             for agent, global_idx, updated_train_dict in zip(*t):
+                is_worker = updated_train_dict.get(DICT_IS_WORKER, True)
+                agent_dir = os.path.join(self.dir, str(self.ident), str(self.counter))
+                if not os.path.exists(agent_dir):
+                    os.makedirs(agent_dir)
+                if is_worker:
+                    if isinstance(agent, BaseAlgorithm):
+                        # if we can save like this, its better
+                        agent.save(path=os.path.join(agent_dir, 'model.zip'))
+                        cls = type(agent)
+                        f = open(os.path.join(agent_dir, 'class.pkl'), 'wb')
+                        pickle.dump(cls, f)
+                        f.close()
+                        agent = None
+                else:
+                    agent = None
+
                 if global_idx not in self.local_mem:
                     self.local_mem[global_idx] = []
-                self.local_mem[global_idx].append((agent, updated_train_dict))
+                self.local_mem[global_idx].append((agent_dir, agent, updated_train_dict))
+                self.counter += 1
 
     def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
         """
