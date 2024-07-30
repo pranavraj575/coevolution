@@ -2,9 +2,9 @@ import torch, os, pickle, shutil
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
-from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
 from src.utils.dict_keys import DICT_IS_WORKER
+from src.utils.savele_baselines import overwrite_worker, load_worker, worker_exists
 
 
 class ZooCage:
@@ -78,27 +78,9 @@ class ZooCage:
         Returns: loaded worker (SB3 algorithm)
         """
         full_dir = os.path.join(self.zoo_dir, worker_key)
-
-        worker_info = self.load_info(key=worker_key)
-
-        if WorkerClass is None:
-            f = open(os.path.join(full_dir, 'class.pkl'), 'rb')
-            WorkerClass = pickle.load(f)
-            f.close()
-        worker = WorkerClass.load(os.path.join(full_dir, 'worker'))
-        if load_buffer:
-            if isinstance(worker, OffPolicyAlgorithm):
-                buff_file = os.path.join(full_dir, 'replay_buffer.pkl')
-                if os.path.exists(buff_file):
-                    worker.load_replay_buffer(buff_file)
-            elif isinstance(worker, OnPolicyAlgorithm):
-                buff_file = os.path.join(full_dir, 'rollout_buffer.pkl')
-                if os.path.exists(buff_file):
-                    worker.rollout_buffer = load_from_pkl(buff_file)
-                    worker.rollout_buffer.device = worker.device
-            else:
-                print('WHAT ALGORITHM IS THIS', worker)
-        return worker, worker_info
+        return load_worker(save_dir=full_dir,
+                           WorkerClass=WorkerClass,
+                           load_buffer=load_buffer)
 
     def overwrite_worker(self,
                          worker,
@@ -115,37 +97,19 @@ class ZooCage:
             save_buffer: whether to save replay buffer, if available
             save_class: whether to save class of algorithm (suprised this works)
         """
+
         full_dir = os.path.join(self.zoo_dir, worker_key)
-        if os.path.exists(full_dir):
-            shutil.rmtree(full_dir)
-        os.makedirs(full_dir)
-        # worker inherits save method from stable baselines
-        worker.save(os.path.join(full_dir, 'worker.zip'))
-        if save_buffer:
-            if isinstance(worker, OffPolicyAlgorithm):
-                # worker has a replay buffer that should also probably be saved
-                worker.save_replay_buffer(os.path.join(full_dir, 'replay_buffer.pkl'))
-            elif isinstance(worker, OnPolicyAlgorithm):
-                save_to_pkl(os.path.join(full_dir, 'rollout_buffer.pkl'), worker.rollout_buffer)
-            else:
-                print('WHAT ALGORITHM IS THIS', worker)
-        if save_class:
-            cls = type(worker)
-            f = open(os.path.join(full_dir, 'class.pkl'), 'wb')
-            pickle.dump(cls, f)
-            f.close()
-        if worker_info is None:
-            worker_info = dict()
-        worker_info[DICT_IS_WORKER] = True
-        self.overwrite_info(key=worker_key,
-                            info=worker_info,
-                            )
-        self.saved_workers.add(worker_key)
+
+        return overwrite_worker(worker=worker,
+                                worker_info=worker_info,
+                                save_dir=full_dir,
+                                save_buffer=save_buffer,
+                                save_class=save_class,
+                                )
 
     def worker_exists(self, worker_key: str):
         full_dir = os.path.join(self.zoo_dir, worker_key)
-        return (os.path.exists(os.path.join(full_dir, 'info.pkl')) and
-                os.path.exists(os.path.join(full_dir, 'worker.zip')))
+        return worker_exists(save_dir=full_dir)
 
     def _update_off_policy_buffer(self, buffer, local_buffer):
         """
@@ -358,7 +322,7 @@ class ZooCage:
 
 if __name__ == '__main__':
     import sys
-    from unstable_baselines3.unstable_baselines3.ppo.PPO import WorkerPPO
+    from unstable_baselines3.ppo.PPO import WorkerPPO
     from stable_baselines3.ppo import MlpPolicy
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))

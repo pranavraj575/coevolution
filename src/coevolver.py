@@ -26,6 +26,8 @@ from src.utils.dict_keys import (DICT_AGE,
                                  COEVOLUTION_DICT_ELO_UPDATE,
                                  COEVOLUTION_DICT_ELO_CONVERSION,
                                  )
+from src.utils.savele_baselines import load_worker
+
 
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
@@ -836,10 +838,10 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 cage: ZooCage = self.zoo[pop_idx]
                 if updated_train_dict.get(DICT_IS_WORKER, True):
                     if agent is None:
-                        f = open(os.path.join(agent_dir, 'class.pkl'), 'rb')
-                        WorkerClass=pickle.load(f)
-                        f.close()
-                        agent=WorkerClass.load(os.path.join(agent_dir, 'model.zip'))
+                        load_worker(save_dir=agent_dir,
+                                    WorkerClass=None,
+                                    load_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
+                                    )
 
                     if updated_train_dict.get(DICT_COLLECT_ONLY, False):
                         cage.update_worker_buffer(local_worker=agent,
@@ -977,7 +979,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             # distribution of agents based on how bad they are
             candidate_target_dist = self.get_inverted_distribution(elos=self.captian_elos[candidate_target_idxs])
             # pick a random subset of target agents to replace based on this distribution
-            target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace, replacement=False)
+            target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace[pop_idx], replacement=False)
             # these are the global indexes of the targets
             target_global_idxs = [candidate_target_idxs[target_idx_idx] for target_idx_idx in target_idx_idxs]
             target_elos = [self.captian_elos[target_global_idx] for target_global_idx in target_global_idxs]
@@ -1010,7 +1012,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                        keep_old_buff=clone_info.get(DICT_KEEP_OLD_BUFFER, False),
                                        update_with_old_buff=clone_info.get(DICT_UPDATE_WITH_OLD_BUFFER, True),
                                        )
-                    breed_dic['number_replaced'] += 1
+                    breed_dic['number_replaced'][pop_idx] += 1
                     breed_dic['target_agents'].append(target_global_idx)
                     breed_dic['cloned_agents'].append(clone_global_idx)
                     breed_dic['cloned_elos'].append(clone_elo)

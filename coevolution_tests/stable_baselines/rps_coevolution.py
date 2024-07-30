@@ -7,7 +7,7 @@ from stable_baselines3.dqn.dqn import DQN
 
 from stable_baselines3.ppo.policies import MlpPolicy as PPOPolicy
 
-from unstable_baselines3.ppo.PPO import WorkerPPO
+from unstable_baselines3 import WorkerPPO, WorkerDQN
 
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 import os, sys, torch
@@ -22,11 +22,16 @@ from src.utils.dict_keys import (DICT_TRAIN,
 from src.coevolver import PettingZooCaptianCoevolution
 
 Worker = WorkerPPO
-
+kwargs = {'gamma': 0.,
+          }
 if issubclass(Worker, DQN):
     MlpPolicy = DQNPolicy
+    kwargs['learning_starts'] = 64
+    kwargs['batch_size'] = 64
 else:
     MlpPolicy = PPOPolicy
+    kwargs['n_steps'] = 64
+    kwargs['batch_size'] = 64
 
 
 class always_0:
@@ -40,6 +45,7 @@ class easy_pred:
         self.p = p
 
     def get_action(self, obs, *args, **kwargs):
+        return 0
         if obs == 3 or np.random.random() < self.p:
             self.choice = np.random.randint(3)
         return self.choice
@@ -56,7 +62,7 @@ class SingleZooOutcome(PettingZooOutcomeFn):
 
         alg = AutoMultiAgentAlgorithm(policy=MlpPolicy,
                                       env=env,
-                                      DefaultWorkerClass=Worker,
+                                      # DefaultWorkerClass=Worker,
                                       worker_infos={'player_0': a_info,
                                                     'player_1': b_info
                                                     },
@@ -67,8 +73,9 @@ class SingleZooOutcome(PettingZooOutcomeFn):
         rec = [0, 0]
         obs = [[], []]
         for i in range(1):
-            alg.learn_episode(total_timesteps=5)
+            alg.learn(total_timesteps=5)
             hist = alg.env.unwrapped.history
+
             for h in range(5):
                 game = hist[h*2:h*2 + 2]
                 diff = (game[0] - game[1])%3
@@ -80,7 +87,7 @@ class SingleZooOutcome(PettingZooOutcomeFn):
             obs[0].append(torch.rand(1))
             obs[1].append(torch.rand(1))
 
-        if True:
+        if False:
             if any([isinstance(c, easy_pred) or isinstance(c, always_0) for c in (a, b)]):
                 print(rec)
         if rec[0] == rec[1]:  # the agents tied
@@ -112,9 +119,9 @@ def env_constructor(train_infos):
     return env
 
 
-trainer = PettingZooCaptianCoevolution(population_sizes=[3,
-                                                         3
-                                                         ],
+pop_sizes = [3, 5]
+
+trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
                                        outcome_fn_gen=SingleZooOutcome,
                                        env_constructor=env_constructor,
                                        worker_constructors=[
@@ -126,18 +133,22 @@ trainer = PettingZooCaptianCoevolution(population_sizes=[3,
                                                                               }),
                                            lambda i, env: (Worker(policy=MlpPolicy,
                                                                   env=env,
-                                                                  n_steps=64,
-                                                                  batch_size=64,
-                                                                  gamma=0.,
+                                                                  **kwargs,
                                                                   ),
-                                                           {DICT_MUTATION_REPLACABLE: False, })
+                                                           {DICT_TRAIN: True,
+                                                            DICT_CLONABLE: True,
+                                                            DICT_CLONE_REPLACABLE: True,
+                                                            DICT_MUTATION_REPLACABLE: False,
+                                                            DICT_IS_WORKER: True,
+                                                            })
                                        ],
                                        zoo_dir=os.path.join(DIR, 'data', 'rps_zoo_coevolution_test'),
                                        member_to_population=lambda team_idx, member_idx: {team_idx},
+                                       processes=1,
                                        )
-save_dir = os.path.join(DIR, 'data', 'save', 'rps_coevolution')
-if os.path.exists(save_dir):
-    trainer.load(save_dir=save_dir)
+save_dir = os.path.join(DIR, 'data', 'save', 'rps_coevolution' + str(tuple(pop_sizes)))
+# if os.path.exists(save_dir):
+#    trainer.load(save_dir=save_dir)
 for epohc in range(1000):
     # print('starting epoch', trainer.info['epochs'])
     trainer.epoch()
@@ -145,5 +156,7 @@ for epohc in range(1000):
         # print('saving')
         trainer.save(save_dir)
         # print('done saving')
+    print('easy agents elos:', trainer.classic_elos[:pop_sizes[0]])
+    print('elos:', trainer.classic_elos[pop_sizes[0]:])
 
 trainer.clear()

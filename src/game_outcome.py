@@ -7,6 +7,7 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_SAVE_CLASS,
                                  )
 from stable_baselines3.common.base_class import BaseAlgorithm
+from src.utils.savele_baselines import overwrite_worker
 
 
 class PlayerInfo:
@@ -274,14 +275,12 @@ class PettingZooOutcomeFn(OutcomeFn):
                 if not os.path.exists(agent_dir):
                     os.makedirs(agent_dir)
                 if is_worker:
-                    if isinstance(agent, BaseAlgorithm):
-                        # if we can save like this, its better
-                        agent.save(path=os.path.join(agent_dir, 'model.zip'))
-                        cls = type(agent)
-                        f = open(os.path.join(agent_dir, 'class.pkl'), 'wb')
-                        pickle.dump(cls, f)
-                        f.close()
-                        agent = None
+                    overwrite_worker(worker=agent,
+                                     worker_info=updated_train_dict,
+                                     save_dir=agent_dir,
+                                     save_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
+                                     save_class=updated_train_dict.get(DICT_SAVE_CLASS, True),
+                                     )
                 else:
                     agent = None
 

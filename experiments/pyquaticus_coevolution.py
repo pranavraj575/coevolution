@@ -133,22 +133,27 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
+    PARSER.add_argument('--agents', type=int, required=False, default=49,
+                        help="number of ppo agents to use")
     PARSER.add_argument('--max-time', type=float, required=False, default=420.,
                         help="max sim time of each episode")
     PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
                         help="skips frames to speed up episodes")
     PARSER.add_argument('--processes', type=int, required=False, default=1,
                         help="number of processes to use")
-    PARSER.add_argument('--ident', action='store', required=False, default='',
-                        )
+    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
+                        help='identification to add to folder')
 
     args = PARSER.parse_args()
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render else None
 
-    data_folder = os.path.join(DIR, 'data', args.ident + 'pyquaticus_coevolution')
-    save_dir = os.path.join(DIR, 'data', 'save', args.ident + 'pyquaticus_coevolution')
+    ppo_cnt = args.agents
+    ident = args.ident + '_agents_' + str(ppo_cnt)
+
+    data_folder = os.path.join(DIR, 'data', ident)
+    save_dir = os.path.join(DIR, 'data', 'save', ident)
 
 
     def env_constructor(train_infos):
@@ -160,7 +165,7 @@ if __name__ == '__main__':
 
 
     max_cores = len(os.sched_getaffinity(0))
-    trainer = PettingZooCaptianCoevolution(population_sizes=[1, 49,
+    trainer = PettingZooCaptianCoevolution(population_sizes=[1, ppo_cnt,
                                                              ],
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
@@ -173,8 +178,6 @@ if __name__ == '__main__':
                                                                                               }),
                                                lambda i, env: (WorkerPPO(policy=MlpPolicy,
                                                                          env=env,
-                                                                         # batch_size=100,
-                                                                         # n_steps=100,
                                                                          policy_kwargs={
                                                                              'net_arch': dict(pi=[64, 64],
                                                                                               vf=[64, 64])
@@ -191,6 +194,7 @@ if __name__ == '__main__':
                                            zoo_dir=os.path.join(data_folder, 'zoo'),
                                            protect_new=300,
                                            processes=args.processes,
+                                           #member_to_population=lambda team_idx, member_idx: {team_idx},
                                            )
 
     if os.path.exists(save_dir):
