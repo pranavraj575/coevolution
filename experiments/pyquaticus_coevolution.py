@@ -265,13 +265,31 @@ if __name__ == '__main__':
     if os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
+
+
+    def typer(global_idx):
+        animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
+        if isinstance(animal, WorkerPPO):
+            return 'ppo'
+        elif isinstance(animal, WorkerDQN):
+            return 'dqn'
+        else:
+            return 'random'
+
+
     if args.display:
         elos = trainer.classic_elos.numpy().copy()
         best = np.argmax(elos)
         worst = np.argmin(elos)
         elos[best] = -np.inf
         second_best = np.argmax(elos)
+        print()
+        print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
+        print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
+        print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
+
         print('playing worst (blue) against best (red)')
+
         ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
         trainer.epoch(rechoose=False,
                       save_epoch_info=False,
@@ -291,21 +309,23 @@ if __name__ == '__main__':
             classic_elos = trainer.classic_elos.numpy()
             if True:
                 print('all elos')
-                print('\telo of random agents:', classic_elos[:pop_sizes[0]])
                 ppos = []
                 dqns = []
-                for i in range(pop_sizes[0], sum(pop_sizes)):
-                    animal, info = trainer.load_animal(trainer.index_to_pop_index(i))
-                    identity = ''
-                    if isinstance(animal, WorkerDQN):
+                rands = []
+                for i in range(sum(pop_sizes)):
+                    identity = typer(i)
+                    if identity == 'dqn':
                         dqns.append(i)
-                    elif isinstance(animal, WorkerPPO):
+                    elif identity == 'ppo':
                         ppos.append(i)
+                    else:
+                        rands.append(i)
+                print('\telo of random agents:', classic_elos[rands])
                 print('\telo of', len(ppos), 'ppo agents:', classic_elos[ppos])
                 print('\telo of', len(dqns), 'dqn agents:', classic_elos[dqns])
 
                 print('avg elos')
-                print('\trandom:', np.mean(classic_elos[:pop_sizes[0]]))
+                print('\trandom:', np.mean(classic_elos[rands]))
                 print('\tppo:', np.mean(classic_elos[ppos]))
                 print('\tdqn:', np.mean(classic_elos[dqns]))
 
