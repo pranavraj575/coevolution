@@ -144,8 +144,8 @@ if __name__ == '__main__':
     PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
                         help="replay buffer capacity")
 
-    PARSER.add_argument('--combine-learners', action='store_true', required=False,
-                        help="learning agents go in one population to allow replacement by clones")
+    PARSER.add_argument('--split-learners', action='store_true', required=False,
+                        help="learning agents types each go in their own population to avoid interspecies replacement")
 
     PARSER.add_argument('--protect-new', type=int, required=False, default=300,
                         help="protect new agents for this number of breeding epochs")
@@ -175,7 +175,7 @@ if __name__ == '__main__':
              '_ppo_agents_' + str(ppo_cnt) +
              '_dqn_agents_' + str(dqn_cnt) +
              '_replay_buffer_capacity_' + str(buffer_cap) +
-             '_combined_learners_' + str(args.combine_learners) +
+             '_split_learners_' + str(args.split_learners) +
              '_protect_new_' + str(args.protect_new)
              )
 
@@ -224,7 +224,16 @@ if __name__ == '__main__':
                                            ), info_dict.copy()
                                  )
 
-    if args.combine_learners:
+    if args.split_learners:
+        pop_sizes = [rand_cnt,
+                     ppo_cnt,
+                     dqn_cnt,
+                     ]
+
+        worker_constructors = [create_rand,
+                               create_ppo,
+                               create_dqn]
+    else:
         pop_sizes = [rand_cnt,
                      ppo_cnt + dqn_cnt,
                      ]
@@ -240,15 +249,7 @@ if __name__ == '__main__':
         worker_constructors = [create_rand,
                                create_learner,
                                ]
-    else:
-        pop_sizes = [rand_cnt,
-                     ppo_cnt,
-                     dqn_cnt,
-                     ]
 
-        worker_constructors = [create_rand,
-                               create_ppo,
-                               create_dqn]
     max_cores = len(os.sched_getaffinity(0))
     trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
                                            outcome_fn_gen=CTFOutcome,
