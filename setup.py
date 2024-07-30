@@ -9,6 +9,7 @@ setup(
         'gymnasium',
         'matplotlib',
         'pettingzoo',
+        'pathos',
         'torch',
         'stable-baselines3',
         'unstable-baselines3',
