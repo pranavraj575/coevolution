@@ -129,8 +129,6 @@ if __name__ == '__main__':
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
-    data_folder = os.path.join(DIR, 'data', 'pyquaticus_coevolution')
-
     PARSER = argparse.ArgumentParser()
 
     PARSER.add_argument('--render', action='store_true', required=False,
@@ -141,11 +139,16 @@ if __name__ == '__main__':
                         help="skips frames to speed up episodes")
     PARSER.add_argument('--processes', type=int, required=False, default=1,
                         help="number of processes to use")
+    PARSER.add_argument('--ident', action='store', required=False, default='',
+                        )
 
     args = PARSER.parse_args()
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render else None
+
+    data_folder = os.path.join(DIR, 'data', args.ident + 'pyquaticus_coevolution')
+    save_dir = os.path.join(DIR, 'data', 'save', args.ident + 'pyquaticus_coevolution')
 
 
     def env_constructor(train_infos):
@@ -190,7 +193,6 @@ if __name__ == '__main__':
                                            processes=args.processes,
                                            )
 
-    save_dir = os.path.join(DIR, 'data', 'save', 'pyquaticus_coevolution')
     if os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)

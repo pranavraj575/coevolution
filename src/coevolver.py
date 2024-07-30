@@ -273,6 +273,7 @@ class CoevolutionBase:
                     # if there are unused agents, use them here
                     cap = np.random.choice(list(unused_choices))
                     unique = True
+                    unused.remove(cap)
                 else:
                     # otherwise, default to using a previous agent
                     cap = np.random.choice(list(choices))
@@ -281,8 +282,6 @@ class CoevolutionBase:
                 uniques[team_idx] = unique
             yield tuple(captains), tuple(uniques)
             # remove captains from unused
-            unused.difference_update(captains)
-
     def epoch(self, rechoose=True, save_epoch_info=True):
         # TODO: parallelizable
         epoch_info = {
@@ -298,6 +297,7 @@ class CoevolutionBase:
             # TODO: This is very suspicious
             with Pool(processes=self.processes) as pool:
                 all_items_to_save = pool.map(train_episode, pre_ep_dicts)
+
         else:
             all_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in pre_ep_dicts]
 

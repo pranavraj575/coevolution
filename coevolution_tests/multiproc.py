@@ -1,25 +1,72 @@
-from multiprocessing import Pool
+from pathos.multiprocessing import Pool
+
 import time
 import os
 from matplotlib import pyplot as plt
+from multiprocessing.pool import ApplyResult
+
+def f(x):
+    i = 0
+    tim = time.time()
+    for _ in range(x):
+        i += 1
+    return {'tim':time.time() - tim}
 
 
-class Test():
-    processes = 1
+add_ops = 3169000
 
-    def _split_train_choice(self, cap_unique):
-        return None
 
-    def test(self):
-        captian_and_unique_choices =[1]
-        if self.processes >= 1:
-            # TODO: This does not work for some reason
-            with Pool(processes=self.processes) as pool:
-                all_items_to_save = pool.map(self._split_train_choice, captian_and_unique_choices)
-            print(all_items_to_save)
+def get_async_list(processes, fn, inputs):
+    pool = Pool(processes=processes, )
+    return pool, [pool.apply_async(fn, (inp,)) for inp in inputs]
 
-print(Test().test())
 
+def mutate(item, pool, fn, inp):
+    if not isinstance(item, dict):
+        if item.ready():
+            return item.get()
+        else:
+            return pool.apply_async(fn, (inp,))
+    else:
+        return item
+
+
+def impatience_reset(processes, inputs, fn, pool=None, res=None):
+    if pool is not None:
+        try:
+            pool.close()
+            pool.terminate()
+        except:
+            print('err')
+    pool = Pool(processes=processes, )
+    done = False
+
+    if res is None:
+        res = [pool.apply_async(fn, (inp,)) for inp in inputs]
+    else:
+        res = [mutate(item, pool, fn, inp) for item, inp in zip(res, inputs)]
+        if all([isinstance(item, dict) for item in res]):
+            done = True
+        else:
+            print(res[-1].terminate())
+    return pool, res, done
+
+
+inputs = [add_ops for _ in range(500)]
+pool = None
+res = None
+done = False
+old = 0
+
+while not done:
+    pool, res, done = impatience_reset(processes=8, inputs=inputs, fn=f, pool=pool, res=res)
+    time.sleep(.5)
+    thing = sum([True if type(item) == dict else item.ready() for item in res])
+    print('total', thing, 'change', thing - old)
+    old = thing
+
+print('here')
+quit()
 
 max_cores = len(os.sched_getaffinity(0))
 
