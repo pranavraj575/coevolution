@@ -9,8 +9,9 @@ from src.game_outcome import PettingZooOutcomeFn
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 from src.coevolver import PettingZooCaptianCoevolution
 
-from unstable_baselines3.ppo import WorkerPPO
-from unstable_baselines3.ppo import MlpPolicy
+from unstable_baselines3 import WorkerPPO, WorkerDQN
+from unstable_baselines3.ppo import MlpPolicy as PPOMlp
+from unstable_baselines3.dqn import MlpPolicy as DQNMlp
 
 from src.utils.dict_keys import *
 
@@ -133,12 +134,27 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
-    PARSER.add_argument('--agents', type=int, required=False, default=49,
+
+    PARSER.add_argument('--rand-agents', type=int, required=False, default=25,
+                        help="number of random agents to use")
+    PARSER.add_argument('--ppo-agents', type=int, required=False, default=25,
                         help="number of ppo agents to use")
+    PARSER.add_argument('--dqn-agents', type=int, required=False, default=25,
+                        help="number of dqn agents to use")
+    PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
+                        help="replay buffer capacity")
+
+    PARSER.add_argument('--combine-learners', action='store_true', required=False,
+                        help="learning agents go in one population to allow replacement by clones")
+
+    PARSER.add_argument('--protect-new', type=int, required=False, default=300,
+                        help="protect new agents for this number of breeding epochs")
+
     PARSER.add_argument('--max-time', type=float, required=False, default=420.,
                         help="max sim time of each episode")
     PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
                         help="skips frames to speed up episodes")
+
     PARSER.add_argument('--processes', type=int, required=False, default=0,
                         help="number of processes to use")
     PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
@@ -150,9 +166,18 @@ if __name__ == '__main__':
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render else None
-
-    ppo_cnt = args.agents
-    ident = args.ident + '_agents_' + str(ppo_cnt)
+    rand_cnt = args.rand_agents
+    ppo_cnt = args.ppo_agents
+    dqn_cnt = args.dqn_agents
+    buffer_cap = args.replay_buffer_capacity
+    ident = (args.ident +
+             '_rand_agents_' + str(rand_cnt) +
+             '_ppo_agents_' + str(ppo_cnt) +
+             '_dqn_agents_' + str(dqn_cnt) +
+             '_replay_buffer_capacity_' + str(buffer_cap) +
+             '_combined_learners_' + str(args.combine_learners) +
+             '_protect_new_' + str(args.protect_new)
+             )
 
     data_folder = os.path.join(DIR, 'data', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
@@ -166,40 +191,71 @@ if __name__ == '__main__':
                                            )
 
 
+    create_rand = lambda i, env: (RandPolicy(env.action_space), {DICT_TRAIN: False,
+                                                                 DICT_CLONABLE: False,
+                                                                 DICT_CLONE_REPLACABLE: False,
+                                                                 DICT_MUTATION_REPLACABLE: False,
+                                                                 DICT_IS_WORKER: False,
+                                                                 })
+    info_dict = {DICT_TRAIN: True,
+                 DICT_CLONABLE: True,
+                 DICT_CLONE_REPLACABLE: True,
+                 DICT_MUTATION_REPLACABLE: True,
+                 DICT_IS_WORKER: True,
+                 }
     ppokwargs = dict()
     # ppokwargs['n_steps'] = 64
     # ppokwargs['batch_size'] = 64
+    create_ppo = lambda i, env: (WorkerPPO(policy=PPOMlp,
+                                           env=env,
+                                           policy_kwargs={
+                                               'net_arch': dict(pi=[64, 64],
+                                                                vf=[64, 64]),
+                                           },
+                                           **ppokwargs
+                                           ), info_dict.copy()
+                                 )
+    dqnkwargs = {
+        'buffer_size': buffer_cap,
+    }
+    create_dqn = lambda i, env: (WorkerDQN(policy=DQNMlp,
+                                           env=env,
+                                           **dqnkwargs
+                                           ), info_dict.copy()
+                                 )
 
+    if args.combine_learners:
+        pop_sizes = [rand_cnt,
+                     ppo_cnt + dqn_cnt,
+                     ]
+
+
+        def create_learner(i, env):
+            if i < ppo_cnt:
+                return create_ppo(i, env)
+            else:
+                return create_dqn(i - ppo_cnt, env)
+
+
+        worker_constructors = [create_rand,
+                               create_learner,
+                               ]
+    else:
+        pop_sizes = [rand_cnt,
+                     ppo_cnt,
+                     dqn_cnt,
+                     ]
+
+        worker_constructors = [create_rand,
+                               create_ppo,
+                               create_dqn]
     max_cores = len(os.sched_getaffinity(0))
-    trainer = PettingZooCaptianCoevolution(population_sizes=[1, ppo_cnt,
-                                                             ],
+    trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
-                                           worker_constructors=[
-                                               lambda i, env: (RandPolicy(env.action_space), {DICT_TRAIN: False,
-                                                                                              DICT_CLONABLE: False,
-                                                                                              DICT_CLONE_REPLACABLE: False,
-                                                                                              DICT_MUTATION_REPLACABLE: False,
-                                                                                              DICT_IS_WORKER: False,
-                                                                                              }),
-                                               lambda i, env: (WorkerPPO(policy=MlpPolicy,
-                                                                         env=env,
-                                                                         policy_kwargs={
-                                                                             'net_arch': dict(pi=[64, 64],
-                                                                                              vf=[64, 64]),
-                                                                         },
-                                                                         **ppokwargs
-                                                                         ),
-                                                               {DICT_TRAIN: True,
-                                                                DICT_CLONABLE: True,
-                                                                DICT_CLONE_REPLACABLE: True,
-                                                                DICT_MUTATION_REPLACABLE: True,
-                                                                DICT_IS_WORKER: True,
-                                                                }
-                                                               ),
-                                           ],
+                                           worker_constructors=worker_constructors,
                                            zoo_dir=os.path.join(data_folder, 'zoo'),
-                                           protect_new=300,
+                                           protect_new=args.protect_new,
                                            processes=args.processes,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
                                            max_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
@@ -209,7 +265,6 @@ if __name__ == '__main__':
     if os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
-
     if args.display:
         best = np.argmax(trainer.classic_elos)
         ep = trainer.pre_episode_generation(captian_choices=(0, best), unique=(True, True))
