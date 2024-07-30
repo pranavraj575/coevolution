@@ -299,13 +299,10 @@ class CoevolutionBase:
         for i, pre_ep_dict in enumerate(pre_ep_dicts):
             pre_ep_dict['ident'] = str(i)
 
-        par_pre_ep_dicts, seq_pre_ep_dicts = self.parallel_seq_split(pre_ep_dicts)
-
         if self.processes > 0:
             par_pre_ep_dicts, seq_pre_ep_dicts = self.parallel_seq_split(pre_ep_dicts)
         else:
             par_pre_ep_dicts, seq_pre_ep_dicts = [], pre_ep_dicts
-
         # parallel run
         if par_pre_ep_dicts:
             # TODO: This does not work when training? (check tests/multiproc)

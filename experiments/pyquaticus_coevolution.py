@@ -200,7 +200,7 @@ if __name__ == '__main__':
                                            protect_new=300,
                                            processes=args.processes,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
-                                           max_per_ep=(2*config_dict['render_fps']*config_dict['max_time']/
+                                           max_per_ep=(1+config_dict['render_fps']*config_dict['max_time']/
                                                        config_dict['sim_speedup_factor'])
                                            )
 
