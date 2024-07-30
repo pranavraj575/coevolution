@@ -164,6 +164,10 @@ if __name__ == '__main__':
                                            )
 
 
+    ppokwargs = dict()
+    # ppokwargs['n_steps'] = 64
+    # ppokwargs['batch_size'] = 64
+
     max_cores = len(os.sched_getaffinity(0))
     trainer = PettingZooCaptianCoevolution(population_sizes=[1, ppo_cnt,
                                                              ],
@@ -180,8 +184,9 @@ if __name__ == '__main__':
                                                                          env=env,
                                                                          policy_kwargs={
                                                                              'net_arch': dict(pi=[64, 64],
-                                                                                              vf=[64, 64])
-                                                                         }
+                                                                                              vf=[64, 64]),
+                                                                         },
+                                                                         **ppokwargs
                                                                          ),
                                                                {DICT_TRAIN: True,
                                                                 DICT_CLONABLE: True,
@@ -194,7 +199,9 @@ if __name__ == '__main__':
                                            zoo_dir=os.path.join(data_folder, 'zoo'),
                                            protect_new=300,
                                            processes=args.processes,
-                                           #member_to_population=lambda team_idx, member_idx: {team_idx},
+                                           # member_to_population=lambda team_idx, member_idx: {team_idx},
+                                           max_per_ep=(2*config_dict['render_fps']*config_dict['max_time']/
+                                                       config_dict['sim_speedup_factor'])
                                            )
 
     if os.path.exists(save_dir):
@@ -209,7 +216,7 @@ if __name__ == '__main__':
 
         print('elos:', classic_elos[1:])
         print('elo of random agent:', classic_elos[0])
-        if not (trainer.info['epochs'])%100:
+        if not (trainer.info['epochs'])%10:
             print('saving')
             trainer.save(save_dir)
             print('done saving')

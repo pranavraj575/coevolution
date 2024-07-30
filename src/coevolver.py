@@ -35,6 +35,7 @@ from unstable_baselines3.common.common import DumEnv
 
 sys.setrecursionlimit(2000)
 
+
 def train_episode(pre_episode_dict):
     """
     NOTE: WE DEFINE THIS OUTSIDE CLASSES FOR PARALLELIZATION PURPOSES
@@ -284,6 +285,9 @@ class CoevolutionBase:
             yield tuple(captains), tuple(uniques)
             # remove captains from unused
 
+    def parallel_seq_split(self, all_items_to_save):
+        return all_items_to_save, []
+
     def epoch(self, rechoose=True, save_epoch_info=True):
         # TODO: parallelizable
         epoch_info = {
@@ -295,15 +299,28 @@ class CoevolutionBase:
         for i, pre_ep_dict in enumerate(pre_ep_dicts):
             pre_ep_dict['ident'] = str(i)
 
-        if self.processes > 0:
-            # TODO: This does not work (check tests/multiproc)
-            #with Pool(processes=self.processes) as pool:
-            #    all_items_to_save = pool.map(train_episode, pre_ep_dicts)
-            raise NotImplementedError
-        else:
-            all_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in pre_ep_dicts]
+        par_pre_ep_dicts, seq_pre_ep_dicts = self.parallel_seq_split(pre_ep_dicts)
 
-        for items_to_save in all_items_to_save:
+        if self.processes > 0:
+            par_pre_ep_dicts, seq_pre_ep_dicts = self.parallel_seq_split(pre_ep_dicts)
+        else:
+            par_pre_ep_dicts, seq_pre_ep_dicts = [], pre_ep_dicts
+        print(len(par_pre_ep_dicts), len(seq_pre_ep_dicts))
+        # parallel run
+        if par_pre_ep_dicts:
+            # TODO: This does not work when training? (check tests/multiproc)
+            with Pool(processes=self.processes) as pool:
+                par_items_to_save = pool.map(train_episode, par_pre_ep_dicts)
+        else:
+            par_items_to_save = []
+
+        # seq runs
+        if seq_pre_ep_dicts:
+            seq_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in seq_pre_ep_dicts]
+        else:
+            seq_items_to_save = []
+
+        for items_to_save in seq_items_to_save + par_items_to_save:
             episode_info = self.update_results(items_to_save=items_to_save)
             epoch_info['episodes'].append(episode_info)
         if rechoose:
@@ -669,6 +686,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  team_idx_to_agent_id=None,
                  processes=0,
                  temp_zoo_dir=None,
+                 max_per_ep=float('inf'),
                  ):
         """
         Args:
@@ -771,6 +789,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.info['mutation_prob'] = mutation_prob
         self.info['protect_new'] = protect_new
         self.info['clone_replacements'] = clone_replacements
+        self.max_per_ep = max_per_ep
 
     @property
     def clone_replacements(self):
@@ -1194,6 +1213,40 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         info = self.get_info(pop_local_idx=(pop_idx, local_idx))
         info[DICT_AGE] = info.get(DICT_AGE, 0) + 1
         self.zoo[pop_idx].overwrite_info(key=str(local_idx), info=info)
+
+    def parallel_seq_split(self, all_items_to_save):
+        par_list, seq_list = [], []
+        for items_to_save in all_items_to_save:
+            agents = items_to_save['agents']
+            updated_train_infos = items_to_save['train_infos']
+            team_choices = items_to_save['teams']
+            seq = False
+            if agents is None:
+                if agents is None:
+                    agents = [
+                        [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
+                        for t in zip(team_choices, updated_train_infos)]
+            for t in zip(agents, updated_train_infos):
+                for agent, train_info in zip(*t):
+                    if train_info.get(DICT_IS_WORKER, True) and train_info.get(DICT_TRAIN, True):
+                        if isinstance(agent, OffPolicyAlgorithm):
+                            # off policy algs always train at the end of a rollout
+                            capacity = 0
+                        elif isinstance(agent, OnPolicyAlgorithm):
+                            # if we can collect this episode without training, we can potentially do it in parallel
+                            capacity = agent.rollout_buffer.buffer_size - agent.rollout_buffer.size()
+                        else:
+                            raise Exception("what alg is this", type(agent))
+                        if self.max_per_ep >= capacity:
+                            seq = True
+                            break
+                if seq:
+                    break
+            if seq:
+                seq_list.append(items_to_save)
+            else:
+                par_list.append(items_to_save)
+        return par_list, seq_list
 
 
 if __name__ == '__main__':
