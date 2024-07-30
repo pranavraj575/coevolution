@@ -680,7 +680,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  elo_update=32*np.log(10)/400,
                  noise_model=None,
                  reinit_agents=True,
-                 mutation_prob=.01,
+                 mutation_prob=.001,
                  protect_new=20,
                  clone_replacements=None,
                  team_idx_to_agent_id=None,

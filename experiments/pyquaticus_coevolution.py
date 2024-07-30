@@ -165,11 +165,11 @@ if __name__ == '__main__':
                         help='identification to add to folder')
 
     PARSER.add_argument('--display', action='store_true', required=False,
-                        help="skip training and display saved model (prob should use with --render and --processes 0)")
+                        help="skip training and display saved model")
     args = PARSER.parse_args()
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
-    RENDER_MODE = 'human' if args.render else None
+    RENDER_MODE = 'human' if args.render or args.display else None
     rand_cnt = args.rand_agents
     ppo_cnt = args.ppo_agents
     dqn_cnt = args.dqn_agents
@@ -255,13 +255,17 @@ if __name__ == '__main__':
                                ]
 
     max_cores = len(os.sched_getaffinity(0))
+    if args.display:
+        proc=0
+    else:
+        proc=args.processes
     trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
                                            worker_constructors=worker_constructors,
                                            zoo_dir=os.path.join(data_folder, 'zoo'),
                                            protect_new=args.protect_new,
-                                           processes=args.processes,
+                                           processes=proc,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
                                            max_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
                                                        config_dict['sim_speedup_factor'])
