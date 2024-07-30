@@ -1,18 +1,17 @@
-import argparse, os, sys
+import argparse
+import os
+import sys
 
 import torch.random
+from unstable_baselines3 import WorkerPPO, WorkerDQN
+from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
+from unstable_baselines3.dqn import MlpPolicy as DQNMlp
+from unstable_baselines3.ppo import MlpPolicy as PPOMlp
 
 from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
-
-from src.game_outcome import PettingZooOutcomeFn
-from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 from src.coevolver import PettingZooCaptianCoevolution
-
-from unstable_baselines3 import WorkerPPO, WorkerDQN
-from unstable_baselines3.ppo import MlpPolicy as PPOMlp
-from unstable_baselines3.dqn import MlpPolicy as DQNMlp
-
+from src.game_outcome import PettingZooOutcomeFn
 from src.utils.dict_keys import *
 
 
@@ -267,8 +266,19 @@ if __name__ == '__main__':
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
     if args.display:
-        best = np.argmax(trainer.classic_elos)
-        ep = trainer.pre_episode_generation(captian_choices=(0, best), unique=(True, True))
+        elos = trainer.classic_elos.numpy().copy()
+        best = np.argmax(elos)
+        worst = np.argmin(elos)
+        elos[best] = -np.inf
+        second_best = np.argmax(elos)
+        print('playing worst (blue) against best (red)')
+        ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
+        trainer.epoch(rechoose=False,
+                      save_epoch_info=False,
+                      pre_ep_dicts=[ep],
+                      )
+        print('playing second best (blue) against best (red)')
+        ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
         trainer.epoch(rechoose=False,
                       save_epoch_info=False,
                       pre_ep_dicts=[ep],
@@ -278,10 +288,27 @@ if __name__ == '__main__':
             tim = time.time()
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
             trainer.epoch()
-            classic_elos = trainer.classic_elos
+            classic_elos = trainer.classic_elos.numpy()
+            if True:
+                print('all elos')
+                print('\telo of random agents:', classic_elos[:pop_sizes[0]])
+                ppos = []
+                dqns = []
+                for i in range(pop_sizes[0], sum(pop_sizes)):
+                    animal, info = trainer.load_animal(trainer.index_to_pop_index(i))
+                    identity = ''
+                    if isinstance(animal, WorkerDQN):
+                        dqns.append(i)
+                    elif isinstance(animal, WorkerPPO):
+                        ppos.append(i)
+                print('\telo of', len(ppos), 'ppo agents:', classic_elos[ppos])
+                print('\telo of', len(dqns), 'dqn agents:', classic_elos[dqns])
 
-            print('elos:', classic_elos[1:])
-            print('elo of random agent:', classic_elos[0])
+                print('avg elos')
+                print('\trandom:', np.mean(classic_elos[:pop_sizes[0]]))
+                print('\tppo:', np.mean(classic_elos[ppos]))
+                print('\tdqn:', np.mean(classic_elos[dqns]))
+
             if not (trainer.info['epochs'])%10:
                 print('saving')
                 trainer.save(save_dir)
