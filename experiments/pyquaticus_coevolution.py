@@ -82,7 +82,9 @@ class CTFOutcome(PettingZooOutcomeFn):
                   number_of_eps=1,
                   )
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
-        print(score)
+        if score != (0, 0):
+            print(score)
+
         if score[0] == score[1]:
             return [
                 (.5, []),
@@ -116,7 +118,7 @@ config_dict["sim_speedup_factor"] = 40
 reward_config = {0: custom_rew2, 1: None, 5: None}  # Example Reward Config
 
 if __name__ == '__main__':
-    DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0]))))
+    DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     data_folder = os.path.join(DIR, 'data', 'pyquaticus_coevolution')
 
@@ -143,11 +145,17 @@ if __name__ == '__main__':
                                            )
 
 
-    trainer = PettingZooCaptianCoevolution(population_sizes=[50,
+    trainer = PettingZooCaptianCoevolution(population_sizes=[1, 49,
                                                              ],
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
                                            worker_constructors=[
+                                               lambda i, env: (RandPolicy(env.action_space), {DICT_TRAIN: False,
+                                                                                              DICT_CLONABLE: False,
+                                                                                              DICT_CLONE_REPLACABLE: False,
+                                                                                              DICT_MUTATION_REPLACABLE: False,
+                                                                                              DICT_IS_WORKER: False,
+                                                                                              }),
                                                lambda i, env: (WorkerPPO(policy=MlpPolicy,
                                                                          env=env,
                                                                          # batch_size=100,
@@ -171,12 +179,17 @@ if __name__ == '__main__':
 
     save_dir = os.path.join(DIR, 'data', 'save', 'pyquaticus_coevolution')
     if os.path.exists(save_dir):
+        print('loading from', save_dir)
+        quit()
         trainer.load(save_dir=save_dir)
+    # trainer.info['protect_new']=200
     while trainer.epochs < 5000:
         print('starting epoch', trainer.info['epochs'])
         trainer.epoch()
+        classic_elos = trainer.classic_elos
 
-        print('elos:', trainer.get_classic_elo(1000))
+        print('elos:', classic_elos[1:])
+        print('elo of random agent:', classic_elos[0])
         if not (trainer.info['epochs'])%10:
             print('saving')
             trainer.save(save_dir)

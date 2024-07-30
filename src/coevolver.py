@@ -535,6 +535,10 @@ class CaptianCoevolution(CoevolutionBase):
         )
         )
 
+    @property
+    def classic_elos(self):
+        return self.get_classic_elo(base_elo=1000)
+
     def get_classic_elo(self, base_elo=None):
         """
         gets 'classic' elo values
@@ -606,6 +610,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  reinit_agents=True,
                  mutation_prob=.01,
                  protect_new=20,
+                 clone_replacements=None,
                  team_idx_to_agent_id=None,
                  processes=1,
                  ):
@@ -638,6 +643,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             elo_update:
             noise_model:
             mutation_prob: probability an agent randomly reinitializes each epoch
+            clone_replacements: max number of agents to replace with clones each epoch
+                if None, replaces all potentially
             protect_new: protect agents younger than this
             processes: if >1, uses multiprocessing
 
@@ -700,6 +707,11 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
         self.info['mutation_prob'] = mutation_prob
         self.info['protect_new'] = protect_new
+        self.info['clone_replacements'] = clone_replacements
+
+    @property
+    def clone_replacements(self):
+        return self.info['clone_replacements']
 
     @property
     def mutation_prob(self):
@@ -788,7 +800,11 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         return self.zoo[pop_idx].load_info(key=str(local_idx))
 
     def breed(self):
-        return self.classic_breed()
+        if self.clone_replacements is None:
+            return self.classic_breed()
+        else:
+            return self.conservative_breed(number_to_replace=self.clone_replacements,
+                                           )
 
     def _get_valid_idxs(self, validity_fn, indices=None):
         """
