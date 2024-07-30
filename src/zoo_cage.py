@@ -85,7 +85,6 @@ class ZooCage:
             f = open(os.path.join(full_dir, 'class.pkl'), 'rb')
             WorkerClass = pickle.load(f)
             f.close()
-
         worker = WorkerClass.load(os.path.join(full_dir, 'worker'))
         if load_buffer:
             if isinstance(worker, OffPolicyAlgorithm):

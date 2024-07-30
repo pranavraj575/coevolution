@@ -1,4 +1,7 @@
 import argparse, os, sys
+
+import torch.random
+
 from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
 
@@ -82,8 +85,6 @@ class CTFOutcome(PettingZooOutcomeFn):
                   number_of_eps=1,
                   )
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
-        if score != (0, 0):
-            print(score)
 
         if score[0] == score[1]:
             return [
@@ -118,6 +119,14 @@ config_dict["sim_speedup_factor"] = 40
 reward_config = {0: custom_rew2, 1: None, 5: None}  # Example Reward Config
 
 if __name__ == '__main__':
+    import time
+    import numpy as np
+    import random
+
+    torch.random.manual_seed(0)
+    np.random.seed()
+    random.seed()
+
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     data_folder = os.path.join(DIR, 'data', 'pyquaticus_coevolution')
@@ -145,6 +154,7 @@ if __name__ == '__main__':
                                            )
 
 
+    max_cores = len(os.sched_getaffinity(0))
     trainer = PettingZooCaptianCoevolution(population_sizes=[1, 49,
                                                              ],
                                            outcome_fn_gen=CTFOutcome,
@@ -175,25 +185,27 @@ if __name__ == '__main__':
                                            ],
                                            zoo_dir=os.path.join(data_folder, 'zoo'),
                                            protect_new=300,
+                                           processes=max_cores,
                                            )
 
     save_dir = os.path.join(DIR, 'data', 'save', 'pyquaticus_coevolution')
     if os.path.exists(save_dir):
         print('loading from', save_dir)
-        quit()
         trainer.load(save_dir=save_dir)
     # trainer.info['protect_new']=200
     while trainer.epochs < 5000:
-        print('starting epoch', trainer.info['epochs'])
+        tim = time.time()
+        print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
         trainer.epoch()
         classic_elos = trainer.classic_elos
 
         print('elos:', classic_elos[1:])
         print('elo of random agent:', classic_elos[0])
-        if not (trainer.info['epochs'])%10:
+        if not (trainer.info['epochs'])%100:
             print('saving')
             trainer.save(save_dir)
             print('done saving')
+        print('time', time.time() - tim)
         print()
 
 

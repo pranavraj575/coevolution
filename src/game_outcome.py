@@ -117,10 +117,11 @@ class OutcomeFn:
         usually 1 is win, 0.5 is tie (for two team games) and 0 is loss
     """
 
-    def get_outcome(self, team_choices, updated_train_infos=None, env=None):
+    def get_outcome(self, team_choices, agent_choices, updated_train_infos=None, env=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
+            agent_choices: same shape as team_choices, calculated agents (if applicable)
             updated_train_infos: either None or array of same shape as team_choices
                 each element is dictionary of training settings for corresponding agent
                 this is updated with current experiment info (i.e. whether agent is unique, a captian, etc.)
@@ -154,22 +155,22 @@ class PettingZooOutcomeFn(OutcomeFn):
 
     def __init__(self):
         super().__init__()
-        self.local_mem = defaultdict(lambda: [])
+        self.local_mem = dict()
 
-    def set_zoo(self, zoo: [ZooCage]):
+    def set_zoo_dirs_and_pop_sizes(self, zoo_dirs, population_sizes):
         """
         Args:
-            zoo: list of ZooCages
+            zoo_dirs: list of directories to find ZooCages
         """
-        self.zoo = zoo
+        self.zoo = [ZooCage(zoo_dir=zoo_dir, overwrite_zoo=False) for zoo_dir in zoo_dirs]
+        self.population_sizes = population_sizes
 
-    def set_index_conversion(self, index_conversion):
-        """
-        sets a function converting indices to (zoo index, population index)
-        Args:
-            index_conversion: (int -> (int, int)); (global index -> (zoo index, population index))
-        """
-        self.index_conversion = index_conversion
+    def index_conversion(self, global_idx):
+        pop_idx = 0
+        while global_idx - self.population_sizes[pop_idx] >= 0:
+            global_idx -= self.population_sizes[pop_idx]
+            pop_idx += 1
+        return pop_idx, global_idx
 
     def index_to_agent(self, idx, training_dict):
         """
@@ -191,11 +192,12 @@ class PettingZooOutcomeFn(OutcomeFn):
                                                           )
         return agent
 
-    def get_outcome(self, team_choices, updated_train_infos=None, env=None):
+    def get_outcome(self, team_choices, agent_choices, updated_train_infos=None, env=None):
         """
         Args:
             team_choices: K-tuple of teams, each team is an array of players
                 players are indices corresponding
+            agent_choices: same shape as team_choices, calculated agents (if applicable)
             updated_train_infos: either None or array of same shape as team_choices
                 each element is dictionary of training settings for corresponding agent
 
@@ -218,9 +220,9 @@ class PettingZooOutcomeFn(OutcomeFn):
         if updated_train_infos is None:
             updated_train_infos = [[dict() for _ in team] for team in team_choices]
 
-        agent_choices = [
-            [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
-            for t in zip(team_choices, updated_train_infos)]
+        #agent_choices = [
+        #    [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
+        #    for t in zip(team_choices, updated_train_infos)]
 
         index_choices = [[member.item() for member in t] for t in team_choices]
         out = self._get_outcome_from_agents(agent_choices=agent_choices,
@@ -241,7 +243,7 @@ class PettingZooOutcomeFn(OutcomeFn):
             if the same agent appears multiple times, the respective list will have multiple elements
         """
         local_local_mem = self.local_mem
-        self.local_mem = defaultdict(lambda: [])
+        self.local_mem = dict()
         return local_local_mem
 
     def _save_agents_to_local_mem(self, agent_choices, index_choices, updated_train_infos):
@@ -255,6 +257,8 @@ class PettingZooOutcomeFn(OutcomeFn):
         """
         for t in zip(agent_choices, index_choices, updated_train_infos):
             for agent, global_idx, updated_train_dict in zip(*t):
+                if global_idx not in self.local_mem:
+                    self.local_mem[global_idx] = []
                 self.local_mem[global_idx].append((agent, updated_train_dict))
 
     def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
