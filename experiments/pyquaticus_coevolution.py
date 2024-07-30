@@ -133,6 +133,11 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
+    PARSER.add_argument('--reset', action='store_true', required=False,
+                        help="do not load from save")
+
+    PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
+                        help="checkpoint freq")
 
     PARSER.add_argument('--rand-agents', type=int, required=False, default=25,
                         help="number of random agents to use")
@@ -262,7 +267,7 @@ if __name__ == '__main__':
                                                        config_dict['sim_speedup_factor'])
                                            )
 
-    if os.path.exists(save_dir):
+    if not args.reset and os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
 
@@ -289,14 +294,14 @@ if __name__ == '__main__':
         print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
         print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
 
-        print('playing worst (blue, '+typer(worst)+') against best (red, '+typer(best)+')')
+        print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
 
         ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
         trainer.epoch(rechoose=False,
                       save_epoch_info=False,
                       pre_ep_dicts=[ep],
                       )
-        print('playing second best (blue, '+typer(second_best)+') against best (red, '+typer(best)+')')
+        print('playing second best (blue, ' + typer(second_best) + ') against best (red, ' + typer(best) + ')')
         ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
         trainer.epoch(rechoose=False,
                       save_epoch_info=False,
@@ -330,7 +335,7 @@ if __name__ == '__main__':
                 print('\tppo:', np.mean(classic_elos[ppos]))
                 print('\tdqn:', np.mean(classic_elos[dqns]))
 
-            if not (trainer.info['epochs'])%10:
+            if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
                 trainer.save(save_dir)
                 print('done saving')
