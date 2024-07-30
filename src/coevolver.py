@@ -237,7 +237,6 @@ class CoevolutionBase:
             all_items_to_save = [self._split_train_choice(choice) for choice in captian_and_unique_choices]
 
         for items_to_save in all_items_to_save:
-            print('here')
             episode_info = self.update_results(items_to_save=items_to_save)
             epoch_info['episodes'].append(episode_info)
         if rechoose:
@@ -698,8 +697,17 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.zoo_dir = zoo_dir
         if reinit_agents:
             self.init_agents()
-        self.mutation_prob = mutation_prob
-        self.protect_new = protect_new
+
+        self.info['mutation_prob'] = mutation_prob
+        self.info['protect_new'] = protect_new
+
+    @property
+    def mutation_prob(self):
+        return self.info['mutation_prob']
+
+    @property
+    def protect_new(self):
+        return self.info['protect_new']
 
     def create_outcome_fn(self):
         """
@@ -1120,7 +1128,7 @@ if __name__ == '__main__':
     print(cap.captian_elos)
     print(agents)
 
-    from multi_agent_algs.dqn.DQN import WorkerDQN
+    from unstable_baselines3.dqn.DQN import WorkerDQN
     from stable_baselines3.dqn import MlpPolicy
     from pettingzoo.classic import tictactoe_v3
 

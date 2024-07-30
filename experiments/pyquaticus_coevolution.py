@@ -143,7 +143,7 @@ if __name__ == '__main__':
                                            )
 
 
-    trainer = PettingZooCaptianCoevolution(population_sizes=[10,
+    trainer = PettingZooCaptianCoevolution(population_sizes=[50,
                                                              ],
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
@@ -166,7 +166,32 @@ if __name__ == '__main__':
                                                                ),
                                            ],
                                            zoo_dir=os.path.join(data_folder, 'zoo'),
-                                           protect_new=1000,
+                                           protect_new=300,
                                            )
-    while trainer.epochs < 5:
+
+    save_dir = os.path.join(DIR, 'data', 'save', 'pyquaticus_coevolution')
+    if os.path.exists(save_dir):
+        trainer.load(save_dir=save_dir)
+    while trainer.epochs < 5000:
+        print('starting epoch', trainer.info['epochs'])
         trainer.epoch()
+
+        print('elos:', trainer.get_classic_elo(1000))
+        if not (trainer.info['epochs'])%10:
+            print('saving')
+            trainer.save(save_dir)
+            print('done saving')
+        print()
+
+
+    def env_constructor2(train_infos):
+        return pyquaticus_v0.PyQuaticusEnv(render_mode='human',
+                                           reward_config=reward_config,
+                                           team_size=1,
+                                           config_dict=config_dict,
+                                           )
+
+
+    trainer.env_constructor = env_constructor2
+    trainer.epoch()
+    trainer.clear()
