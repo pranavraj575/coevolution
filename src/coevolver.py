@@ -641,7 +641,7 @@ class CaptianCoevolution(CoevolutionBase):
         Returns:
             normalized distribution
         """
-        return torch.softmax(-torch.tensor(elos), dim=-1)
+        return torch.softmax(-elos, dim=-1)
 
     def set_captian_elos(self, captian_elos):
         self.info[COEVOLUTION_DICT_CAPTIAN_ELO] = captian_elos
