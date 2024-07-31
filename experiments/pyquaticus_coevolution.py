@@ -7,6 +7,9 @@ from unstable_baselines3.ppo import MlpPolicy as PPOMlp
 
 from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
+from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
+from experiments.pyquaticus_utils.utils import policy_wrapper
+
 from src.coevolver import PettingZooCaptianCoevolution
 from src.game_outcome import PettingZooOutcomeFn
 from src.utils.dict_keys import *
@@ -30,41 +33,43 @@ def custom_rew(self, params, prev_params):
 
 def custom_rew2(self, params, prev_params):
     reward = 0
+    
+    flag_capture_rew=1.  
+    flag_pickup_rew=1.
+    tag_reward=.05
+    oob_penalty=1.
+    
     # Penalize player for opponent grabbing team flag
     if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
-        reward += -.2
-    # Penalize player for opponent successfully capturing team flag
-    if params["opponent_flag_capture"] and not prev_params["opponent_flag_capture"]:
-        reward += -1
-
+        reward += -flag_pickup_rew
     # Reward player for grabbing opponents flag
     if params["has_flag"] and not prev_params['has_flag']:
-        reward += .2
-
+        reward += flag_pickup_rew
+    
     # penalize player for dropping flag
     if not params["team_flag_capture"] and (prev_params["has_flag"] and not params['has_flag']):
-        reward += - .2
-
+        reward += -flag_pickup_rew
+                         
+    # Penalize player for opponent successfully capturing team flag
+    if params["opponent_flag_capture"] and not prev_params["opponent_flag_capture"]:
+        reward += -flag_capture_rew
     # Reward player for capturing opponents flag
     if params["team_flag_capture"] and not prev_params["team_flag_capture"]:
-        reward += 1
+        reward += flag_capture_rew
+
     # Check to see if agent was tagged
     if params["agent_tagged"][params["agent_id"]] and not prev_params["agent_tagged"][params["agent_id"]]:
-        if prev_params["has_flag"]:
-            reward += -.05
-        else:
-            reward += -.02
-
+        reward+= -tag_reward
     # Check to see if agent tagged an opponent
     tagged_opponent = params["agent_captures"][params["agent_id"]]
     if tagged_opponent is not None:
+        reward += tag_reward
         if prev_params["opponent_" + str(tagged_opponent) + "_has_flag"]:
-            reward += .03
-        else:
-            reward += .03
+            reward += flag_pickup_rew
+    
     # Penalize agent if it went out of bounds (Hit border wall)
     if params["agent_oob"][params["agent_id"]] == 1:
-        reward -= 1
+        reward += -oob_penalty
     return reward
 
 
@@ -107,6 +112,7 @@ class RandPolicy:
     def get_action(self, obs, *args, **kwargs):
         return self.action_space.sample()
 
+DefendPolicy=policy_wrapper(BaseDefender)
 
 config_dict = config_dict_std
 config_dict["max_screen_size"] = (float('inf'), float('inf'))
@@ -130,6 +136,9 @@ if __name__ == '__main__':
                         help="Enable rendering")
     PARSER.add_argument('--reset', action='store_true', required=False,
                         help="do not load from save")
+
+    PARSER.add_argument('--unnormalize', action='store_true', required=False,
+                        help="do not normalize, arg is necessary to use some pyquaticus bots")
 
     PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
                         help="checkpoint freq")
@@ -176,6 +185,8 @@ if __name__ == '__main__':
     dqn_cnt = args.dqn_agents
     buffer_cap = args.replay_buffer_capacity
     net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
+    normalize = not args.unnormalize
+    config_dict['normalize'] = normalize
 
     ident = (args.ident +
              '_rand_agents_' + str(rand_cnt) +
@@ -184,7 +195,8 @@ if __name__ == '__main__':
              '_replay_buffer_capacity_' + str(buffer_cap) +
              '_split_learners_' + str(args.split_learners) +
              '_protect_new_' + str(args.protect_new) +
-             '_net_arch_' + '_'.join([str(s) for s in net_arch])
+             '_net_arch_' + '_'.join([str(s) for s in net_arch]) +
+             '_normalize_obs_' + str(normalize)
              )
 
     data_folder = os.path.join(DIR, 'data', ident)
@@ -205,6 +217,7 @@ if __name__ == '__main__':
                                                                  DICT_MUTATION_REPLACABLE: False,
                                                                  DICT_IS_WORKER: False,
                                                                  })
+
     info_dict = {DICT_TRAIN: True,
                  DICT_CLONABLE: True,
                  DICT_CLONE_REPLACABLE: True,
