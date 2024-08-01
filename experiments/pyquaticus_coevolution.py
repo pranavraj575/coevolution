@@ -295,6 +295,14 @@ if __name__ == '__main__':
         elos[best] = -np.inf
         second_best = np.argmax(elos)
         if idxs is None:
+            classic_elos = trainer.classic_elos.numpy()
+            idents_and_elos = []
+            for i in range(sum(pop_sizes)):
+                idents_and_elos.append((typer(i), classic_elos[i]))
+            print('all elos by index')
+            for i, (identity, elo) in enumerate(idents_and_elos):
+                print(i, ' (', identity, '): ', elo, sep='')
+
             print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
             print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
             print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
@@ -326,18 +334,12 @@ if __name__ == '__main__':
             epoch_info = trainer.epoch()
             classic_elos = trainer.classic_elos.numpy()
             if True:
-                idents_and_elos = []
                 id_to_idxs = dict()
                 for i in range(sum(pop_sizes)):
                     identity = typer(i)
                     if identity not in id_to_idxs:
                         id_to_idxs[identity] = []
                     id_to_idxs[identity].append(i)
-                    idents_and_elos.append((identity, classic_elos[i]))
-                print('all elos by index')
-                for i, (identity, elo) in enumerate(idents_and_elos):
-                    print(i, ' (', identity, '): elo ', elo, ';\t', end='', sep='')
-                print()
                 print('all elos')
                 for identity in id_to_idxs:
                     print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])

@@ -47,7 +47,7 @@ parallel_env = pistonball_v6.parallel_env(render_mode="human", continuous=False,
 observations, infos = parallel_env.reset(seed=42)
 
 thingy = ParallelDQN(policy=CnnPolicy, parallel_env=parallel_env, buffer_size=1000)
-thingy.learn(total_timesteps=20000)
+thingy.iniitalize_model(total_timesteps=20000)
 
 quit()
 
