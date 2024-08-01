@@ -74,7 +74,8 @@ class singleQuaticus(gym.Env):
 if __name__ == '__main__':
     from stable_baselines3 import PPO
     from stable_baselines3.ppo import MlpPolicy
+    from experiments.pyquaticus_coevolution import config_dict, custom_rew2
 
-    env = singleQuaticus()
+    env = singleQuaticus(config_dict=config_dict, reward_fn=custom_rew2)
     model = PPO(policy=MlpPolicy, env=env)
-    model.learn(10000)
+    model.learn(105*5000)

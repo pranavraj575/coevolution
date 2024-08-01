@@ -116,6 +116,9 @@ DefendPolicy=policy_wrapper(BaseDefender)
 
 config_dict = config_dict_std
 config_dict["max_screen_size"] = (float('inf'), float('inf'))
+# reset later
+config_dict["sim_speedup_factor"] = 40
+config_dict["max_time"] = 420.
 # config_dict['tag_on_wall_collision']=True
 reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
 
