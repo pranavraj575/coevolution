@@ -1,6 +1,5 @@
-import torch
+import torch, math
 from torch import nn
-import math
 
 
 class AbstractPositionalEncoding(nn.Module):

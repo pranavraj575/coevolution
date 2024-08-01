@@ -1,7 +1,9 @@
+import torch, shutil, os, sys
 import numpy as np
-import torch, shutil, pickle, os, sys
+import dill as pickle
 # from multiprocessing import Pool
 from pathos.multiprocessing import Pool
+
 from src.team_trainer import TeamTrainer
 from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
 from src.zoo_cage import ZooCage

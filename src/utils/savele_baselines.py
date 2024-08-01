@@ -1,4 +1,6 @@
-import os, pickle, shutil
+import os, shutil
+import dill as pickle
+
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl

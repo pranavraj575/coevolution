@@ -253,6 +253,7 @@ if __name__ == '__main__':
     if not args.reset and os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
+    print('seting save directory as', save_dir)
 
 
     def typer(global_idx):
@@ -309,11 +310,15 @@ if __name__ == '__main__':
                     elo_tracker[identity].append(i)
                 print('all elos')
                 for identity in elo_tracker:
-                    print('\telo of', identity, 'agents:', classic_elos[elo_tracker[identity]])
+                    print('\t', identity, 'agents:', classic_elos[elo_tracker[identity]])
 
                 print('avg elos')
                 for identity in elo_tracker:
-                    print('\tavgelo of', identity, 'agents:', np.mean(classic_elos[elo_tracker[identity]]))
+                    print('\t', identity, 'agents:', np.mean(classic_elos[elo_tracker[identity]]))
+
+                print('max elos')
+                for identity in elo_tracker:
+                    print('\t', identity, 'agents:', np.max(classic_elos[elo_tracker[identity]]))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
@@ -324,4 +329,5 @@ if __name__ == '__main__':
 
     trainer.clear()
     import shutil
+
     shutil.rmtree(data_folder)

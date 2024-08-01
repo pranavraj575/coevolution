@@ -1,4 +1,6 @@
-import torch, os, pickle
+import torch, os
+import dill as pickle
+
 from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_TRAIN,
@@ -6,8 +8,9 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_SAVE_BUFFER,
                                  DICT_SAVE_CLASS,
                                  )
-from stable_baselines3.common.base_class import BaseAlgorithm
 from src.utils.savele_baselines import overwrite_worker
+
+from stable_baselines3.common.base_class import BaseAlgorithm
 
 
 class PlayerInfo:

@@ -2,11 +2,11 @@ import torch, os, shutil
 from torch import nn
 from torch.utils.data import DataLoader
 
+from src.language_replay_buffer import LangReplayBuffer
+
 from networks.team_builder import TeamBuilder, BERTeam
 from networks.input_embedding import DiscreteInputEmbedder, DiscreteInputPosEmbedder, DiscreteInputPosAppender
 from networks.positional_encoder import IdentityEncoding, ClassicPositionalEncoding, PositionalAppender
-
-from src.language_replay_buffer import LangReplayBuffer
 
 
 class TeamTrainer:

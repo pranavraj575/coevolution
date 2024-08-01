@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from torch.nn import Transformer
-from torch.nn import Embedding
+from torch.nn import Transformer, Embedding
+
 from networks.positional_encoder import IdentityEncoding, ClassicPositionalEncoding, PositionalAppender
 from networks.input_embedding import InputEmbedder
 

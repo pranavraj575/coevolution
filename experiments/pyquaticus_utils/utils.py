@@ -1,9 +1,11 @@
+from collections import defaultdict
+
 from repos.pyquaticus.pyquaticus.base_policies.base import BaseAgentPolicy
 from repos.pyquaticus.pyquaticus.structs import Team
 
-from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 from src.game_outcome import PettingZooOutcomeFn
-from collections import defaultdict
+
+from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 
 
 def policy_wrapper(Policy: BaseAgentPolicy, agent_obs_normalizer, identity='wrapped_policy'):
@@ -13,10 +15,10 @@ def policy_wrapper(Policy: BaseAgentPolicy, agent_obs_normalizer, identity='wrap
             self.identity = identity
 
         def set_team(self, team):
-            if team==0:
-                self.team=Team.BLUE_TEAM
+            if team == 0:
+                self.team = Team.BLUE_TEAM
             else:
-                self.team=Team.RED_TEAM
+                self.team = Team.RED_TEAM
 
         def get_action(self, obs, *args, **kwargs):
             agent_obs = agent_obs_normalizer.unnormalized(obs)
