@@ -139,7 +139,7 @@ if __name__ == '__main__':
              '_split_learners_' + str(args.split_learners) +
              '_protect_new_' + str(args.protect_new) +
              '_mutation_prob_' + str(args.mutation_prob) +
-             ('_clone_replacments_' + clone_replacements if clone_replacements is not None else '') +
+             ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
              ('_normalize_obs' if normalize else '')
              )
 
