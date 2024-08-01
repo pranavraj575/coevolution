@@ -28,9 +28,9 @@ test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
                                        config_dict=config_dict,
                                        )
 obs_normalizer = test_env.agent_obs_normalizer
-DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='defender')
-AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='attacker')
-BalancedPolicy = policy_wrapper(BaseBalanced, agent_obs_normalizer=obs_normalizer, identity='balanced')
+DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
+AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
+BalancedPolicy = policy_wrapper(BaseBalanced, agent_obs_normalizer=obs_normalizer, identity='bal')
 
 if __name__ == '__main__':
     import time
@@ -283,7 +283,7 @@ if __name__ == '__main__':
         elif 'WrappedPolicy' in str(type(animal)):
             return animal.identity
         else:
-            return 'random'
+            return 'rand'
 
 
     if args.display:
@@ -336,7 +336,7 @@ if __name__ == '__main__':
                     idents_and_elos.append((identity, classic_elos[i]))
                 print('all elos by index')
                 for i, (identity, elo) in enumerate(idents_and_elos):
-                    print(i, ' (', identity, '): elo ', elo, '; ', end='', sep='')
+                    print(i, ' (', identity, '): elo ', elo, ';\t', end='', sep='')
                 print('all elos')
                 for identity in id_to_idxs:
                     print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])
