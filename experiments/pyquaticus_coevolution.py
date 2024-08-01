@@ -102,6 +102,9 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--display', action='store_true', required=False,
                         help="skip training and display saved model")
+
+    PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
+                        help='which agent indexes to display, in the format "i,j" (used with --display)')
     args = PARSER.parse_args()
 
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
@@ -284,31 +287,38 @@ if __name__ == '__main__':
 
 
     if args.display:
+        idxs = args.idxs_to_display
         elos = trainer.classic_elos.numpy().copy()
         worst = np.argmin(elos)
 
         best = np.argmax(elos)
         elos[best] = -np.inf
         second_best = np.argmax(elos)
-        print(worst, best, second_best)
-        print()
-        print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
-        print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
-        print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
+        if idxs is None:
+            print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
+            print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
+            print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
+            print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
 
-        print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
-
-        ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
-        trainer.epoch(rechoose=False,
-                      save_epoch_info=False,
-                      pre_ep_dicts=[ep],
-                      )
-        print('playing second best (blue, ' + typer(second_best) + ') against best (red, ' + typer(best) + ')')
-        ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
-        trainer.epoch(rechoose=False,
-                      save_epoch_info=False,
-                      pre_ep_dicts=[ep],
-                      )
+            ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
+            trainer.epoch(rechoose=False,
+                          save_epoch_info=False,
+                          pre_ep_dicts=[ep],
+                          )
+            print('playing second best (blue, ' + typer(second_best) + ') against best (red, ' + typer(best) + ')')
+            ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
+            trainer.epoch(rechoose=False,
+                          save_epoch_info=False,
+                          pre_ep_dicts=[ep],
+                          )
+        else:
+            i, j = ast.literal_eval('(' + idxs + ')')
+            print('playing', i, '(blue, ' + typer(i) + ') against', j, '(red, ' + typer(j) + ')')
+            ep = trainer.pre_episode_generation(captian_choices=(i, j), unique=(True, True))
+            trainer.epoch(rechoose=False,
+                          save_epoch_info=False,
+                          pre_ep_dicts=[ep],
+                          )
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()
@@ -316,23 +326,28 @@ if __name__ == '__main__':
             epoch_info = trainer.epoch()
             classic_elos = trainer.classic_elos.numpy()
             if True:
-                elo_tracker = dict()
+                idents_and_elos = []
+                id_to_idxs = dict()
                 for i in range(sum(pop_sizes)):
                     identity = typer(i)
-                    if identity not in elo_tracker:
-                        elo_tracker[identity] = []
-                    elo_tracker[identity].append(i)
+                    if identity not in id_to_idxs:
+                        id_to_idxs[identity] = []
+                    id_to_idxs[identity].append(i)
+                    idents_and_elos.append((identity, classic_elos[i]))
+                print('all elos by index')
+                for i, (identity, elo) in enumerate(idents_and_elos):
+                    print(i, ' (', identity, '): elo ', elo, '; ', end='', sep='')
                 print('all elos')
-                for identity in elo_tracker:
-                    print('\t', identity, 'agents:', classic_elos[elo_tracker[identity]])
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])
 
                 print('avg elos')
-                for identity in elo_tracker:
-                    print('\t', identity, 'agents:', np.mean(classic_elos[elo_tracker[identity]]))
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', np.mean(classic_elos[id_to_idxs[identity]]))
 
                 print('max elos')
-                for identity in elo_tracker:
-                    print('\t', identity, 'agents:', np.max(classic_elos[elo_tracker[identity]]))
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
