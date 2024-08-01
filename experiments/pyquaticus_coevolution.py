@@ -87,6 +87,9 @@ if __name__ == '__main__':
     PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
                         help="probabality of mutating agents each epoch (should probably be very small)")
 
+    PARSER.add_argument('--clone-replacements', type=int, required=False, default=None,
+                        help="number of agents to try replacing each epoch (default all)")
+
     PARSER.add_argument('--max-time', type=float, required=False, default=420.,
                         help="max sim time of each episode")
     PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
@@ -100,9 +103,13 @@ if __name__ == '__main__':
     PARSER.add_argument('--display', action='store_true', required=False,
                         help="skip training and display saved model")
     args = PARSER.parse_args()
+
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render or args.display else None
+
+    clone_replacemnets = args.clone_replacemnets
+
     rand_cnt = args.rand_agents
 
     defend_cnt = args.defend_agents
@@ -124,6 +131,7 @@ if __name__ == '__main__':
              '_defend_' + str(defend_cnt) +
              '_attack_' + str(attack_cnt) +
              '_combined_' + str(balanced_cnt) +
+             '_net_arch_' + '_'.join([str(s) for s in net_arch]) +
              '_ppo_' + str(ppo_cnt) +
              '_dqn_' + str(dqn_cnt) +
              '_' +
@@ -131,7 +139,7 @@ if __name__ == '__main__':
              '_split_learners_' + str(args.split_learners) +
              '_protect_new_' + str(args.protect_new) +
              '_mutation_prob_' + str(args.mutation_prob) +
-             '_net_arch_' + '_'.join([str(s) for s in net_arch]) +
+             ('_clone_replacments_' + clone_replacemnets if clone_replacemnets is not None else '') +
              ('_normalize_obs' if normalize else '')
              )
 
@@ -253,6 +261,7 @@ if __name__ == '__main__':
                                            max_steps_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
                                                              config_dict['sim_speedup_factor']),
                                            mutation_prob=args.mutation_prob,
+                                           clone_replacements=clone_replacemnets,
                                            )
 
     if not args.reset and os.path.exists(save_dir):
@@ -304,7 +313,7 @@ if __name__ == '__main__':
         while trainer.epochs < args.epochs:
             tim = time.time()
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
-            trainer.epoch()
+            epoch_info = trainer.epoch()
             classic_elos = trainer.classic_elos.numpy()
             if True:
                 elo_tracker = dict()

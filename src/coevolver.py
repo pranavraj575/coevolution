@@ -333,6 +333,7 @@ class CoevolutionBase:
         self.add_additional_epoch_info(epoch_info)
         if save_epoch_info:
             self.epoch_infos.append(epoch_info)
+        return epoch_info
 
     def add_additional_epoch_info(self, epoch_info):
         """
@@ -988,7 +989,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             if validity_fn(info):
                 yield global_idx
 
-    def conservative_breed(self, number_to_replace: [int], base_elo=0., force_replacements=True):
+    def conservative_breed(self, number_to_replace: [int], base_elo=0., force_replacements=False):
         """
         Args:
             number_to_replace: max number of agents to try to replace in each population (must be in range [0,self.N])
@@ -1014,7 +1015,6 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             number_to_replace = [number_to_replace for _ in self.population_sizes]
         k = 0
         for pop_idx, popsize in enumerate(self.population_sizes):
-
             if number_to_replace[pop_idx] <= 0:
                 continue
 
@@ -1098,13 +1098,16 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                              load_buffer=load_buffer,
                                              )
 
-    def classic_breed(self):
+    def classic_breed(self, base_elo=0.):
         """
         breeds according to softmax selection
         https://ieeexplore.ieee.org/document/9308290
         """
         # equivalent to conservative_breed with targets being all agents
-        return self.conservative_breed(number_to_replace=self.N)
+        return self.conservative_breed(number_to_replace=self.N,
+                                       base_elo=base_elo,
+                                       force_replacements=True,
+                                       )
 
     def mutate(self):
         if self.mutation_prob == 0:
