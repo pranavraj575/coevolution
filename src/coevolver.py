@@ -328,8 +328,18 @@ class CoevolutionBase:
             epoch_info['breeding'] = self.breed()
             epoch_info['mutation'] = self.mutate()
         self.info['epochs'] += 1
+        self.add_additional_epoch_info(epoch_info)
         if save_epoch_info:
             self.epoch_infos.append(epoch_info)
+
+    def add_additional_epoch_info(self, epoch_info):
+        """
+        updates epoch_info with any relevant epoch info
+        Args:
+            epoch_info: dict of info to save about current state
+        Returns: None
+        """
+        pass
 
     def breed(self):
         """
@@ -445,6 +455,10 @@ class CaptianCoevolution(CoevolutionBase):
             COEVOLUTION_DICT_ELO_UPDATE: elo_update,
             COEVOLUTION_DICT_ELO_CONVERSION: elo_conversion,
         })
+
+    def add_additional_epoch_info(self, epoch_info):
+        super().add_additional_epoch_info(epoch_info=epoch_info)
+        epoch_info['captian_elos'] = self.captian_elos.cpu().numpy()
 
     def clear(self):
         super().clear()
@@ -791,6 +805,19 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.set_protect_new(protect_new=protect_new)
         self.set_clone_replacements(clone_replacements=clone_replacements)
         self.set_max_steps_per_ep(max_steps_per_ep=max_steps_per_ep)
+
+    def add_additional_epoch_info(self, epoch_info):
+        super().add_additional_epoch_info(epoch_info=epoch_info)
+        epoch_info['agent_classes'] = tuple(
+            type(
+                self.load_animal(
+                    pop_local_idx=self.index_to_pop_index(
+                        global_idx=global_idx
+                    ),
+                    load_buffer=False
+                )[0]
+            )
+            for global_idx in range(self.N))
 
     @property
     def max_steps_per_ep(self):

@@ -1,4 +1,6 @@
-import torch, os, pickle, shutil
+import torch, os, shutil
+import dill as pickle
+
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer

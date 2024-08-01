@@ -1,5 +1,5 @@
-import torch
-import os, sys, shutil, pickle
+import torch, os, sys, shutil
+import dill as pickle
 
 
 class LangReplayBuffer:
