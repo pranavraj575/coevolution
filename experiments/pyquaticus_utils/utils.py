@@ -7,6 +7,8 @@ from src.game_outcome import PettingZooOutcomeFn
 
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 
+DEBUG_MESSAGES = False
+
 
 def policy_wrapper(Policy: BaseAgentPolicy, agent_obs_normalizer, identity='wrapped_policy'):
     class WrappedPolicy(Policy):
@@ -54,34 +56,51 @@ def custom_rew2(self, params, prev_params):
     # Penalize player for opponent grabbing team flag
     if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
         reward += -flag_pickup_rew
+        if DEBUG_MESSAGES:
+            print('enemey flag pickup')
     # Reward player for grabbing opponents flag
     if params["has_flag"] and not prev_params['has_flag']:
+        if DEBUG_MESSAGES:
+            print('flag pickup')
         reward += flag_pickup_rew
 
     # penalize player for dropping flag
     if not params["team_flag_capture"] and (prev_params["has_flag"] and not params['has_flag']):
+        if DEBUG_MESSAGES:
+            print('dropped flag')
         reward += -flag_pickup_rew
 
     # Penalize player for opponent successfully capturing team flag
     if params["opponent_flag_capture"] and not prev_params["opponent_flag_capture"]:
+        if DEBUG_MESSAGES:
+            print('enemy flag cap')
         reward += -flag_capture_rew
     # Reward player for capturing opponents flag
     if params["team_flag_capture"] and not prev_params["team_flag_capture"]:
+        if DEBUG_MESSAGES:
+            print('flag cap')
         reward += flag_capture_rew
 
     # Check to see if agent was tagged
     if params["agent_tagged"][params["agent_id"]] and not prev_params["agent_tagged"][params["agent_id"]]:
+        if DEBUG_MESSAGES:
+            print('agent tagged')
         reward += -tag_reward
     # Check to see if agent tagged an opponent
     tagged_opponent = params["agent_captures"][params["agent_id"]]
     if tagged_opponent is not None:
         reward += tag_reward
+        if DEBUG_MESSAGES:
+            print('opponent tagged')
         if prev_params["opponent_" + str(tagged_opponent) + "_has_flag"]:
             reward += flag_pickup_rew
 
     # Penalize agent if it went out of bounds (Hit border wall)
     if params["agent_oob"][params["agent_id"]] == 1:
         reward += -oob_penalty
+    if reward != 0:
+        if DEBUG_MESSAGES:
+            print(reward)
     return reward
 
 
@@ -105,7 +124,8 @@ class CTFOutcome(PettingZooOutcomeFn):
                   number_of_eps=1,
                   )
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
-
+        if DEBUG_MESSAGES:
+            print(score)
         if score[0] == score[1]:
             return [
                 (.5, []),

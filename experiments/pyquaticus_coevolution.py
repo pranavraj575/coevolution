@@ -82,8 +82,10 @@ if __name__ == '__main__':
     PARSER.add_argument('--split-learners', action='store_true', required=False,
                         help="learning agents types each go in their own population to avoid interspecies replacement")
 
-    PARSER.add_argument('--protect-new', type=int, required=False, default=300,
+    PARSER.add_argument('--protect-new', type=int, required=False, default=500,
                         help="protect new agents for this number of breeding epochs")
+    PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
+                        help="probabality of mutating agents each epoch (should probably be very small)")
 
     PARSER.add_argument('--max-time', type=float, required=False, default=420.,
                         help="max sim time of each episode")
@@ -128,8 +130,9 @@ if __name__ == '__main__':
              '_replay_buffer_capacity_' + str(buffer_cap) +
              '_split_learners_' + str(args.split_learners) +
              '_protect_new_' + str(args.protect_new) +
+             '_mutation_prob_' + str(args.mutation_prob) +
              '_net_arch_' + '_'.join([str(s) for s in net_arch]) +
-             '_normalize_obs_' + str(normalize)
+             ('_normalize_obs' if normalize else '')
              )
 
     data_folder = os.path.join(DIR, 'data', ident)
@@ -160,7 +163,7 @@ if __name__ == '__main__':
                                                  ), non_train_dict.copy()
                                     )
     create_attack = lambda i, env: (AttackPolicy(agent_id=0,
-                                                 mode="easy",
+                                                 mode="hard",
                                                  using_pyquaticus=True,
                                                  ), non_train_dict.copy()
                                     )
@@ -232,7 +235,8 @@ if __name__ == '__main__':
 
 
         worker_constructors = non_lerning_construct + [create_learner]
-
+    if sum(pop_sizes) == 0:
+        raise Exception("no agents specified, at least one of --*-agents must be greater than 0")
     max_cores = len(os.sched_getaffinity(0))
     if args.display:
         proc = 0
@@ -247,7 +251,8 @@ if __name__ == '__main__':
                                            processes=proc,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
                                            max_steps_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
-                                                             config_dict['sim_speedup_factor'])
+                                                             config_dict['sim_speedup_factor']),
+                                           mutation_prob=args.mutation_prob,
                                            )
 
     if not args.reset and os.path.exists(save_dir):
