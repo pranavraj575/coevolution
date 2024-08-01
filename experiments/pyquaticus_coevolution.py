@@ -337,6 +337,7 @@ if __name__ == '__main__':
                 print('all elos by index')
                 for i, (identity, elo) in enumerate(idents_and_elos):
                     print(i, ' (', identity, '): elo ', elo, ';\t', end='', sep='')
+                print()
                 print('all elos')
                 for identity in id_to_idxs:
                     print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])
