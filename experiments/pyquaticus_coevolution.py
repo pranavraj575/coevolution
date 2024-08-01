@@ -108,7 +108,7 @@ if __name__ == '__main__':
     config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render or args.display else None
 
-    clone_replacemnets = args.clone_replacemnets
+    clone_replacements = args.clone_replacements
 
     rand_cnt = args.rand_agents
 
@@ -261,7 +261,7 @@ if __name__ == '__main__':
                                            max_steps_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
                                                              config_dict['sim_speedup_factor']),
                                            mutation_prob=args.mutation_prob,
-                                           clone_replacements=clone_replacemnets,
+                                           clone_replacements=clone_replacements,
                                            )
 
     if not args.reset and os.path.exists(save_dir):
