@@ -138,7 +138,7 @@ if __name__ == '__main__':
              '_replay_buffer_capacity_' + str(buffer_cap) +
              '_split_learners_' + str(args.split_learners) +
              '_protect_new_' + str(args.protect_new) +
-             '_mutation_prob_' + str(args.mutation_prob) +
+             '_mutation_prob_' + str(args.mutation_prob).replace('.', '_') +
              ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
              ('_dont_normalize_obs' if not normalize else '')
              )
