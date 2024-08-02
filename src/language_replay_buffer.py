@@ -200,6 +200,7 @@ class BinnedReplayBufferDiskStorage(LangReplayBuffer):
         }
         if storage_dir is not None:
             self.set_storage_dir(storage_dir=storage_dir, reset=overwrite_existing)
+        self.weights = None
 
     def set_storage_dir(self, storage_dir, reset=False):
         super().set_storage_dir(storage_dir=storage_dir, reset=reset)
@@ -268,34 +269,39 @@ class BinnedReplayBufferDiskStorage(LangReplayBuffer):
 
             self.avgs[biin] = (self.avgs[biin]*(len(self.bins[biin]) - 1) + scalar - rem)/len(self.bins[biin])
 
-    def set_weights(self, values_to_weights=None):
+    def set_weights(self, values_to_weights):
         """
         sets weights of each  bin according to the average value of its elements
         Args:
         values_to_weights: a function (tensor -> tensor) ([0,1] -> R+), weights to give a bin with a particular value
             if None, uses weights of len(bin) for each bin (this corresponds to uniformly sampling an element)
         """
-        if values_to_weights == None:
-            self.weights = self.bin_lens
-        else:
-            self.weights = values_to_weights(self.avgs)
+        self.weights = values_to_weights(self.avgs)
 
     def sample_one(self):
-        biin = torch.multinomial(self.weights, 1)
+        """
+        samples one according to weights set
+        if weights are not set, samples uniformly from seen examples
+        first samples a bin according to weights, then samples an element from bin
+        """
+        weights = self.weights
+        if weights is None:
+            weights = self.bin_lens
+        # weight empty bins at 0
+        weights = weights*(self.bin_lens > 0)
+
+        biin = torch.multinomial(weights, 1)
         return self.bins[biin].sample_one()
 
-    def sample(self, batch, values_to_weights=None, **kwargs):
+    def sample(self, batch, **kwargs):
         """
         samples a bin according to the average value of its elements, then samples elements from the bin
         Args:
             batch: number of elements to sample
-            values_to_weights: a function (tensor -> tensor) ([0,1] -> R+), weights to give a bin with a particular value
-                if None, uses weights of len(bin) for each bin (this corresponds to uniformly sampling an element)
             **kwargs:
         Returns:
             Iterable of samples
         """
-        self.set_weights(values_to_weights=values_to_weights)
         for item in super().sample(batch=batch, **kwargs):
             yield item
 

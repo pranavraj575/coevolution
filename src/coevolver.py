@@ -353,7 +353,6 @@ class CoevolutionBase:
         seq_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in seq_pre_ep_dicts]
 
         all_items_to_save = seq_items_to_save + par_items_to_save
-        print('played', len(all_items_to_save), 'games')
         for items_to_save in all_items_to_save:
             epoch_info['episodes'].append(items_to_save['episode_info'])
 
@@ -605,7 +604,7 @@ class CaptianCoevolution(CoevolutionBase):
                                pre_ep_dicts=[pre_ep_dict],
                                update_epoch_infos=False,
                                depth=depth + 1,
-                               known_obs=(team_idx, playerinfo),
+                               known_obs=(team_idx, combined_obs),
                                save_trained_agents=False,
                                save_into_team_buffer=True,
                                )

@@ -35,6 +35,8 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--batch-size', type=int, required=False, default=128,
                         help="batch size for Multi Level Marketing training")
+    PARSER.add_argument('--minibatch-size', type=int, required=False, default=1,
+                        help="minibatch size for Multi Level Marketing training (1 is equivalent to sgd)")
     PARSER.add_argument('--train-freq', type=int, required=False, default=10,
                         help="train freq for Multi Level Marketing training")
 
@@ -152,9 +154,18 @@ if __name__ == '__main__':
                      ('_dropout_' + lstm_dropout if args.lstm_dropout is not None else '')
              ) +
              (('_random_agents_' + str(rand_cnt)) if rand_cnt else '') +
+             (
+                 ('_retrials_' +
+                  ('_loss_' + str(args.loss_retrials) if args.loss_retrials else '') +
+                  ('_tie_' + str(args.tie_retrials) if args.tie_retrials else '')
+                  )
+                 if args.loss_retrials or args.tie_retrials else ''
+             ) +
              '_train_freq_' + str(args.train_freq) +
-             '_loss_retrials_' + str(args.loss_retrials) +
-             '_tie_retrials_' + str(args.tie_retrials) +
+             '_batch_size_' + str(args.batch_size) +
+             '_minibatch_size_' + str(args.minibatch_size) +
+             '_half_life_' + str(args.half_life).replace('.', '_') +
+
              ('_dont_normalize_obs' if not normalize else '')
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
@@ -290,14 +301,45 @@ if __name__ == '__main__':
             )
             if not trainer.epochs%args.train_freq:
                 print('training step started')
-                trainer.team_trainer.training_step(
+                trainer.team_trainer.train(
                     batch_size=args.batch_size,
+                    minibatch=args.minibatch_size,
+                    mask_probs=None,
+                    replacement_probs=(.8, .1, .1),
+                    mask_obs_prob=.1,
                 )
                 print('training step finished')
             if True:
-                classic_elos = trainer.classic_elos.numpy()
+                id_to_idxs = dict()
+                for i in range(sum(non_learning_sizes)):
+                    identity = typer(i)
+                    if identity not in id_to_idxs:
+                        id_to_idxs[identity] = []
+                    id_to_idxs[identity].append(i)
                 print('all elos')
-                print(classic_elos)
+                classic_elos = trainer.classic_elos.numpy()
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])
+
+                print('avg elos')
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', np.mean(classic_elos[id_to_idxs[identity]]))
+
+                print('max elos')
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
+                print('initial dist')
+
+                test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
+                indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                             indices=None,
+                                                                             obs_preembed=None,
+                                                                             obs_mask=None,
+                                                                             noise_model=None,
+                                                                             valid_members=None,
+                                                                             )
+
+                print(torch.mean(dist, dim=0))
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
                 trainer.save(save_dir)

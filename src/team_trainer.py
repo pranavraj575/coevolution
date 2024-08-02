@@ -46,6 +46,26 @@ class TeamTrainer:
     def uniform_random_team(self, shape):
         return torch.randint(0, self.num_agents, shape)
 
+    def get_member_distribution(self,
+                                init_team,
+                                indices=None,
+                                **kwargs
+                                ):
+        """
+        returns probability distribution of next member being added to team
+        Args:
+            init_team: already initialized team
+            indices: indices to check, if None, checks all masked elements
+        Returns:
+            indices, distribution of agents for each index
+                for this class, uniform
+        """
+
+        if indices is None:
+            indices = torch.where(torch.eq(init_team, self.MASK))
+
+        return indices, torch.ones((len(indices[0]), self.num_agents))/self.num_agents
+
     def add_member_to_team(self,
                            member,
                            T=None,
@@ -194,7 +214,7 @@ class TeamTrainer:
         """
         return torch.fill(torch.zeros((N, T), dtype=torch.long), self.MASK)
 
-    def training_step(self, *args, **kwargs):
+    def train(self, *args, **kwargs):
         pass
 
     def create_nose_model_towards_uniform(self, t):
@@ -296,21 +316,39 @@ class MLMTeamTrainer(TeamTrainer):
         item = (scalar, obs_preembed, team, obs_mask)
         self.buffer.push(item=item)
 
+    def train(self,
+              batch_size,
+              minibatch=None,
+              mask_probs=None,
+              replacement_probs=(.8, .1, .1),
+              mask_obs_prob=.1,
+              ):
+        if minibatch is None:
+            minibatch = batch_size
+        for i in range(0, batch_size, minibatch):
+            tinybatch = min(i + minibatch, batch_size) - i
+            # cut off the last batch if we go over
+            self.training_step(
+                batch_size=tinybatch,
+                mask_probs=mask_probs,
+                replacement_probs=replacement_probs,
+                mask_obs_prob=mask_obs_prob,
+            )
+
     def training_step(self,
                       batch_size,
                       mask_probs=None,
                       replacement_probs=(.8, .1, .1),
-                      sgd=True,
                       mask_obs_prob=.1,
                       ):
         """
         Args:
             batch_size: size of batch to train on
-            mask_probs: list of proabilities of masking to use
-                if None, uses (1/team_size, 2/team_size, ..., 1)
+            mask_probs: list of proabilities of masking to sample from
+                if None, samples (1/team_size, 2/team_size, ..., 1)
+                    for each obtained team size
             replacement_probs: proportion of ([MASK], random element, same element) to replace masked elements with
                 default (.8, .1, .1) because BERT
-            sgd: whether to take a step after each batch (i.e. batch size of 1)
             scalar: thing to multiply losses
                 should be 1 for normal MLM training
                     -1 to push model away from 'bad' teamas
@@ -322,8 +360,7 @@ class MLMTeamTrainer(TeamTrainer):
             print('WARNING: trying to train on empty buffer')
             return None
         data = self.buffer.sample(batch=batch_size)
-        if not sgd:
-            self.optim.zero_grad()
+        self.optim.zero_grad()
         losses = torch.zeros(1)
         count = 0
         for (scalar, obs_preembed, team, obs_mask) in data:
@@ -331,36 +368,33 @@ class MLMTeamTrainer(TeamTrainer):
                 obs_preembed = None
             if torch.is_tensor(obs_mask) and torch.all(torch.isnan(obs_mask)):
                 obs_mask = None
-            if sgd:
-                self.optim.zero_grad()
+            if mask_probs is None:
+                N, T = team.shape
+                mask_probs = torch.arange(0, T + 1)/T
+
+            mask_prob = mask_probs[torch.randint(0, len(mask_probs), (1,))]
 
             loss = self._mask_and_learn(obs_preembed=obs_preembed,
                                         teams=team,
                                         obs_mask=obs_mask,
-                                        mask_probs=mask_probs,
+                                        mask_prob=mask_prob,
                                         replacement_probs=replacement_probs,
                                         scalar=scalar,
                                         mask_obs_prob=mask_obs_prob,
                                         )
-            if sgd:
-                loss.backward()
-                self.optim.step()
-                losses += loss.detach()
-            else:
-                # keep gradients
-                losses += loss
+            # keep gradients
+            losses += loss
             count += 1
         mean_loss = losses/count
-        if not sgd:
-            mean_loss.backward()
-            self.optim.step()
+        mean_loss.backward()
+        self.optim.step()
         return mean_loss.item()
 
     def _mask_and_learn(self,
                         obs_preembed,
                         teams,
                         obs_mask,
-                        mask_probs=None,
+                        mask_prob,
                         replacement_probs=(.8, .1, .1),
                         scalar=1.,
                         mask_obs_prob=.1,
@@ -383,29 +417,23 @@ class MLMTeamTrainer(TeamTrainer):
         Returns:
             avg crossentropy loss
         """
-        if mask_probs is None:
-            N, T = teams.shape
-            mask_probs = torch.arange(0, T + 1)/T
-        losses = torch.zeros(1)
-        for mask_prob in mask_probs:
-            if mask_obs_prob > 0 and obs_preembed is not None:
-                if obs_mask is not None:
-                    temp_obs_mask = obs_mask.clone()
-                else:
-                    temp_obs_mask = torch.zeros((obs_preembed.shape[:2]))
-                additional_mask = torch.rand_like(temp_obs_mask, dtype=torch.float) < mask_obs_prob
-                temp_obs_mask = torch.logical_or(temp_obs_mask, additional_mask)
+        if mask_obs_prob > 0 and obs_preembed is not None:
+            if obs_mask is not None:
+                temp_obs_mask = obs_mask.clone()
             else:
-                temp_obs_mask = obs_mask
-            loss = self._get_losses(obs_preembed=obs_preembed,
-                                    teams=teams,
-                                    obs_mask=temp_obs_mask,
-                                    mask_prob=mask_prob,
-                                    replacement_probs=replacement_probs,
-                                    scalar=scalar,
-                                    )
-            losses += loss
-        return losses/len(mask_probs)
+                temp_obs_mask = torch.zeros((obs_preembed.shape[:2]))
+            additional_mask = torch.rand_like(temp_obs_mask, dtype=torch.float) < mask_obs_prob
+            temp_obs_mask = torch.logical_or(temp_obs_mask, additional_mask)
+        else:
+            temp_obs_mask = obs_mask
+        loss = self._get_losses(obs_preembed=obs_preembed,
+                                teams=teams,
+                                obs_mask=temp_obs_mask,
+                                mask_prob=mask_prob,
+                                replacement_probs=replacement_probs,
+                                scalar=scalar,
+                                )
+        return loss
 
     def _get_losses(self,
                     obs_preembed,
@@ -572,6 +600,33 @@ class MLMTeamTrainer(TeamTrainer):
                                   noise_model=noise_model,
                                   )
 
+    def get_member_distribution(self,
+                                init_team,
+                                indices=None,
+                                obs_preembed=None,
+                                obs_mask=None,
+                                noise_model=None,
+                                valid_members=None,
+                                ):
+        if indices is None:
+            indices = torch.where(torch.eq(init_team, self.MASK))
+        output = self.team_builder.forward(obs_preembed=obs_preembed,
+                                           target_team=init_team,
+                                           obs_mask=obs_mask,
+                                           output_probs=True,
+                                           pre_softmax=False,
+                                           )
+
+        dist = output[indices]  # (|indices|, num_agents) multinomial distribution for each index to update
+        if noise_model is not None:
+            # add noise if this is a thing
+            dist = noise_model(dist)
+
+        if valid_members is not None:
+            # set invalid members to 0
+            dist = dist*(valid_members[indices])
+        return indices, dist
+
     def mutate_add_member(self,
                           initial_teams,
                           indices=None,
@@ -608,21 +663,13 @@ class MLMTeamTrainer(TeamTrainer):
         if len(indices[0]) == 0:
             # no [MASK] tokens exist
             return initial_teams
-        output = self.team_builder.forward(obs_preembed=obs_preembed,
-                                           target_team=initial_teams,
-                                           obs_mask=obs_mask,
-                                           output_probs=True,
-                                           pre_softmax=False,
-                                           )
-
-        dist = output[indices]  # (|indices|, num_agents) multinomial distribution for each index to update
-        if noise_model is not None:
-            # add noise if this is a thing
-            dist = noise_model(dist)
-
-        if valid_members is not None:
-            # set invalid members to 0
-            dist = dist*(valid_members[indices])
+        indices, dist = self.get_member_distribution(init_team=initial_teams,
+                                                     indices=indices,
+                                                     obs_preembed=obs_preembed,
+                                                     obs_mask=obs_mask,
+                                                     noise_model=noise_model,
+                                                     valid_members=valid_members
+                                                     )
 
         # torch.multinomial samples each
         initial_teams[indices] = torch.multinomial(dist, 1).flatten()
