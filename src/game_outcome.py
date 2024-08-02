@@ -35,6 +35,20 @@ class PlayerInfo:
                           obs_mask=None if self.obs_mask is None else self.obs_mask.clone(),
                           )
 
+    def get_data(self, reshape=True):
+        """
+        gets data
+        Args:
+            reshape: whtether to return in batch format
+        Returns:
+            self.obs_preembed,self.obs_mask
+        """
+        if reshape:
+            return (None if self.obs_preembed is None else self.obs_preembed.unsqueeze(0),
+                    None if self.obs_mask is None else self.obs_mask.unsqueeze(0))
+        else:
+            return self.obs_preembed, self.obs_mask
+
     def union_obs(self,
                   other_player_info,
                   combine=True,

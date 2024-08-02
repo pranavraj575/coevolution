@@ -49,7 +49,7 @@ if __name__ == '__main__':
                                    team_trainer=trainer,
                                    clone_fn=lambda: None,
                                    mutation_fn=None,
-                                   elo_update=.05
+                                   captian_elo_update=.05
                                    )
 
     minibatch = 64
@@ -75,7 +75,7 @@ if __name__ == '__main__':
                                                 )
             conditional_dists.append(dist.detach().flatten().numpy())
         cond_dists.append(conditional_dists)
-        loss = trainer.training_step(batch_size=minibatch, minibatch=False)
+        loss = trainer.training_step(batch_size=minibatch, sgd=False)
         losses.append(loss)
         print('epoch', epoch, ';\tbuffer size', len(trainer.buffer))
         print('loss', loss)

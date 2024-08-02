@@ -1,7 +1,7 @@
 from unstable_baselines3.utils.dict_keys import *
+
 # whether agent is able to be trained/should be trained
 # DICT_TRAIN = DICT_TRAIN
-
 
 
 # keeps track of age of each agent
@@ -52,34 +52,35 @@ TEMP_DICT_CAPTIAN = 'captian'
 # whether a captain is unique
 TEMP_DICT_CAPTIAN_UNIQUE = 'unique'
 
-
 ###### these keys are for coevolution dict
 
-COEVOLUTION_DICT_CAPTIAN_ELO='captian_elos'
-COEVOLUTION_DICT_ELO_UPDATE='elo_update'
-COEVOLUTION_DICT_ELO_CONVERSION='elo_conversion'
+COEVOLUTION_DICT_ELOS = 'elos'
+COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE = 'captian_elo_update'
+COEVOLUTION_DICT_MEMBER_ELO_UPDATE = 'member_elo_update'
+COEVOLUTION_DICT_ELO_CONVERSION = 'elo_conversion'
+COEVOLUTION_DICT_DEPTH_OF_RETRY='depth_of_retry'
 
-__all__=["DICT_TRAIN",
-         "DICT_AGE",
+__all__ = ["DICT_TRAIN",
+           "DICT_AGE",
 
-         "DICT_IS_WORKER",
+           "DICT_IS_WORKER",
 
-         "DICT_CLONABLE",
-         "DICT_CLONE_REPLACABLE",
-         "DICT_MUTATION_REPLACABLE",
-         "DICT_COLLECT_ONLY",
+           "DICT_CLONABLE",
+           "DICT_CLONE_REPLACABLE",
+           "DICT_MUTATION_REPLACABLE",
+           "DICT_COLLECT_ONLY",
 
-         "DICT_SAVE_BUFFER",
-         "DICT_SAVE_CLASS",
+           "DICT_SAVE_BUFFER",
+           "DICT_SAVE_CLASS",
 
-         "TEMP_DICT_CAPTIAN",
-         "TEMP_DICT_CAPTIAN_UNIQUE",
+           "TEMP_DICT_CAPTIAN",
+           "TEMP_DICT_CAPTIAN_UNIQUE",
 
-         "DICT_POSITION_DEPENDENT",
-         "DICT_KEEP_OLD_BUFFER",
-         "DICT_UPDATE_WITH_OLD_BUFFER",
+           "DICT_POSITION_DEPENDENT",
+           "DICT_KEEP_OLD_BUFFER",
+           "DICT_UPDATE_WITH_OLD_BUFFER",
 
-         "COEVOLUTION_DICT_CAPTIAN_ELO",
-         "COEVOLUTION_DICT_ELO_UPDATE",
-         "COEVOLUTION_DICT_ELO_CONVERSION",
-         ]
+           "COEVOLUTION_DICT_ELOS",
+           "COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE",
+           "COEVOLUTION_DICT_ELO_CONVERSION",
+           ]

@@ -8,9 +8,9 @@ from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
 from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
 from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker
-from repos.pyquaticus.pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent as BaseBalanced
-from experiments.pyquaticus_utils.utils import policy_wrapper, custom_rew, custom_rew2, RandPolicy, CTFOutcome
-from repos.pyquaticus.pyquaticus.structs import Team
+from experiments.pyquaticus_utils.reward_fns import custom_rew, custom_rew2, RandPolicy
+from experiments.pyquaticus_utils.outcomes import CTFOutcome
+from experiments.pyquaticus_utils.wrappers import policy_wrapper
 
 from src.coevolver import PettingZooCaptianCoevolution
 from src.utils.dict_keys import *
@@ -22,15 +22,6 @@ config_dict["sim_speedup_factor"] = 40
 config_dict["max_time"] = 420.
 # config_dict['tag_on_wall_collision']=True
 reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
-
-test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
-                                       team_size=1,
-                                       config_dict=config_dict,
-                                       )
-obs_normalizer = test_env.agent_obs_normalizer
-DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
-AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
-BalancedPolicy = policy_wrapper(BaseBalanced, agent_obs_normalizer=obs_normalizer, identity='bal')
 
 if __name__ == '__main__':
     import time
@@ -45,28 +36,12 @@ if __name__ == '__main__':
 
     PARSER = argparse.ArgumentParser()
 
-    PARSER.add_argument('--render', action='store_true', required=False,
-                        help="Enable rendering")
-    PARSER.add_argument('--reset', action='store_true', required=False,
-                        help="do not load from save")
-
-    PARSER.add_argument('--unnormalize', action='store_true', required=False,
-                        help="do not normalize, arg is necessary to use some pyquaticus bots")
-
-    PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
-                        help="checkpoint freq")
-
-    PARSER.add_argument('--epochs', type=int, required=False, default=5000,
-                        help="epochs to train for")
-
     PARSER.add_argument('--rand-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
 
     PARSER.add_argument('--defend-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
     PARSER.add_argument('--attack-agents', type=int, required=False, default=0,
-                        help="number of random agents to use")
-    PARSER.add_argument('--combined-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
 
     PARSER.add_argument('--ppo-agents', type=int, required=False, default=0,
@@ -75,7 +50,6 @@ if __name__ == '__main__':
                         help="number of dqn agents to use")
     PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
                         help="replay buffer capacity")
-
     PARSER.add_argument('--net-arch', action='store', required=False, default='64,64',
                         help="hidden layers of network, should be readable as a list or tuple")
 
@@ -86,7 +60,6 @@ if __name__ == '__main__':
                         help="protect new agents for this number of breeding epochs")
     PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
                         help="probabality of mutating agents each epoch (should probably be very small)")
-
     PARSER.add_argument('--clone-replacements', type=int, required=False, default=None,
                         help="number of agents to try replacing each epoch (default all)")
 
@@ -94,9 +67,18 @@ if __name__ == '__main__':
                         help="max sim time of each episode")
     PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
                         help="skips frames to speed up episodes")
+    PARSER.add_argument('--unnormalize', action='store_true', required=False,
+                        help="do not normalize, arg is necessary to use some pyquaticus bots")
 
+    PARSER.add_argument('--epochs', type=int, required=False, default=5000,
+                        help="epochs to train for")
     PARSER.add_argument('--processes', type=int, required=False, default=0,
                         help="number of processes to use")
+
+    PARSER.add_argument('--reset', action='store_true', required=False,
+                        help="do not load from save")
+    PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
+                        help="checkpoint freq")
     PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
                         help='identification to add to folder')
 
@@ -105,7 +87,18 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
                         help='which agent indexes to display, in the format "i,j" (used with --display)')
+
+    PARSER.add_argument('--render', action='store_true', required=False,
+                        help="Enable rendering")
     args = PARSER.parse_args()
+
+    test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
+                                           team_size=1,
+                                           config_dict=config_dict,
+                                           )
+    obs_normalizer = test_env.agent_obs_normalizer
+    DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
+    AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
 
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
@@ -117,7 +110,6 @@ if __name__ == '__main__':
 
     defend_cnt = args.defend_agents
     attack_cnt = args.attack_agents
-    balanced_cnt = args.combined_agents
 
     ppo_cnt = args.ppo_agents
 
@@ -129,24 +121,23 @@ if __name__ == '__main__':
     config_dict['normalize'] = normalize
 
     ident = (args.ident +
-             '_agent_count_'
-             '_rand_' + str(rand_cnt) +
-             '_defend_' + str(defend_cnt) +
-             '_attack_' + str(attack_cnt) +
-             '_combined_' + str(balanced_cnt) +
-             '_net_arch_' + '_'.join([str(s) for s in net_arch]) +
-             '_ppo_' + str(ppo_cnt) +
-             '_dqn_' + str(dqn_cnt) +
+             '_agent_count_' +
+             (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
+             (('_defend_' + str(defend_cnt)) if defend_cnt else '') +
+             (('_attack_' + str(attack_cnt)) if attack_cnt else '') +
+             (('_net_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
+             (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
+             (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
              '_' +
-             '_replay_buffer_capacity_' + str(buffer_cap) +
-             '_split_learners_' + str(args.split_learners) +
+             (('_replay_buffer_capacity_' + str(buffer_cap)) if dqn_cnt else '') +
+             ('_split_learners_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
              '_protect_new_' + str(args.protect_new) +
              '_mutation_prob_' + str(args.mutation_prob).replace('.', '_') +
              ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
              ('_dont_normalize_obs' if not normalize else '')
              )
 
-    data_folder = os.path.join(DIR, 'data', ident)
+    data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
 
 
@@ -167,7 +158,7 @@ if __name__ == '__main__':
     create_rand = lambda i, env: (RandPolicy(env.action_space), non_train_dict.copy())
     create_defend = lambda i, env: (DefendPolicy(agent_id=0,
                                                  team='red',
-                                                 mode="easy",
+                                                 mode="hard",
                                                  flag_keepout=config_dict['flag_keepout'],
                                                  catch_radius=config_dict["catch_radius"],
                                                  using_pyquaticus=True,
@@ -178,22 +169,12 @@ if __name__ == '__main__':
                                                  using_pyquaticus=True,
                                                  ), non_train_dict.copy()
                                     )
-    create_balance = lambda i, env: (BalancedPolicy(agent_id=0,
-                                                    team='red',
-                                                    mode="easy",
-                                                    flag_keepout=config_dict['flag_keepout'],
-                                                    catch_radius=config_dict["catch_radius"],
-                                                    using_pyquaticus=True,
-                                                    defensiveness=20.,
-                                                    ), non_train_dict.copy()
-                                     )
-
-    info_dict = {DICT_TRAIN: True,
-                 DICT_CLONABLE: True,
-                 DICT_CLONE_REPLACABLE: True,
-                 DICT_MUTATION_REPLACABLE: True,
-                 DICT_IS_WORKER: True,
-                 }
+    train_info_dict = {DICT_TRAIN: True,
+                       DICT_CLONABLE: True,
+                       DICT_CLONE_REPLACABLE: True,
+                       DICT_MUTATION_REPLACABLE: True,
+                       DICT_IS_WORKER: True,
+                       }
     ppokwargs = dict()
     policy_kwargs = {
         'net_arch': dict(pi=net_arch,
@@ -206,7 +187,7 @@ if __name__ == '__main__':
                                                                 vf=[64, 64]),
                                            },
                                            **ppokwargs
-                                           ), info_dict.copy()
+                                           ), train_info_dict.copy()
                                  )
     dqnkwargs = {
         'buffer_size': buffer_cap,
@@ -214,17 +195,15 @@ if __name__ == '__main__':
     create_dqn = lambda i, env: (WorkerDQN(policy=DQNMlp,
                                            env=env,
                                            **dqnkwargs
-                                           ), info_dict.copy()
+                                           ), train_info_dict.copy()
                                  )
     non_learning_sizes = [rand_cnt,
                           defend_cnt,
                           attack_cnt,
-                          balanced_cnt,
                           ]
     non_lerning_construct = [create_rand,
                              create_defend,
                              create_attack,
-                             create_balance,
                              ]
     if args.split_learners:
         pop_sizes = non_learning_sizes + [ppo_cnt,
@@ -257,7 +236,7 @@ if __name__ == '__main__':
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
                                            worker_constructors=worker_constructors,
-                                           zoo_dir=os.path.join(data_folder, 'zoo'),
+                                           storage_dir=data_folder,
                                            protect_new=args.protect_new,
                                            processes=proc,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
@@ -332,7 +311,6 @@ if __name__ == '__main__':
             tim = time.time()
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
             epoch_info = trainer.epoch()
-            classic_elos = trainer.classic_elos.numpy()
             if True:
                 id_to_idxs = dict()
                 for i in range(sum(pop_sizes)):
@@ -341,6 +319,7 @@ if __name__ == '__main__':
                         id_to_idxs[identity] = []
                     id_to_idxs[identity].append(i)
                 print('all elos')
+                classic_elos = trainer.classic_elos.numpy()
                 for identity in id_to_idxs:
                     print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])
 

@@ -1,32 +1,6 @@
-from collections import defaultdict
 
-from repos.pyquaticus.pyquaticus.base_policies.base import BaseAgentPolicy
-from repos.pyquaticus.pyquaticus.structs import Team
-
-from src.game_outcome import PettingZooOutcomeFn
-
-from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 
 DEBUG_MESSAGES = False
-
-
-def policy_wrapper(Policy: BaseAgentPolicy, agent_obs_normalizer, identity='wrapped_policy'):
-    class WrappedPolicy(Policy):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.identity = identity
-
-        def set_team(self, team):
-            if team == 0:
-                self.team = Team.BLUE_TEAM
-            else:
-                self.team = Team.RED_TEAM
-
-        def get_action(self, obs, *args, **kwargs):
-            agent_obs = agent_obs_normalizer.unnormalized(obs)
-            return self.compute_action(defaultdict(lambda: agent_obs))
-
-    return WrappedPolicy
 
 
 def custom_rew(self, params, prev_params):
@@ -103,44 +77,6 @@ def custom_rew2(self, params, prev_params):
             print(reward)
     return reward
 
-
-class CTFOutcome(PettingZooOutcomeFn):
-    def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
-        agent_choices = agent_choices[0] + agent_choices[1]
-        updated_train_infos = updated_train_infos[0] + updated_train_infos[1]
-
-        for team, agent in enumerate(agent_choices):
-            if isinstance(agent, BaseAgentPolicy):
-                # tell the agent which team it is on
-                print('skipping team assignment to see what happens')
-                # agent.team = team
-
-        # env is set up so the first k agents are team blue and the last k agents are team red
-        alg = AutoMultiAgentAlgorithm(env=env,
-                                      workers={i: agent_choices[i] for i in range(len(agent_choices))},
-                                      worker_infos={i: updated_train_infos[i] for i in range(len(agent_choices))},
-                                      )
-        alg.learn(total_timesteps=10000,
-                  number_of_eps=1,
-                  )
-        score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
-        if DEBUG_MESSAGES:
-            print(score)
-        if score[0] == score[1]:
-            return [
-                (.5, []),
-                (.5, []),
-            ]
-        if score[0] > score[1]:
-            return [
-                (1, []),
-                (0, []),
-            ]
-        if score[0] < score[1]:
-            return [
-                (0, []),
-                (1, []),
-            ]
 
 
 class RandPolicy:

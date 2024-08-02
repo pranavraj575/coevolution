@@ -36,7 +36,7 @@ if __name__ == '__main__':
                                  clone_fn=clone,
                                  mutation_fn=mutate,
                                  team_trainer=TeamTrainer(num_agents=popsize),
-                                 elo_update=.5,
+                                 captian_elo_update=.5,
                                  )
 
     init_dists = []

@@ -25,9 +25,11 @@ from src.utils.dict_keys import (DICT_AGE,
                                  TEMP_DICT_CAPTIAN,
                                  TEMP_DICT_CAPTIAN_UNIQUE,
 
-                                 COEVOLUTION_DICT_CAPTIAN_ELO,
-                                 COEVOLUTION_DICT_ELO_UPDATE,
+                                 COEVOLUTION_DICT_ELOS,
+                                 COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE,
+                                 COEVOLUTION_DICT_MEMBER_ELO_UPDATE,
                                  COEVOLUTION_DICT_ELO_CONVERSION,
+                                 COEVOLUTION_DICT_DEPTH_OF_RETRY,
                                  )
 from src.utils.savele_baselines import load_worker
 
@@ -109,6 +111,7 @@ class CoevolutionBase:
                  team_sizes=(1, 1),
                  member_to_population=None,
                  processes=0,
+                 storage_dir=None,
                  ):
         """
         Args:
@@ -125,6 +128,7 @@ class CoevolutionBase:
             member_to_population: takes team member (team_idx, member_idx) and returns set of
                 populations (subset of (0<i<len(population_sizes))) that the member can be drawn from
                 by default, assumes each member can be drawn from each population
+            storage_dir: place to store files and such
         """
         self.outcome_fn_gen = outcome_fn_gen
         self.population_sizes = population_sizes
@@ -148,6 +152,10 @@ class CoevolutionBase:
                      'epoch_infos': [],
                      }
         self.processes = processes
+        self.storage_dir = storage_dir
+
+    def set_storage_dir(self, storage_dir):
+        self.storage_dir = storage_dir
 
     def clear(self):
         """
@@ -291,14 +299,38 @@ class CoevolutionBase:
     def parallel_seq_split(self, all_items_to_save):
         return all_items_to_save, []
 
-    def epoch(self, rechoose=True, save_epoch_info=True, pre_ep_dicts=None):
-        # TODO: parallelizable
+    def epoch(self,
+              rechoose=True,
+              save_epoch_info=True,
+              pre_ep_dicts=None,
+              update_epoch_infos=True,
+              **kwargs,
+              ):
+        """
+        one epoch of training
+        Args:
+            rechoose: whether to breed/mutate
+            save_epoch_info: whether to save epoch info to info dict
+            pre_ep_dicts: episode dictionaries, if predefined
+            update_epoch_infos: whether to save results into self.epoch_infos
+            **kwargs: sent to pre_episode_generation and complete_epoch_and_extra_training
+        Returns:
+            epoch info dict
+        """
         epoch_info = {
             'epoch': self.epochs,
-            'episodes': []
+            'update_results': update_epoch_infos,
         }
+        epoch_info['episodes'] = []
         if pre_ep_dicts is None:
-            pre_ep_dicts = [self.pre_episode_generation(captian_choices=cap_choice, unique=unq)
+            pre_ep_dicts = [self.pre_episode_generation(captian_choices=cap_choice,
+                                                        unique=unq,
+                                                        rechoose=rechoose,
+                                                        save_epoch_info=save_epoch_info,
+                                                        pre_ep_dicts=pre_ep_dicts,
+                                                        update_epoch_infos=update_epoch_infos,
+                                                        **kwargs,
+                                                        )
                             for cap_choice, unq in self.create_random_captians()]
         for i, pre_ep_dict in enumerate(pre_ep_dicts):
             pre_ep_dict['ident'] = str(i)
@@ -318,27 +350,38 @@ class CoevolutionBase:
             par_items_to_save = []
 
         # seq runs
-        if seq_pre_ep_dicts:
-            seq_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in seq_pre_ep_dicts]
-        else:
-            seq_items_to_save = []
+        seq_items_to_save = [train_episode(pre_episode_dict=pre_ep_dict) for pre_ep_dict in seq_pre_ep_dicts]
 
-        for items_to_save in seq_items_to_save + par_items_to_save:
-            episode_info = self.update_results(items_to_save=items_to_save)
-            epoch_info['episodes'].append(episode_info)
+        all_items_to_save = seq_items_to_save + par_items_to_save
+        print('played', len(all_items_to_save), 'games')
+        for items_to_save in all_items_to_save:
+            epoch_info['episodes'].append(items_to_save['episode_info'])
+
+        self.complete_epoch_and_extra_training(all_items_to_save=all_items_to_save,
+                                               epoch_info=epoch_info,
+                                               rechoose=rechoose,
+                                               save_epoch_info=save_epoch_info,
+                                               pre_ep_dicts=pre_ep_dicts,
+                                               update_epoch_infos=update_epoch_infos,
+                                               **kwargs,
+                                               )
         if rechoose:
             epoch_info['breeding'] = self.breed()
             epoch_info['mutation'] = self.mutate()
-        self.info['epochs'] += 1
-        self.add_additional_epoch_info(epoch_info)
-        if save_epoch_info:
-            self.epoch_infos.append(epoch_info)
+
+        if update_epoch_infos:
+            self.info['epochs'] += 1
+            if save_epoch_info:
+                self.epoch_infos.append(epoch_info)
+
         return epoch_info
 
-    def add_additional_epoch_info(self, epoch_info):
+    def complete_epoch_and_extra_training(self, all_items_to_save, epoch_info, **kwargs):
         """
+        completes epoch given all information about
         updates epoch_info with any relevant epoch info
         Args:
+            all_items_to_save: list of outputs of self.train_choice
             epoch_info: dict of info to save about current state
         Returns: None
         """
@@ -363,23 +406,14 @@ class CoevolutionBase:
         """
         pass
 
-    def pre_episode_generation(self, captian_choices, unique):
+    def pre_episode_generation(self, captian_choices, unique, teams=None, **kwargs):
         """
         takes a choice of team captians and genrates teams and other info for training
         Args:
             captian_choices: tuple of captian indices, one for each team
             unique: wheher each captian is the first unique captian
+            teams: list of torch arrays. If not specified, generates them
         Returns: info to be passed to update_results
-        """
-        raise NotImplementedError
-
-    def update_results(self, items_to_save):
-        """
-        updates results from the output of self.train_choice
-        Args:
-            items_to_save: output of self.train_choice
-        Returns:
-            dict, episode info
         """
         raise NotImplementedError
 
@@ -409,11 +443,13 @@ class CaptianCoevolution(CoevolutionBase):
                  clone_fn=None,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
-                 elo_update=32*np.log(10)/400,
+                 captian_elo_update=32*np.log(10)/400,
+                 team_member_elo_update=0*np.log(10)/400,
                  mutation_fn=None,
-                 noise_model=None,
                  member_to_population=None,
                  processes=0,
+                 depth_to_retry_result=None,
+                 storage_dir=None,
                  ):
         """
         Args:
@@ -430,38 +466,161 @@ class CaptianCoevolution(CoevolutionBase):
                 to convert between this and classic elo (where win probs are 1/(1+10^{(Rb'-Ra')/400}), we simply scale
                     by the factor 400/np.log(10)
                 This value is only used for display purposes, and will not change behavior of the learning algorithm
-            elo_update: Ra'=Ra+elo_update*(Sa-Ea) (https://en.wikipedia.org/wiki/Elo_rating_system).
+            captian_elo_update: Ra'=Ra+elo_update*(Sa-Ea) (https://en.wikipedia.org/wiki/Elo_rating_system).
                 We are using scaled elo, so keep this in mind.
                     a 'classic' elo update of 32 is equivalent to a scaled 32*log(10)/400
+            team_member_elo_update: elo update to use for team members (default 0)
+                should update the team members less than the captain
             mutation_fn:
-            noise_model: model to use to set noise in team selectoin
-                takes T-element multinomial distributions and returns another (with added noise)
-                    ((N,T) -> (N,T))
-                updated with set_noise_model
             processes: if positive, uses multiprocessing
-
+            depth_to_retry_result: (game outcome value -> max number of times to try for a different outcome)
+                if not specified, always 0
+            storage_dir: place to store files and such
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
                          team_sizes=team_sizes,
                          member_to_population=member_to_population,
                          processes=processes,
+                         storage_dir=storage_dir,
                          )
         if team_trainer is None:
             team_trainer = TeamTrainer(num_agents=self.N)
         self.team_trainer = team_trainer
-        self.noise_model = noise_model
+        if storage_dir is not None:
+            self.set_storage_dir(storage_dir=storage_dir)
         self.clone_fn = clone_fn
         self.mutation_fn = mutation_fn
+        if depth_to_retry_result is None:
+            depth_to_retry_result = lambda _: 0
         self.info.update({
-            COEVOLUTION_DICT_CAPTIAN_ELO: torch.zeros(self.N),
-            COEVOLUTION_DICT_ELO_UPDATE: elo_update,
+            COEVOLUTION_DICT_ELOS: torch.zeros(self.N),
+            COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE: captian_elo_update,
+            COEVOLUTION_DICT_MEMBER_ELO_UPDATE: team_member_elo_update,
             COEVOLUTION_DICT_ELO_CONVERSION: elo_conversion,
+            COEVOLUTION_DICT_DEPTH_OF_RETRY: depth_to_retry_result,
         })
 
-    def add_additional_epoch_info(self, epoch_info):
-        super().add_additional_epoch_info(epoch_info=epoch_info)
-        epoch_info['captian_elos'] = self.captian_elos.cpu().numpy()
+    def set_storage_dir(self, storage_dir):
+        super().set_storage_dir(storage_dir=storage_dir)
+        self.team_trainer.set_storage_dir(storage_dir=os.path.join(storage_dir, 'team_trainer'))
+
+    def epoch(self,
+              rechoose=True,
+              save_epoch_info=True,
+              pre_ep_dicts=None,
+              update_epoch_infos=True,
+              noise_model=None,
+              depth=0,
+              known_obs=(None, None),
+              save_trained_agents=True,
+              save_into_team_buffer=True,
+              **kwargs,
+              ):
+        """
+        one epoch of training
+        Args:
+            rechoose: whether to breed/mutate
+            save_epoch_info: whether to save epoch info to info dict
+            pre_ep_dicts: episode dictionaries, if predefined
+            update_epoch_infos: whether to save results into self.epoch_infos
+            depth: current depth of self.epoch() calls
+            known_obs: (team index, Playerinfo observation), if known
+            noise_model: model to put noise into team selection
+                map of distributions from (*,num_agents) -> (*,num_agents)
+                    default identity
+            **kwargs: sent to pre_episode_generation and complete_epoch_and_extra_training
+        Returns:
+            epoch info dict
+        """
+        return super().epoch(rechoose=rechoose,
+                             save_epoch_info=save_epoch_info,
+                             pre_ep_dicts=pre_ep_dicts,
+                             update_epoch_infos=update_epoch_infos,
+                             depth=depth,
+                             known_obs=known_obs,
+                             noise_model=noise_model,
+                             **kwargs,
+                             )
+
+    def complete_epoch_and_extra_training(self, all_items_to_save, epoch_info, **kwargs):
+        super().complete_epoch_and_extra_training(all_items_to_save=all_items_to_save,
+                                                  epoch_info=epoch_info,
+                                                  **kwargs,
+                                                  )
+        save_trained_agents = kwargs.get('save_trained_agents', True)
+        save_into_team_buffer = kwargs.get('save_into_team_buffer', True)
+        if save_trained_agents or save_into_team_buffer:
+            for items_to_save in all_items_to_save:
+                if save_trained_agents:
+                    self.update_results(items_to_save=items_to_save)
+                if save_into_team_buffer:
+                    self.update_team_buffer(items_to_save=items_to_save)
+
+        depth = kwargs.get('depth', 0)
+        noise_model = kwargs.get('noise_model', None)
+        known_idx, known_player_info = kwargs.get('known_obs', (None, None))
+        # whether episodes carry over observations
+        # making this true will make for way slower training, as it is more difficult to parallelize
+        combine_episode_obs = kwargs.get('combine_episode_obs', False)
+
+        epoch_info['elos'] = self.elos.cpu().numpy()
+
+        pre_ep_dicts = []
+
+        for items_to_save in all_items_to_save:
+            team_outcomes = items_to_save['team_outcomes']
+            teams = items_to_save['teams']
+            for team_idx, (team_outcome, player_infos) in enumerate(team_outcomes):
+                if depth >= self.depth_to_retry_result(team_outcome):
+                    continue
+                # get all player infos together, if applicable
+                if team_idx == known_idx:
+                    combined_obs = known_player_info
+                else:
+                    combined_obs = PlayerInfo()
+
+                for pi in player_infos:
+                    combined_obs = combined_obs.union_obs(other_player_info=pi,
+                                                          combine=True,
+                                                          )
+                obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
+                new_team, _ = self.create_team(team_idx=team_idx,
+                                               captian=None,
+                                               noise_model=noise_model,
+                                               obs_preembed=obs_preembed,
+                                               obs_mask=obs_mask,
+                                               )
+                teams = [new_team if idx == team_idx else team
+                         for idx, team in enumerate(teams)]
+                pre_ep_dict = self.pre_episode_generation(captian_choices=[team[torch.randint(0, len(team), (1,))]
+                                                                           for team in teams],
+                                                          unique=[False for _ in self.team_sizes],
+                                                          teams=teams,
+                                                          noise_model=None,
+                                                          )
+                if combine_episode_obs:
+                    self.epoch(rechoose=False,
+                               save_epoch_info=False,
+                               pre_ep_dicts=[pre_ep_dict],
+                               update_epoch_infos=False,
+                               depth=depth + 1,
+                               known_obs=(team_idx, playerinfo),
+                               save_trained_agents=False,
+                               save_into_team_buffer=True,
+                               )
+                else:
+                    pre_ep_dicts.append(pre_ep_dict)
+        if pre_ep_dicts:
+            self.epoch(rechoose=False,
+                       save_epoch_info=False,
+                       pre_ep_dicts=pre_ep_dicts,
+                       update_epoch_infos=False,
+                       depth=depth + 1,
+                       known_obs=(None, None),
+                       save_trained_agents=False,
+                       save_into_team_buffer=True,
+                       )
 
     def clear(self):
         super().clear()
@@ -475,58 +634,101 @@ class CaptianCoevolution(CoevolutionBase):
         super().load(save_dir=save_dir)
         self.team_trainer.load(save_dir=os.path.join(save_dir, 'team_trainer'))
 
-    def set_noise_model(self, noise_model):
-        self.noise_model = noise_model
+    def create_team(self,
+                    team_idx,
+                    captian=None,
+                    obs_preembed=None,
+                    obs_mask=None,
+                    noise_model=None,
+                    team_noise_model=None,
+                    ):
+        """
+        creates team to play at specified index
+        Args:
+            team_idx: index to create team for
+            captian: captian that must be in team (None if no such thing)
+            obs_preembed: observations about environment from previous play
+            obs_mask: observation mask
+            noise_model: noise model to use for selection
+            team_noise_model: noise model to use for team assignment
+        Returns:
+            team (team_size,) torch array, captian position (or None)
+        """
+        team_size = self.team_sizes[team_idx]
+        captian_pos = None
+        if captian is not None:
+            captian_pop_idx, _ = self.index_to_pop_index(global_idx=captian)
+            valid_locations = self.pop_and_team_to_valid_locations[captian_pop_idx][team_idx]
+            team = self.team_trainer.add_member_to_team(member=captian,
+                                                        T=team_size,
+                                                        N=1,
+                                                        team_noise_model=team_noise_model,
+                                                        valid_locations=valid_locations.view((1, team_size)),
+                                                        obs_preembed=obs_preembed,
+                                                        obs_mask=obs_mask,
+                                                        )
+            captian_pos = torch.where(torch.eq(team.view(-1), captian))[0].item()
+        else:
+            team = self.team_trainer.create_masked_teams(T=team_size,
+                                                         N=1,
+                                                         )
+        valid_members = self.team_to_valid_members[team_idx]
+        team = self.team_trainer.fill_in_teams(initial_teams=team,
+                                               noise_model=noise_model,
+                                               valid_members=valid_members.view((1, team_size, self.N)),
+                                               obs_preembed=obs_preembed,
+                                               obs_mask=obs_mask,
+                                               )
+        team = team.detach().flatten()
+        return team, captian_pos
 
-    def pre_episode_generation(self, captian_choices, unique):
+    def pre_episode_generation(self, captian_choices, unique, teams=None, noise_model=None, **kwargs):
         """
         takes a choice of team captians and trains them in RL environment
         Args:
             captian_choices: tuple of self.num_teams indices
             unique: whether each captian is unique (each captian will be marked unique exactly once
+            teams: list of torch arrays. If not specified, generates them with self.team_choice
         """
         episode_info = {'captian_choices': captian_choices,
                         'unique_captians': unique
                         }
 
         # team selection (pretty much does nothing if teams are size 1
-        teams = []
-        train_infos = []
+
         captian_positions = []
-        for team_idx, (captian, unq, team_size) in enumerate(zip(captian_choices, unique, self.team_sizes)):
-            captian_pop_idx, _ = self.index_to_pop_index(global_idx=captian)
-            valid_locations = self.pop_and_team_to_valid_locations[captian_pop_idx][team_idx]
+        if teams is None:
+            teams = []
+            for team_idx, (captian, team_size) in enumerate(zip(captian_choices, self.team_sizes)):
+                team, captian_pos = self.create_team(team_idx=team_idx,
+                                                     captian=captian,
+                                                     noise_model=noise_model,
+                                                     )
+                captian_positions.append(captian_pos)
+                teams.append(team)
+        else:
+            for team, captian in zip(teams, captian_choices):
+                possible = torch.where(torch.eq(team.view(-1), captian))[0].flatten()
+                captian_positions.append(possible[torch.randint(0, len(possible), (1,))])
 
-            team = self.team_trainer.add_member_to_team(member=captian,
-                                                        T=team_size,
-                                                        N=1,
-                                                        noise_model=self.noise_model,
-                                                        valid_locations=valid_locations.view((1, team_size)),
-                                                        )
-            pos = torch.where(torch.eq(team.view(-1), captian))[0].item()
-            captian_positions.append(pos)
-
-            valid_members = self.team_to_valid_members[team_idx]
-            team = self.team_trainer.fill_in_teams(initial_teams=team,
-                                                   noise_model=self.noise_model,
-                                                   valid_members=valid_members.view((1, team_size, self.N)),
-                                                   )
-            teams.append(team.detach())
+        episode_info['teams'] = tuple(team.numpy() for team in teams)
+        outcome_fn = self.create_outcome_fn()
+        train_infos = []
+        for team_idx, (captian_pos, unq, team) in enumerate(zip(captian_positions, unique, teams)):
             tinfo = []
-            for i, member in enumerate(team.flatten()):
+            for i, member in enumerate(team):
                 global_idx = member.item()
                 captian_pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
 
                 info = self.get_info(pop_local_idx=(captian_pop_idx, local_idx))
-                if i == pos:
+                if i == captian_pos:
                     info[TEMP_DICT_CAPTIAN] = True
                     info[TEMP_DICT_CAPTIAN_UNIQUE] = unq
                 else:
                     info[TEMP_DICT_CAPTIAN] = False
                 tinfo.append(info)
             train_infos.append(tinfo)
-        episode_info['teams'] = tuple(team.numpy() for team in teams)
-        outcome_fn = self.create_outcome_fn()
+
         env = self.env_constructor(train_infos)
 
         return {'ident': 0,
@@ -544,29 +746,36 @@ class CaptianCoevolution(CoevolutionBase):
         self.save_trained_agents(items_to_save['outcome_local_mem'])
 
         # expected win probabilities, assuming the teams win probability is determined by captian elo
-        expected_win_probs = torch.softmax(self.captian_elos[items_to_save['captian_choices'],],
+        expected_win_probs = torch.softmax(self.elos[items_to_save['captian_choices'],],
                                            dim=-1)
-        # save to team selection buffer
         for (captian,
              team,
-             (team_outcome, player_infos),
-             expected_outcome) in zip(items_to_save['captian_choices'],
-                                      items_to_save['teams'],
-                                      items_to_save['team_outcomes'],
-                                      expected_win_probs):
-            self.captian_elos[captian] += self.elo_update*(team_outcome - expected_outcome)
+             (team_outcome, _),
+             expected_outcome,
+             ) in zip(items_to_save['captian_choices'],
+                      items_to_save['teams'],
+                      items_to_save['team_outcomes'],
+                      expected_win_probs):
+            self.elos[captian] += self.captian_elo_update*(team_outcome - expected_outcome)
+            for member in team:
+                self.elos[member] += self.member_elo_update*(team_outcome - expected_outcome)
 
+    def update_team_buffer(self, items_to_save):
+        for (team,
+             (team_outcome, player_infos),
+             ) in zip(items_to_save['teams'],
+                      items_to_save['team_outcomes']
+                      ):
             # combine all player observations into one (can also just add each individual PlayerInfo)
             combined_obs = PlayerInfo()
             for player_info in player_infos:
-                combined_obs.union_obs(other_player_info=player_info)
-
+                combined_obs = combined_obs.union_obs(other_player_info=player_info)
+            obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
             self.team_trainer.add_to_buffer(scalar=team_outcome,
-                                            obs_preembed=combined_obs.obs_preembed,
-                                            team=team,
-                                            obs_mask=combined_obs.obs_mask,
+                                            obs_preembed=obs_preembed,
+                                            team=team.reshape((1, -1)),
+                                            obs_mask=obs_mask,
                                             )
-        return items_to_save['episode_info']
 
     def save_trained_agents(self, outcome_fn_local_mem):
         """
@@ -582,7 +791,7 @@ class CaptianCoevolution(CoevolutionBase):
         replacements = []
         k = 0
         for popsize in self.population_sizes:
-            dist = torch.softmax(self.captian_elos[k:k + popsize], dim=-1)
+            dist = torch.softmax(self.elos[k:k + popsize], dim=-1)
             # sample from this distribution with replacements
             rep_sample = torch.multinomial(dist, popsize, replacement=True)
             rep_sample += k  # shift the indices to the start of this population
@@ -591,8 +800,8 @@ class CaptianCoevolution(CoevolutionBase):
             k += popsize
 
         self.clone_fn(torch.arange(self.N), replacements)
-        temp_arr = self.captian_elos.clone()
-        self.captian_elos[np.arange(self.N)] = temp_arr[replacements]
+        temp_arr = self.elos.clone()
+        self.elos[np.arange(self.N)] = temp_arr[replacements]
         self.rebase_elos()
         return
 
@@ -619,8 +828,8 @@ class CaptianCoevolution(CoevolutionBase):
         Args:
             base_elo: elo to make the 'average' elo
         """
-        self.set_captian_elos(self._get_rebased_elos(
-            elos=self.captian_elos,
+        self.set_elos(self._get_rebased_elos(
+            elos=self.elos,
             base_elo=base_elo,
         )
         )
@@ -640,7 +849,7 @@ class CaptianCoevolution(CoevolutionBase):
             i.e. if the default elo_conversion is used, this is  1/(1+10^{(Rb'-Ra')/400}), the standard value
         """
 
-        scaled_elos = self.captian_elos*self.elo_conversion
+        scaled_elos = self.elos*self.elo_conversion
         if base_elo is not None:
             scaled_elos = self._get_rebased_elos(elos=scaled_elos, base_elo=base_elo)
         return scaled_elos
@@ -660,24 +869,40 @@ class CaptianCoevolution(CoevolutionBase):
         """
         return torch.softmax(-elos, dim=-1)
 
-    def set_captian_elos(self, captian_elos):
-        self.info[COEVOLUTION_DICT_CAPTIAN_ELO] = captian_elos
+    @property
+    def ages(self):
+        return torch.tensor([self.get_info(pop_local_idx=self.index_to_pop_index(global_idx=global_idx)
+                                           ).get(DICT_AGE, 0)
+                             for global_idx in range(self.N)
+                             ],
+                            dtype=torch.float
+                            )
+
+    def set_elos(self, elos):
+        self.info[COEVOLUTION_DICT_ELOS] = elos
 
     @property
-    def captian_elos(self):
+    def elos(self):
         # note: since this returns the reference to a tensor
         # this can only be used to mutate indices
         # i.e. self.captian_elos[2]=3 mutates self.captian_elos
         # self.captian_elos=torch.rand(2) does not mutate captian_elos
-        return self.info[COEVOLUTION_DICT_CAPTIAN_ELO]
+        return self.info[COEVOLUTION_DICT_ELOS]
 
     @property
-    def elo_update(self):
-        return self.info[COEVOLUTION_DICT_ELO_UPDATE]
+    def captian_elo_update(self):
+        return self.info[COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE]
+
+    @property
+    def member_elo_update(self):
+        return self.info[COEVOLUTION_DICT_MEMBER_ELO_UPDATE]
 
     @property
     def elo_conversion(self):
         return self.info[COEVOLUTION_DICT_ELO_CONVERSION]
+
+    def depth_to_retry_result(self, outcome_value):
+        return self.info[COEVOLUTION_DICT_DEPTH_OF_RETRY](outcome_value)
 
 
 class PettingZooCaptianCoevolution(CaptianCoevolution):
@@ -689,14 +914,14 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  env_constructor,
                  outcome_fn_gen,
                  population_sizes,
-                 zoo_dir,
+                 storage_dir,
                  worker_constructors,
                  member_to_population=None,
                  team_trainer: TeamTrainer = None,
                  team_sizes=(1, 1),
                  elo_conversion=400/np.log(10),
-                 elo_update=32*np.log(10)/400,
-                 noise_model=None,
+                 captian_elo_update=32*np.log(10)/400,
+                 team_member_elo_update=0*np.log(10)/400,
                  reinit_agents=True,
                  mutation_prob=.001,
                  protect_new=20,
@@ -705,6 +930,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  processes=0,
                  temp_zoo_dir=None,
                  max_steps_per_ep=float('inf'),
+                 depth_to_retry_result=None,
                  ):
         """
         Args:
@@ -729,11 +955,10 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                     DICT_POSITION_DEPENDENT: set of dict that is associated with position:
                         i.e. if any entries are in this set, they will be unchanged after replacing agent with a clone
                             or mutation
-            zoo_dir: place to store cages of agents
+            storage_dir: place to store files and such
             team_sizes:
             elo_conversion:
-            elo_update:
-            noise_model:
+            captian_elo_update:
             mutation_prob: probability an agent randomly reinitializes each epoch
             clone_replacements: max number of agents to replace with clones each epoch
                 if None, replaces all potentially
@@ -742,19 +967,22 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             temp_zoo_dir: place to store temp files
                 if None, uses zoo_dir/temp_cage
             max_steps_per_ep: maximum steps per episode, used to decide whether to parallelize
-
+            depth_to_retry_result: (game outcome value -> max number of times to try for a different outcome)
+                if not specified, always 0
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
                          team_trainer=team_trainer,
                          team_sizes=team_sizes,
                          elo_conversion=elo_conversion,
-                         elo_update=elo_update,
+                         captian_elo_update=captian_elo_update,
+                         team_member_elo_update=team_member_elo_update,
                          mutation_fn=None,
                          clone_fn=None,
-                         noise_model=noise_model,
                          member_to_population=member_to_population,
                          processes=processes,
+                         depth_to_retry_result=depth_to_retry_result,
+                         storage_dir=storage_dir,
                          )
 
         self.env_constructor = env_constructor
@@ -788,7 +1016,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                                                                  )
                                                     )
         # self.worker_constructors is now (pos_idx -> (local idx -> agent))
-
+        zoo_dir = os.path.join(storage_dir, 'zoo')
         self.zoo = [
             ZooCage(zoo_dir=os.path.join(zoo_dir, 'cage_' + str(i)),
                     overwrite_zoo=True,
@@ -809,8 +1037,11 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.set_clone_replacements(clone_replacements=clone_replacements)
         self.set_max_steps_per_ep(max_steps_per_ep=max_steps_per_ep)
 
-    def add_additional_epoch_info(self, epoch_info):
-        super().add_additional_epoch_info(epoch_info=epoch_info)
+    def complete_epoch_and_extra_training(self, all_items_to_save, epoch_info, **kwargs):
+        super().complete_epoch_and_extra_training(all_items_to_save=all_items_to_save,
+                                                  epoch_info=epoch_info,
+                                                  **kwargs,
+                                                  )
         epoch_info['agent_classes'] = tuple(
             type(
                 self.load_animal(
@@ -884,8 +1115,12 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                                           )
         return agent
 
-    def pre_episode_generation(self, captian_choices, unique):
-        pre_ep_dict = super().pre_episode_generation(captian_choices=captian_choices, unique=unique)
+    def pre_episode_generation(self, captian_choices, unique, teams=None, noise_model=None, **kwargs):
+        pre_ep_dict = super().pre_episode_generation(captian_choices=captian_choices,
+                                                     unique=unique,
+                                                     teams=teams,
+                                                     noise_model=noise_model,
+                                                     )
         team_choices, updated_train_infos = pre_ep_dict['teams'], pre_ep_dict['train_infos']
         pre_ep_dict.update({'agents': [
             [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
@@ -944,7 +1179,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         for pop_idx, popsize in enumerate(self.population_sizes):
             for local_idx in range(popsize):
                 self.reset_agent(pop_local_idx=(pop_idx, local_idx),
-                                 elo=torch.mean(self.captian_elos),
+                                 elo=torch.mean(self.elos),
                                  )
 
     def reset_agent(self, pop_local_idx, elo=None):
@@ -958,7 +1193,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                               save_class=True,
                               )
         if elo is not None:
-            self.captian_elos[self.pop_index_to_index(pop_local_idx=pop_local_idx)] = elo
+            self.elos[self.pop_index_to_index(pop_local_idx=pop_local_idx)] = elo
 
     def get_info(self, pop_local_idx):
         pop_idx, local_idx = pop_local_idx
@@ -1043,15 +1278,15 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             if not candidate_target_idxs:
                 continue
             # distribution of agents based on how bad they are
-            candidate_target_dist = self.get_inverted_distribution(elos=self.captian_elos[candidate_target_idxs])
+            candidate_target_dist = self.get_inverted_distribution(elos=self.elos[candidate_target_idxs])
             # pick a random subset of target agents to replace based on this distribution
             target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace[pop_idx], replacement=False)
             # these are the global indexes of the targets
             target_global_idxs = [candidate_target_idxs[target_idx_idx] for target_idx_idx in target_idx_idxs]
-            target_elos = [self.captian_elos[target_global_idx] for target_global_idx in target_global_idxs]
+            target_elos = [self.elos[target_global_idx] for target_global_idx in target_global_idxs]
 
             # now pick which agents to clone based on elo
-            candidate_clone_elos = self.captian_elos[candidate_clone_idxs]
+            candidate_clone_elos = self.elos[candidate_clone_idxs]
             clone_dist = torch.softmax(candidate_clone_elos, dim=-1)
             # sample from this distribution with replacement
             clone_idx_idxs = list(torch.multinomial(clone_dist, len(target_global_idxs), replacement=True))
@@ -1126,14 +1361,14 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         mutation_dict['num_mutated'] = num_to_mutate
         if num_to_mutate > 0:
             # distribution based on how bad each agent is
-            mut_dist = self.get_inverted_distribution(elos=self.captian_elos[mutatable_idxs])
+            mut_dist = self.get_inverted_distribution(elos=self.elos[mutatable_idxs])
             # chose which to mutate without replacement
             mut_idx_idxs = torch.multinomial(mut_dist, num_to_mutate, replacement=False)
             # mutatable_idxs[mut_idx_idx] is the global index of an agent to mutate
             mut_global_idxs = [mutatable_idxs[mut_idx_idx] for mut_idx_idx in mut_idx_idxs]
             mutation_dict['idxs_mutated'] = mut_global_idxs
 
-            elo_replacement = torch.mean(self.captian_elos).item()
+            elo_replacement = torch.mean(self.elos).item()
             mutation_dict['elo_replacement'] = elo_replacement
             for mut_global_idx in mut_global_idxs:
                 mut_pop_local_idx = self.index_to_pop_index(global_idx=mut_global_idx)
@@ -1232,7 +1467,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         if elo is not None:
             global_idx = self.pop_index_to_index(pop_local_idx=pop_local_idx)
             # replace elo as well
-            self.captian_elos[global_idx] = elo
+            self.elos[global_idx] = elo
 
     def save_zoo(self, save_dir):
         """
@@ -1324,7 +1559,7 @@ if __name__ == '__main__':
         return team with highest indices
         """
 
-        def get_outcome(self, team_choices, updated_train_infos=None, env=None):
+        def get_outcome(self, team_choices, agent_choices, updated_train_infos=None, env=None):
             agent_choices = [agents[team[0]] for team in team_choices]
             if agent_choices[0] == agent_choices[1]:
                 return [(.5, []), (.5, [])]
@@ -1343,11 +1578,11 @@ if __name__ == '__main__':
     for _ in range(20):
         for _ in range(2):
             cap.epoch(rechoose=False)
-        print(cap.captian_elos)
+        print(cap.elos)
         print(agents)
         cap.epoch(rechoose=True)
 
-    print(cap.captian_elos)
+    print(cap.elos)
     print(agents)
 
     from unstable_baselines3.dqn.DQN import WorkerDQN
