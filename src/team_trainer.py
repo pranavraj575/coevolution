@@ -642,10 +642,15 @@ class MLMTeamTrainer(TeamTrainer):
                 for member, value in enumerate(dist[i]):
                     init_team = init_team.clone()
                     init_team[idx] = member
+                    # probability of sleceting this is prob of selecting init_team
+                    # times prob of selecting this index (1/ number of indices)
+                    # times transformer prob
+
+                    selection_prob = value*prob/len(indices[0])
                     self.get_total_distribution(T=T,
                                                 N=N,
                                                 init_team=init_team,
-                                                prob=value*prob,
+                                                prob=selection_prob,
                                                 tracked=tracked,
                                                 obs_preembed=obs_preembed,
                                                 obs_mask=obs_mask,
@@ -653,6 +658,7 @@ class MLMTeamTrainer(TeamTrainer):
                                                 valid_members=valid_members,
                                                 )
         return tracked
+
     def get_member_distribution(self,
                                 init_team,
                                 indices=None,

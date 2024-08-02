@@ -259,7 +259,11 @@ if __name__ == '__main__':
 
                                            team_member_elo_update=1*np.log(10)/400,
                                            )
-    plotting = {'init_dists': []}
+    plotting = {'init_dists': [],
+                'team_dists': [],
+                'team_dists_non_ordered': [],
+                'epochs': [],
+                }
 
     if not args.reset and os.path.exists(save_dir):
         print('loading from', save_dir)
@@ -273,13 +277,44 @@ if __name__ == '__main__':
 
         print('plotting and closing')
         plot_dist_evolution(plot_dist=plotting['init_dists'],
+                            x=plotting['epochs'],
                             mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
                             labels=(['att ezy', 'att mid', 'att hrd'] +
                                     ['def ezy', 'def mid', 'def hrd'] +
                                     ['random']),
                             save_dir=os.path.join(save_dir, 'initial_plot.png'),
                             alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            colors=['red']*3 + ['blue']*3 + ['black']
+                            colors=['red']*3 + ['blue']*3 + ['black'],
+                            title='Initial Distributions'
+                            )
+        possible_teams = sorted(plotting['team_dists_non_ordered'][0].keys())
+
+        all_team_dist = []
+        for team_dist in plotting['team_dists_non_ordered']:
+            all_team_dist.append(np.array([team_dist[team]
+                                           for team in possible_teams]))
+
+        plot_dist_evolution(plot_dist=all_team_dist,
+                            x=plotting['epochs'],
+                            # mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
+                            labels=possible_teams,
+                            save_dir=os.path.join(save_dir, 'total_plot.png'),
+                            # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
+                            # colors=['red']*3 + ['blue']*3 + ['black']
+                            title="Total Dictribution",
+                            )
+        # all keys that have random agents
+        random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
+        non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
+
+        plot_dist_evolution(plot_dist=all_team_dist,
+                            x=plotting['epochs'],
+                            mapping=lambda dist: np.concatenate((dist[non_random_keys], [np.sum(dist[random_keys])])),
+                            labels=[possible_teams[i] for i in non_random_keys] + ['random'],
+                            save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
+                            # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
+                            # colors=['red']*3 + ['blue']*3 + ['black']
+                            title="Total Distribution (Random combined)",
                             )
         trainer.clear()
         quit()
@@ -311,14 +346,13 @@ if __name__ == '__main__':
 
         else:
             team_1, team_2 = [ast.literal_eval(team) for team in idxs.split(';')]
-
             print('playing', team_1, '(blue) against', team_2, '(red)')
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
-            #print(trainer.team_trainer.get_total_distribution(T=team_size))
-            #quit()
+            # print(trainer.team_trainer.get_total_distribution(T=team_size))
+            # quit()
             epoch_info = trainer.epoch(
                 noise_model=team_trainer.create_nose_model_towards_uniform(
                     t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
@@ -346,6 +380,17 @@ if __name__ == '__main__':
 
                 init_dist = torch.mean(dist, dim=0).detach().numpy()
                 plotting['init_dists'].append(init_dist)
+                team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
+                team_dist_non_ordered = dict()
+                for item in team_dist:
+                    key = tuple(sorted(item))
+                    if key not in team_dist_non_ordered:
+                        team_dist_non_ordered[key] = 0
+                    team_dist_non_ordered[key] += team_dist[item]
+                plotting['team_dists'].append(team_dist)
+                plotting['team_dists_non_ordered'].append(team_dist_non_ordered)
+                plotting['epochs'].append(trainer.epochs)
+
             if True:
                 id_to_idxs = dict()
                 for i in range(sum(non_learning_sizes)):
