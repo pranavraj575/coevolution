@@ -304,7 +304,6 @@ class MLMTeamTrainer(TeamTrainer):
                       mask_obs_prob=.1,
                       ):
         """
-
         Args:
             batch_size: size of batch to train on
             mask_probs: list of proabilities of masking to use
@@ -325,7 +324,8 @@ class MLMTeamTrainer(TeamTrainer):
         data = self.buffer.sample(batch=batch_size)
         if not sgd:
             self.optim.zero_grad()
-        all_losses = []
+        losses = torch.zeros(1)
+        count = 0
         for (scalar, obs_preembed, team, obs_mask) in data:
             if torch.is_tensor(obs_preembed) and torch.all(torch.isnan(obs_preembed)):
                 obs_preembed = None
@@ -334,20 +334,27 @@ class MLMTeamTrainer(TeamTrainer):
             if sgd:
                 self.optim.zero_grad()
 
-            losses = self._mask_and_learn(obs_preembed=obs_preembed,
-                                          teams=team,
-                                          obs_mask=obs_mask,
-                                          mask_probs=mask_probs,
-                                          replacement_probs=replacement_probs,
-                                          scalar=scalar,
-                                          mask_obs_prob=mask_obs_prob,
-                                          )
+            loss = self._mask_and_learn(obs_preembed=obs_preembed,
+                                        teams=team,
+                                        obs_mask=obs_mask,
+                                        mask_probs=mask_probs,
+                                        replacement_probs=replacement_probs,
+                                        scalar=scalar,
+                                        mask_obs_prob=mask_obs_prob,
+                                        )
             if sgd:
+                loss.backward()
                 self.optim.step()
-            all_losses.append(losses.item())
+                losses += loss.detach()
+            else:
+                # keep gradients
+                losses += loss
+            count += 1
+        mean_loss = losses/count
         if not sgd:
+            mean_loss.backward()
             self.optim.step()
-        return torch.mean(torch.tensor(all_losses)).item()
+        return mean_loss.item()
 
     def _mask_and_learn(self,
                         obs_preembed,
@@ -379,7 +386,7 @@ class MLMTeamTrainer(TeamTrainer):
         if mask_probs is None:
             N, T = teams.shape
             mask_probs = torch.arange(0, T + 1)/T
-        losses = []
+        losses = torch.zeros(1)
         for mask_prob in mask_probs:
             if mask_obs_prob > 0 and obs_preembed is not None:
                 if obs_mask is not None:
@@ -397,8 +404,8 @@ class MLMTeamTrainer(TeamTrainer):
                                     replacement_probs=replacement_probs,
                                     scalar=scalar,
                                     )
-            losses.append(loss)
-        return torch.mean(torch.tensor(losses))
+            losses += loss
+        return losses/len(mask_probs)
 
     def _get_losses(self,
                     obs_preembed,
@@ -438,7 +445,6 @@ class MLMTeamTrainer(TeamTrainer):
         criterion = nn.CrossEntropyLoss()
 
         loss = scalar*criterion(logits[mask_indices], teams[mask_indices])
-        loss.backward()
         return loss
 
     def _randomly_mask_teams(self, teams, mask_prob, replacement_props):

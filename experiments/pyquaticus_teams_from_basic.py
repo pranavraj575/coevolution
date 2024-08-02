@@ -289,9 +289,11 @@ if __name__ == '__main__':
                 )
             )
             if not trainer.epochs%args.train_freq:
+                print('training step started')
                 trainer.team_trainer.training_step(
                     batch_size=args.batch_size,
                 )
+                print('training step finished')
             if True:
                 classic_elos = trainer.classic_elos.numpy()
                 print('all elos')
