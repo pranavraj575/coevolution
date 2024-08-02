@@ -74,11 +74,15 @@ if __name__ == '__main__':
                         help="Enable rendering")
     PARSER.add_argument('--display', action='store_true', required=False,
                         help="skip training and display saved model")
+    PARSER.add_argument('--plot', action='store_true', required=False,
+                        help="skip training and plot")
     PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
                         help='which agent indexes to display, in the format "p1,p2;p1,p2" (used with --display)')
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, random
+    import dill as pickle
+    from matplotlib import pyplot as plt
 
     from repos.pyquaticus.pyquaticus.config import config_dict_std
     from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
@@ -187,7 +191,11 @@ if __name__ == '__main__':
                       DICT_MUTATION_REPLACABLE: False,
                       DICT_IS_WORKER: False,
                       }
-    create_rand = lambda i, env: (RandPolicy(env.action_space), non_train_dict.copy())
+    create_attack = lambda i, env: (policies['att'][i](agent_id=0,
+                                                       mode=modes[i%len(modes)],
+                                                       using_pyquaticus=True,
+                                                       ), non_train_dict.copy()
+                                    )
     create_defend = lambda i, env: (policies['def'][i](agent_id=0,
                                                        team='red',
                                                        mode=modes[i%len(modes)],
@@ -196,11 +204,7 @@ if __name__ == '__main__':
                                                        using_pyquaticus=True,
                                                        ), non_train_dict.copy()
                                     )
-    create_attack = lambda i, env: (policies['att'][i](agent_id=0,
-                                                       mode=modes[i%len(modes)],
-                                                       using_pyquaticus=True,
-                                                       ), non_train_dict.copy()
-                                    )
+    create_rand = lambda i, env: (RandPolicy(env.action_space), non_train_dict.copy())
 
     non_learning_sizes = [3,
                           3,
@@ -255,10 +259,28 @@ if __name__ == '__main__':
 
                                            team_member_elo_update=1*np.log(10)/400,
                                            )
-
+    init_dists = []
     if not args.reset and os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
+        f = open(os.path.join(save_dir, 'plotting.pkl'), 'rb')
+        init_dists = pickle.load(f)
+        f.close()
+
+    if args.plot:
+        from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution
+        print('plotting and closing')
+        plot_dist_evolution(plot_dist=init_dists,
+                            mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
+                            labels=(['att ezy', 'att mid', 'att hrd'] +
+                                    ['def ezy', 'def mid', 'def hrd'] +
+                                    ['random']),
+                            save_dir=os.path.join(save_dir, 'plot.png'),
+                            alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
+                            colors=['red']*3 + ['blue']*3 + ['black']
+                            )
+        trainer.clear()
+        quit()
     print('seting save directory as', save_dir)
 
 
@@ -309,6 +331,18 @@ if __name__ == '__main__':
                     mask_obs_prob=.1,
                 )
                 print('training step finished')
+
+                test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
+                indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                             indices=None,
+                                                                             obs_preembed=None,
+                                                                             obs_mask=None,
+                                                                             noise_model=None,
+                                                                             valid_members=None,
+                                                                             )
+
+                init_dist = torch.mean(dist, dim=0).detach().numpy()
+                init_dists.append(init_dist)
             if True:
                 id_to_idxs = dict()
                 for i in range(sum(non_learning_sizes)):
@@ -328,22 +362,19 @@ if __name__ == '__main__':
                 print('max elos')
                 for identity in id_to_idxs:
                     print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
-                print('initial dist')
+                if init_dists:
+                    print('initial dist')
+                    print(init_dists[-1])
 
-                test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
-                indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
-                                                                             indices=None,
-                                                                             obs_preembed=None,
-                                                                             obs_mask=None,
-                                                                             noise_model=None,
-                                                                             valid_members=None,
-                                                                             )
-
-                print(torch.mean(dist, dim=0))
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
                 trainer.save(save_dir)
+
+                f = open(os.path.join(save_dir, 'plotting.pkl'), 'wb')
+                pickle.dump(init_dists, f)
+                f.close()
                 print('done saving')
+
             print('time', time.time() - tim)
             print()
 
