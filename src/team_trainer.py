@@ -46,6 +46,15 @@ class TeamTrainer:
     def uniform_random_team(self, shape):
         return torch.randint(0, self.num_agents, shape)
 
+    def get_total_distribution(self,
+                               T,
+                               N=1,
+                               init_team=None,
+                               tracked=None,
+                               **kwargs,
+                               ):
+        raise NotImplementedError
+
     def get_member_distribution(self,
                                 init_team,
                                 indices=None,
@@ -600,6 +609,50 @@ class MLMTeamTrainer(TeamTrainer):
                                   noise_model=noise_model,
                                   )
 
+    def get_total_distribution(self,
+                               T,
+                               N=1,
+                               init_team=None,
+                               prob=1,
+                               tracked=None,
+                               obs_preembed=None,
+                               obs_mask=None,
+                               noise_model=None,
+                               valid_members=None,
+                               ):
+        if init_team is None:
+            init_team = self.create_masked_teams(T=T, N=N)
+        if tracked is None:
+            tracked = dict()
+
+        indices, dist = self.get_member_distribution(init_team=init_team,
+                                                     indices=None,
+                                                     obs_preembed=obs_preembed,
+                                                     obs_mask=obs_mask,
+                                                     noise_model=noise_model,
+                                                     valid_members=valid_members,
+                                                     )
+        if indices is None:
+            obj = tuple(init_team.detach().numpy().flatten())
+            if obj not in tracked:
+                tracked[obj] = 0
+            tracked[obj] += prob.item()
+        else:
+            for i, idx in enumerate(zip(*indices)):
+                for member, value in enumerate(dist[i]):
+                    init_team = init_team.clone()
+                    init_team[idx] = member
+                    self.get_total_distribution(T=T,
+                                                N=N,
+                                                init_team=init_team,
+                                                prob=value*prob,
+                                                tracked=tracked,
+                                                obs_preembed=obs_preembed,
+                                                obs_mask=obs_mask,
+                                                noise_model=noise_model,
+                                                valid_members=valid_members,
+                                                )
+        return tracked
     def get_member_distribution(self,
                                 init_team,
                                 indices=None,
@@ -610,6 +663,8 @@ class MLMTeamTrainer(TeamTrainer):
                                 ):
         if indices is None:
             indices = torch.where(torch.eq(init_team, self.MASK))
+        if len(indices[0]) == 0:
+            return None, None
         output = self.team_builder.forward(obs_preembed=obs_preembed,
                                            target_team=init_team,
                                            obs_mask=obs_mask,
