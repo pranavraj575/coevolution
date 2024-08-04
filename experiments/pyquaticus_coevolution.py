@@ -254,10 +254,25 @@ if __name__ == '__main__':
     if args.display:
         from unstable_baselines3.common import DumEnv
 
-        test_animals = [creation(0, DumEnv(action_space=test_env.action_space(0),
-                                           obs_space=test_env.observation_space(0)))
-                        for creation in [create_rand, create_defend, create_attack]
-                        ]
+        test_animals = ([(RandPolicy(test_env.action_space(0)), non_train_dict.copy())] +
+                        [(DefendPolicy(agent_id=0,
+                                       team='red',
+                                       mode=mode,
+                                       flag_keepout=config_dict['flag_keepout'],
+                                       catch_radius=config_dict["catch_radius"],
+                                       using_pyquaticus=True,
+                                       ), non_train_dict.copy()
+                          )
+                         for mode in ('easy', 'medium', 'hard')
+                         ] +
+                        [(AttackPolicy(agent_id=0,
+                                       mode=mode,
+                                       using_pyquaticus=True,
+                                       ), non_train_dict.copy()
+                          )
+                         for mode in ('easy', 'medium', 'hard')
+                         ]
+                        )
     else:
         test_animals = []
 
@@ -273,7 +288,7 @@ if __name__ == '__main__':
         elif isinstance(animal, WorkerDQN):
             return 'dqn'
         elif 'WrappedPolicy' in str(type(animal)):
-            return animal.identity
+            return animal.identity + ' ' + animal.mode
         else:
             return 'rand'
 
@@ -304,11 +319,6 @@ if __name__ == '__main__':
             print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
             print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
 
-            # ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
-            # trainer.epoch(rechoose=False,
-            #              save_epoch_info=False,
-            #              pre_ep_dicts=[ep],
-            #              )
             outcom = CTFOutcome()
             outcom.get_outcome(
                 team_choices=[[torch.tensor(worst)], [torch.tensor(best)]],
@@ -327,11 +337,6 @@ if __name__ == '__main__':
                 updated_train_infos=[[non_train_dict],
                                      [non_train_dict]]
             )
-            # ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
-            # trainer.epoch(rechoose=False,
-            #              save_epoch_info=False,
-            #              pre_ep_dicts=[ep],
-            #              )
         else:
             i, j = ast.literal_eval('(' + idxs + ')')
             print('playing', i, '(blue, ' + typer(i) + ') against', j, '(red, ' + typer(j) + ')')
@@ -349,11 +354,6 @@ if __name__ == '__main__':
                 updated_train_infos=[[non_train_dict],
                                      [non_train_dict]]
             )
-            # ep = trainer.pre_episode_generation(captian_choices=(i, j), unique=(True, True))
-            # trainer.epoch(rechoose=False,
-            #              save_epoch_info=False,
-            #              pre_ep_dicts=[ep],
-            #              )
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()
