@@ -138,6 +138,7 @@ class OutcomeFn:
     def __init__(self):
         super().__init__()
         self.ident = 0
+        self.dir = None
 
     def get_outcome(self, team_choices, agent_choices, updated_train_infos=None, env=None):
         """
@@ -285,6 +286,9 @@ class PettingZooOutcomeFn(OutcomeFn):
             updated_train_infos:
         Returns:
         """
+        if self.dir is None:
+            print('WARNING, DIRECTORY NOT SET, AGENTS CANNOT BE SAVED, AND POP_LOCAL_MEM WILL RETURN NOTHING')
+            return
         for t in zip(agent_choices, index_choices, updated_train_infos):
             for agent, global_idx, updated_train_dict in zip(*t):
                 is_worker = updated_train_dict.get(DICT_IS_WORKER, True)

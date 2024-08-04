@@ -256,7 +256,6 @@ if __name__ == '__main__':
                                            team_sizes=(team_size, team_size),
                                            depth_to_retry_result=retrial_fn,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
-
                                            team_member_elo_update=1*np.log(10)/400,
                                            )
     plotting = {'init_dists': [],
@@ -287,7 +286,10 @@ if __name__ == '__main__':
                             colors=['red']*3 + ['blue']*3 + ['black'],
                             title='Initial Distributions'
                             )
-        possible_teams = sorted(plotting['team_dists_non_ordered'][0].keys())
+        possible_teams = sorted(plotting['team_dists_non_ordered'][-1].keys(),
+                                key=lambda k: plotting['team_dists_non_ordered'][-1][k],
+                                reverse=True,
+                                )
 
         all_team_dist = []
         for team_dist in plotting['team_dists_non_ordered']:
@@ -368,7 +370,7 @@ if __name__ == '__main__':
                     mask_obs_prob=.1,
                 )
                 print('training step finished')
-
+            if trainer.epochs == 0 or (not trainer.epochs%args.train_freq):
                 test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
                 indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
                                                                              indices=None,

@@ -1,14 +1,11 @@
 import torch
 
 from repos.pyquaticus.pyquaticus.base_policies.base import BaseAgentPolicy
-
+from repos.pyquaticus.pyquaticus.structs import Team
 from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
 from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv
 
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
-
-DEBUG_MESSAGES = False
-
 
 class CTFOutcome(PettingZooOutcomeFn):
     def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
@@ -17,8 +14,8 @@ class CTFOutcome(PettingZooOutcomeFn):
         for team, agent in enumerate(agent_choices):
             if isinstance(agent, BaseAgentPolicy):
                 # tell the agent which team it is on
-                print('skipping team assignment to see what happens')
-                # agent.team = team
+                # print('skipping team assignment to see what happens')
+                agent.team = (Team.BLUE_TEAM, Team.RED_TEAM)[team]
 
         # env is set up so the first k agents are team blue and the last k agents are team red
         alg = AutoMultiAgentAlgorithm(env=env,
@@ -29,8 +26,7 @@ class CTFOutcome(PettingZooOutcomeFn):
                   number_of_eps=1,
                   )
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
-        if DEBUG_MESSAGES:
-            print(score)
+
         if isinstance(env, MyQuaticusEnv):
             # get list of observations from each player
             team_0_obs = (torch.stack([torch.tensor(obs[agent_idx]) for obs in env.obs_record], dim=0)

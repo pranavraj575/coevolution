@@ -83,6 +83,7 @@ class ReplayBufferDiskStorage(LangReplayBuffer):
         super().load(save_dir=save_dir)
         self.clear()
         shutil.copytree(src=save_dir, dst=self.storage_dir)
+        self.load_place(force=False)
 
     def reset_storage(self):
         self.clear()
@@ -336,6 +337,14 @@ class BinnedReplayBufferDiskStorage(LangReplayBuffer):
 
     def __len__(self):
         return self.size
+
+    def __getitem__(self, item):
+        if item >= self.size:
+            raise IndexError
+        for biin in self.bins:
+            if item < biin.size:
+                return biin[item]
+            item -= biin.size
 
     @property
     def bin_lens(self):

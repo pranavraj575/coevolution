@@ -240,20 +240,33 @@ if __name__ == '__main__':
                                            protect_new=args.protect_new,
                                            processes=proc,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
-                                           max_steps_per_ep=(1 + config_dict['render_fps']*config_dict['max_time']/
-                                                             config_dict['sim_speedup_factor']),
+                                           # for some reason this overesetimates by a factor of 3, so we fix it
+                                           max_steps_per_ep=(
+                                                   1 + (1/3)*config_dict['render_fps']*config_dict['max_time']/
+                                                   config_dict['sim_speedup_factor']),
                                            mutation_prob=args.mutation_prob,
                                            clone_replacements=clone_replacements,
                                            )
-
     if not args.reset and os.path.exists(save_dir):
         print('loading from', save_dir)
         trainer.load(save_dir=save_dir)
     print('seting save directory as', save_dir)
+    if args.display:
+        from unstable_baselines3.common import DumEnv
+
+        test_animals = [creation(0, DumEnv(action_space=test_env.action_space(0),
+                                           obs_space=test_env.observation_space(0)))
+                        for creation in [create_rand, create_defend, create_attack]
+                        ]
+    else:
+        test_animals = []
 
 
     def typer(global_idx):
-        animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
+        if global_idx >= 0:
+            animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
+        else:
+            animal, _ = test_animals[global_idx]
 
         if isinstance(animal, WorkerPPO):
             return 'ppo'
@@ -273,39 +286,74 @@ if __name__ == '__main__':
         best = np.argmax(elos)
         elos[best] = -np.inf
         second_best = np.argmax(elos)
+
+        classic_elos = trainer.classic_elos.numpy()
+        idents_and_elos = []
+        for i in range(sum(pop_sizes)):
+            idents_and_elos.append((typer(i), classic_elos[i]))
+        print('all elos by index')
+        for i, animal in enumerate(test_animals):
+            ip = i - len(test_animals)
+            print(ip, ' (', typer(ip), '): ', None, sep='')
+        for i, (identity, elo) in enumerate(idents_and_elos):
+            print(i, ' (', identity, '): ', elo, sep='')
         if idxs is None:
-            classic_elos = trainer.classic_elos.numpy()
-            idents_and_elos = []
-            for i in range(sum(pop_sizes)):
-                idents_and_elos.append((typer(i), classic_elos[i]))
-            print('all elos by index')
-            for i, (identity, elo) in enumerate(idents_and_elos):
-                print(i, ' (', identity, '): ', elo, sep='')
 
             print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
             print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
             print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
             print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
 
-            ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
-            trainer.epoch(rechoose=False,
-                          save_epoch_info=False,
-                          pre_ep_dicts=[ep],
-                          )
+            # ep = trainer.pre_episode_generation(captian_choices=(worst, best), unique=(True, True))
+            # trainer.epoch(rechoose=False,
+            #              save_epoch_info=False,
+            #              pre_ep_dicts=[ep],
+            #              )
+            outcom = CTFOutcome()
+            outcom.get_outcome(
+                team_choices=[[torch.tensor(worst)], [torch.tensor(best)]],
+                agent_choices=[[trainer.load_animal(trainer.index_to_pop_index(worst))[0]],
+                               [trainer.load_animal(trainer.index_to_pop_index(best))[0]]],
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict],
+                                     [non_train_dict]]
+            )
             print('playing second best (blue, ' + typer(second_best) + ') against best (red, ' + typer(best) + ')')
-            ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
-            trainer.epoch(rechoose=False,
-                          save_epoch_info=False,
-                          pre_ep_dicts=[ep],
-                          )
+            outcom.get_outcome(
+                team_choices=[[torch.tensor(second_best)], [torch.tensor(best)]],
+                agent_choices=[[trainer.load_animal(trainer.index_to_pop_index(second_best))[0]],
+                               [trainer.load_animal(trainer.index_to_pop_index(best))[0]]],
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict],
+                                     [non_train_dict]]
+            )
+            # ep = trainer.pre_episode_generation(captian_choices=(second_best, best), unique=(True, True))
+            # trainer.epoch(rechoose=False,
+            #              save_epoch_info=False,
+            #              pre_ep_dicts=[ep],
+            #              )
         else:
             i, j = ast.literal_eval('(' + idxs + ')')
             print('playing', i, '(blue, ' + typer(i) + ') against', j, '(red, ' + typer(j) + ')')
-            ep = trainer.pre_episode_generation(captian_choices=(i, j), unique=(True, True))
-            trainer.epoch(rechoose=False,
-                          save_epoch_info=False,
-                          pre_ep_dicts=[ep],
-                          )
+            agent_choices = [[], []]
+            for k, idx in enumerate((i, j)):
+                if idx >= 0:
+                    agent_choices[k].append(trainer.load_animal(trainer.index_to_pop_index(idx))[0])
+                else:
+                    agent_choices[k].append(test_animals[idx][0])
+            outcom = CTFOutcome()
+            outcom.get_outcome(
+                team_choices=[[torch.tensor(i)], [torch.tensor(j)]],
+                agent_choices=agent_choices,
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict],
+                                     [non_train_dict]]
+            )
+            # ep = trainer.pre_episode_generation(captian_choices=(i, j), unique=(True, True))
+            # trainer.epoch(rechoose=False,
+            #              save_epoch_info=False,
+            #              pre_ep_dicts=[ep],
+            #              )
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()
