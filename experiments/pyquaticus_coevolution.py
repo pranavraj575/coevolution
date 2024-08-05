@@ -1,4 +1,4 @@
-import argparse, os, sys, ast
+import argparse, os, sys, ast, shutil
 import torch.random
 from unstable_baselines3 import WorkerPPO, WorkerDQN
 from unstable_baselines3.dqn import MlpPolicy as DQNMlp
@@ -75,6 +75,8 @@ if __name__ == '__main__':
                         help="do not load from save")
     PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
                         help="checkpoint freq")
+    PARSER.add_argument('--dont-backup', action='store_true', required=False,
+                        help="do not backup a copy of previous save")
     PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
                         help='identification to add to folder')
 
@@ -145,6 +147,7 @@ if __name__ == '__main__':
 
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
+    backup_dir = os.path.join(DIR, 'data', 'save', 'backups', ident)
 
 
     def env_constructor(train_infos):
@@ -396,6 +399,9 @@ if __name__ == '__main__':
                     print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
+                if not args.dont_backup and os.path.exists(save_dir):
+                    print('backing up')
+                    shutil.copytree(save_dir, backup_dir)
                 print('saving')
                 trainer.save(save_dir)
                 print('done saving')
