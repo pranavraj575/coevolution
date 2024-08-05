@@ -7,15 +7,17 @@ from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv
 
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm
 
+
 class CTFOutcome(PettingZooOutcomeFn):
     def _get_outcome_from_agents(self, agent_choices, index_choices, updated_train_infos, env):
-        agent_choices = agent_choices[0] + agent_choices[1]
         updated_train_infos = updated_train_infos[0] + updated_train_infos[1]
-        for team, agent in enumerate(agent_choices):
-            if isinstance(agent, BaseAgentPolicy):
-                # tell the agent which team it is on
-                # print('skipping team assignment to see what happens')
-                agent.team = (Team.BLUE_TEAM, Team.RED_TEAM)[team]
+        for team_idx, team in enumerate(agent_choices):
+            for agent in team:
+                if isinstance(agent, BaseAgentPolicy):
+                    # tell the agent which team it is on
+                    # print('skipping team assignment to see what happens')
+                    agent.team = (Team.BLUE_TEAM, Team.RED_TEAM)[team_idx]
+        agent_choices = agent_choices[0] + agent_choices[1]
 
         # env is set up so the first k agents are team blue and the last k agents are team red
         alg = AutoMultiAgentAlgorithm(env=env,

@@ -4,10 +4,6 @@ if __name__ == '__main__':
     import torch, random
     import numpy as np
 
-    torch.random.manual_seed(0)
-    np.random.seed()
-    random.seed()
-
     PARSER = argparse.ArgumentParser()
 
     PARSER.add_argument('--team-size', type=int, required=False, default=2,
@@ -109,7 +105,8 @@ if __name__ == '__main__':
 
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
-
+    # config_dict["world_size"] = [160.0, 80.0]
+    config_dict["world_size"] = [200.0, 100.0]
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
                              config_dict=config_dict,

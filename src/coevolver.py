@@ -204,6 +204,7 @@ class CoevolutionBase:
                 if populations is None:
                     populations = set(range(len(self.population_sizes)))
                 for pop_idx in populations:
+                    print('adding', pop_idx)
                     self.pop_to_member[pop_idx].add((team_idx, member_idx))
                     self.pop_to_team[pop_idx].add(team_idx)
 
@@ -211,7 +212,11 @@ class CoevolutionBase:
                     self.member_to_pop[team_idx][member_idx].add(pop_idx)
 
                     self.pop_and_team_to_valid_locations[pop_idx][team_idx][member_idx] = True
-
+        for pop_idx in range(len(self.population_sizes)):
+            if not self.pop_to_member[pop_idx]:
+                raise Exception("population", pop_idx,
+                                "has no associated team member, revise team_size or member_to_population arg"
+                                )
         self.pop_to_team = tuple(self.pop_to_team)
         self.pop_to_member = tuple(self.pop_to_member)
 

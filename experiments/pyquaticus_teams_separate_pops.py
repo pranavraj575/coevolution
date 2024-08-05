@@ -1,36 +1,14 @@
-import argparse, os, sys, ast
-import torch.random
-from unstable_baselines3 import WorkerPPO, WorkerDQN
-from unstable_baselines3.dqn import MlpPolicy as DQNMlp
-from unstable_baselines3.ppo import MlpPolicy as PPOMlp
-
-from repos.pyquaticus.pyquaticus import pyquaticus_v0
-from repos.pyquaticus.pyquaticus.config import config_dict_std
-from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
-from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker
-from experiments.pyquaticus_utils.reward_fns import custom_rew, custom_rew2, RandPolicy
-from experiments.pyquaticus_utils.outcomes import CTFOutcome
-from experiments.pyquaticus_utils.wrappers import policy_wrapper
-
-from src.coevolver import PettingZooCaptianCoevolution
-from src.utils.dict_keys import *
-
-config_dict = config_dict_std
-config_dict["max_screen_size"] = (float('inf'), float('inf'))
-# reset later
-config_dict["sim_speedup_factor"] = 40
-config_dict["max_time"] = 420.
-# config_dict['tag_on_wall_collision']=True
-reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
-
 if __name__ == '__main__':
-    import time
-    import numpy as np
-    import random
+    import argparse, os, sys, ast
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     PARSER = argparse.ArgumentParser()
+
+    PARSER.add_argument('--team-size', type=int, required=False, default=2,
+                        help="size of teams")
+    PARSER.add_argument('--arena-size', action='store', required=False, default='200.0,100.0',
+                        help="x,y dims of arena, in format '200.0,100.0'")
 
     PARSER.add_argument('--rand-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
@@ -48,9 +26,6 @@ if __name__ == '__main__':
                         help="replay buffer capacity")
     PARSER.add_argument('--net-arch', action='store', required=False, default='64,64',
                         help="hidden layers of network, should be readable as a list or tuple")
-
-    PARSER.add_argument('--split-learners', action='store_true', required=False,
-                        help="learning agents types each go in their own population to avoid interspecies replacement")
 
     PARSER.add_argument('--protect-new', type=int, required=False, default=500,
                         help="protect new agents for this number of breeding epochs")
@@ -89,13 +64,40 @@ if __name__ == '__main__':
     PARSER.add_argument('--seed', type=int, required=False, default=0,
                         help="random seed")
     args = PARSER.parse_args()
+    team_size = args.team_size
+    import torch.random
+    from unstable_baselines3 import WorkerPPO, WorkerDQN
+    from unstable_baselines3.dqn import MlpPolicy as DQNMlp
+    from unstable_baselines3.ppo import MlpPolicy as PPOMlp
+
+    from repos.pyquaticus.pyquaticus import pyquaticus_v0
+    from repos.pyquaticus.pyquaticus.config import config_dict_std
+    from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
+    from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker
+    from experiments.pyquaticus_utils.reward_fns import custom_rew, custom_rew2, RandPolicy
+    from experiments.pyquaticus_utils.outcomes import CTFOutcome
+    from experiments.pyquaticus_utils.wrappers import policy_wrapper
+
+    from src.coevolver import PettingZooCaptianCoevolution
+    from src.utils.dict_keys import *
+
+    import time
+    import numpy as np
+    import random
 
     torch.random.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
 
+    config_dict = config_dict_std
+    config_dict["max_screen_size"] = (float('inf'), float('inf'))
+    # config_dict["world_size"] = [160.0, 80.0]
+    config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
+    # config_dict['tag_on_wall_collision']=True
+    reward_config = {i: custom_rew2 for i in range(team_size*2)}  # Example Reward Config
+
     test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
-                                           team_size=1,
+                                           team_size=team_size,
                                            config_dict=config_dict,
                                            )
     obs_normalizer = test_env.agent_obs_normalizer
@@ -123,6 +125,8 @@ if __name__ == '__main__':
     config_dict['normalize'] = normalize
 
     ident = (args.ident +
+             '_team_size_' + str(team_size) +
+             '_arena_size_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
              '_agent_count_' +
              (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
              (('_defend_' + str(defend_cnt)) if defend_cnt else '') +
@@ -132,7 +136,6 @@ if __name__ == '__main__':
              (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
              '_' +
              (('_replay_buffer_capacity_' + str(buffer_cap)) if dqn_cnt else '') +
-             ('_split_learners_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
              '_protect_new_' + str(args.protect_new) +
              '_mutation_prob_' + str(args.mutation_prob).replace('.', '_') +
              ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
@@ -146,7 +149,7 @@ if __name__ == '__main__':
     def env_constructor(train_infos):
         return pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE,
                                            reward_config=reward_config,
-                                           team_size=1,
+                                           team_size=team_size,
                                            config_dict=config_dict,
                                            )
 
@@ -199,49 +202,49 @@ if __name__ == '__main__':
                                            **dqnkwargs
                                            ), train_info_dict.copy()
                                  )
-    non_learning_sizes = [rand_cnt,
-                          defend_cnt,
-                          attack_cnt,
-                          ]
     non_lerning_construct = [create_rand,
                              create_defend,
                              create_attack,
                              ]
-    if args.split_learners:
-        pop_sizes = non_learning_sizes + [ppo_cnt,
-                                          dqn_cnt,
-                                          ]
 
-        worker_constructors = non_lerning_construct + [create_ppo,
-                                                       create_dqn,
-                                                       ]
-    else:
-        pop_sizes = non_learning_sizes + [ppo_cnt + dqn_cnt]
+    agent_counts = [rand_cnt,
+                    defend_cnt,
+                    attack_cnt,
+                    ppo_cnt,
+                    dqn_cnt
+                    ]
 
 
-        def create_learner(i, env):
-            if i < ppo_cnt:
-                return create_ppo(i, env)
-            else:
-                return create_dqn(i - ppo_cnt, env)
+    def create_agent(i, env):
+        for agent_cnt, creation in ((rand_cnt, create_rand),
+                                    (defend_cnt, create_defend),
+                                    (attack_cnt, create_attack),
+                                    (ppo_cnt, create_ppo),
+                                    (dqn_cnt, create_dqn)
+                                    ):
+            if i < agent_cnt:
+                return creation(i, env)
+            i -= agent_cnt
 
 
-        worker_constructors = non_lerning_construct + [create_learner]
-    if sum(pop_sizes) == 0:
+    if sum(agent_counts) == 0:
         raise Exception("no agents specified, at least one of --*-agents must be greater than 0")
     max_cores = len(os.sched_getaffinity(0))
     if args.display:
         proc = 0
     else:
         proc = args.processes
-    trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
+    trainer = PettingZooCaptianCoevolution(population_sizes=[sum(agent_counts) for _ in range(team_size)],
+                                           team_sizes=(team_size, team_size),
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
-                                           worker_constructors=worker_constructors,
+                                           worker_constructors=[create_agent for _ in range(team_size)],
                                            storage_dir=data_folder,
                                            protect_new=args.protect_new,
                                            processes=proc,
-                                           # member_to_population=lambda team_idx, member_idx: {team_idx},
+                                           # draw member i from population i
+                                           # i.e. each team has team_size members drawn from team_size populations
+                                           member_to_population=lambda team_idx, member_idx: {member_idx},
                                            # for some reason this overesetimates by a factor of 3, so we fix it
                                            max_steps_per_ep=(
                                                    1 + (1/3)*config_dict['render_fps']*config_dict['max_time']/
@@ -306,7 +309,7 @@ if __name__ == '__main__':
 
         classic_elos = trainer.classic_elos.numpy()
         idents_and_elos = []
-        for i in range(sum(pop_sizes)):
+        for i in range(sum(agent_counts)*team_size):
             idents_and_elos.append((typer(i), classic_elos[i]))
         print('all elos by index')
         for i, animal in enumerate(test_animals):
@@ -373,7 +376,7 @@ if __name__ == '__main__':
             epoch_info = trainer.epoch()
             if True:
                 id_to_idxs = dict()
-                for i in range(sum(pop_sizes)):
+                for i in range(sum(agent_counts)*team_size):
                     identity = typer(i)
                     if identity not in id_to_idxs:
                         id_to_idxs[identity] = []
