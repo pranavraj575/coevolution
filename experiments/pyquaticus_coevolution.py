@@ -401,7 +401,10 @@ if __name__ == '__main__':
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 if not args.dont_backup and os.path.exists(save_dir):
                     print('backing up')
+                    if os.path.exists(backup_dir):
+                        shutil.rmtree(backup_dir)
                     shutil.copytree(save_dir, backup_dir)
+                    print('done backing up')
                 print('saving')
                 trainer.save(save_dir)
                 print('done saving')
