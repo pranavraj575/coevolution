@@ -88,8 +88,12 @@ if __name__ == '__main__':
                         help="Enable rendering")
     PARSER.add_argument('--seed', type=int, required=False, default=0,
                         help="random seed")
-    args = PARSER.parse_args()
 
+    PARSER.add_argument('--unblock-gpu', action='store_true', required=False,
+                        help="unblock using gpu ")
+    args = PARSER.parse_args()
+    if not args.unblock_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
     torch.random.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)

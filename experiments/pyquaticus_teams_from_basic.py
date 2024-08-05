@@ -74,12 +74,17 @@ if __name__ == '__main__':
                         help="skip training and plot")
     PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
                         help='which agent indexes to display, in the format "p1,p2;p1,p2" (used with --display)')
+
+    PARSER.add_argument('--unblock-gpu', action='store_true', required=False,
+                        help="unblock using gpu ")
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, random
     import dill as pickle
     from matplotlib import pyplot as plt
 
+    if not args.unblock_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
     from repos.pyquaticus.pyquaticus.config import config_dict_std
     from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
     from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker

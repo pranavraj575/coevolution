@@ -63,7 +63,11 @@ if __name__ == '__main__':
                         help="Enable rendering")
     PARSER.add_argument('--seed', type=int, required=False, default=0,
                         help="random seed")
+    PARSER.add_argument('--unblock-gpu', action='store_true', required=False,
+                        help="unblock using gpu ")
     args = PARSER.parse_args()
+    if not args.unblock_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
     team_size = args.team_size
     import torch.random
     from unstable_baselines3 import WorkerPPO, WorkerDQN
