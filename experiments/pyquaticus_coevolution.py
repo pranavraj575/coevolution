@@ -28,9 +28,6 @@ if __name__ == '__main__':
     import numpy as np
     import random
 
-    torch.random.manual_seed(0)
-    np.random.seed()
-    random.seed()
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
@@ -90,8 +87,14 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
+    PARSER.add_argument('--seed', type=int, required=False, default=0,
+                        help="random seed")
     args = PARSER.parse_args()
 
+    torch.random.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    
     test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
                                            team_size=1,
                                            config_dict=config_dict,
