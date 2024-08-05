@@ -204,7 +204,6 @@ class CoevolutionBase:
                 if populations is None:
                     populations = set(range(len(self.population_sizes)))
                 for pop_idx in populations:
-                    print('adding', pop_idx)
                     self.pop_to_member[pop_idx].add((team_idx, member_idx))
                     self.pop_to_team[pop_idx].add(team_idx)
 
