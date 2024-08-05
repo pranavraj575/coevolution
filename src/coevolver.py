@@ -1286,7 +1286,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace[pop_idx], replacement=False)
             # these are the global indexes of the targets
             target_global_idxs = [candidate_target_idxs[target_idx_idx] for target_idx_idx in target_idx_idxs]
-            target_elos = [self.elos[target_global_idx] for target_global_idx in target_global_idxs]
+            target_elos = [self.elos[target_global_idx].item() for target_global_idx in target_global_idxs]
 
             # now pick which agents to clone based on elo
             candidate_clone_elos = self.elos[candidate_clone_idxs]
@@ -1298,7 +1298,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
             # global indexes of clones, as well as elos of the clones
             clone_global_idxs = [candidate_clone_idxs[clone_idx_idx] for clone_idx_idx in clone_idx_idxs]
-            clone_elos = [candidate_clone_elos[clone_idx_idx] for clone_idx_idx in clone_idx_idxs]
+            clone_elos = [candidate_clone_elos[clone_idx_idx].item() for clone_idx_idx in clone_idx_idxs]
 
             for target_global_idx, target_elo, clone_global_idx, clone_elo in zip(target_global_idxs,
                                                                                   target_elos,
