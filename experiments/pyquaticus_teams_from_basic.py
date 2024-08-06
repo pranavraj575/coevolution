@@ -11,7 +11,6 @@ if __name__ == '__main__':
     PARSER.add_argument('--arena-size', action='store', required=False, default='200.0,100.0',
                         help="x,y dims of arena, in format '200.0,100.0'")
 
-
     PARSER.add_argument('--embedding-dim', type=int, required=False, default=128,
                         help="size of transformer embedding layer")
 
@@ -275,6 +274,31 @@ if __name__ == '__main__':
         plotting = pickle.load(f)
         f.close()
 
+
+    def update_plotting_variables():
+        test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
+        indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                     indices=None,
+                                                                     obs_preembed=None,
+                                                                     obs_mask=None,
+                                                                     noise_model=None,
+                                                                     valid_members=None,
+                                                                     )
+
+        init_dist = torch.mean(dist, dim=0).detach().numpy()
+        plotting['init_dists'].append(init_dist)
+        team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
+        team_dist_non_ordered = dict()
+        for item in team_dist:
+            key = tuple(sorted(item))
+            if key not in team_dist_non_ordered:
+                team_dist_non_ordered[key] = 0
+            team_dist_non_ordered[key] += team_dist[item]
+        plotting['team_dists'].append(team_dist)
+        plotting['team_dists_non_ordered'].append(team_dist_non_ordered)
+        plotting['epochs'].append(trainer.epochs)
+
+
     if args.plot:
         from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution
 
@@ -335,7 +359,6 @@ if __name__ == '__main__':
             return 'rand'
 
 
-
     if args.display:
         idxs = args.idxs_to_display
         elos = trainer.classic_elos.numpy().copy()
@@ -346,21 +369,31 @@ if __name__ == '__main__':
         second_best = np.argmax(elos)
 
         classic_elos = trainer.classic_elos.numpy()
+        print('agent list')
+        for i in range(6):
+            print(str(i) + ':', typer(i))
+        if rand_cnt > 0:
+            if rand_cnt > 1:
+                print('6-' + str(6 + rand_cnt - 1) + ':', typer(6))
+            else:
+                print('6:', typer(6))
+
         if idxs is None:
-            print(trainer.team_trainer.create_teams(T=team_size))
+            gen_team = [t.item()
+                        for t in trainer.team_trainer.create_teams(T=team_size).flatten()]
+            print('generated team has elos', trainer.classic_elos[gen_team])
+
             print('best agent has elo', trainer.classic_elos[best],
                   'and is type', typer(best))
-            print('second best agent has elo', trainer.classic_elos[second_best],
-                  'and is type', typer(second_best))
             print('worst agents has elo', trainer.classic_elos[worst],
                   'and is type', typer(worst))
 
-            print('playing worst (blue, ' + str([typer(worst) for idx in range(team_size)])
-                  + ') against best (red, ' + str([typer(best) for idx in range(team_size)]) + ')')
+            print('playing double best (blue, ' + str([typer(best) for idx in range(team_size)])
+                  + ') against generated (red, ' + str([typer(idx) for idx in gen_team]) + ')')
 
             outcom = CTFOutcome()
             agents = []
-            for team in [worst]*team_size, [best]*team_size:
+            for team in [best]*team_size, gen_team:
                 m = []
                 for idx in team:
                     agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
@@ -376,10 +409,10 @@ if __name__ == '__main__':
 
 
         else:
-            A, B = [ast.literal_eval('(' +team+ ')') for team in idxs.split(';')]
+            A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
-            print('playing second best (blue, ' + str([typer(idx) for idx in B])
-                  + ') against best (red, ' + str([typer(idx) for idx in A]) + ')')
+            print('playing', B, '(blue, ' + str([typer(idx) for idx in B])
+                  + ') against', A, '(red, ' + str([typer(idx) for idx in A]) + ')')
 
             outcom = CTFOutcome()
             agents = []
@@ -403,6 +436,8 @@ if __name__ == '__main__':
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
             # print(trainer.team_trainer.get_total_distribution(T=team_size))
             # quit()
+            if trainer.epochs == 0:
+                update_plotting_variables()
             epoch_info = trainer.epoch(
                 noise_model=team_trainer.create_nose_model_towards_uniform(
                     t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
@@ -418,28 +453,8 @@ if __name__ == '__main__':
                     mask_obs_prob=.1,
                 )
                 print('training step finished')
-            if trainer.epochs == 0 or (not trainer.epochs%args.train_freq):
-                test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
-                indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
-                                                                             indices=None,
-                                                                             obs_preembed=None,
-                                                                             obs_mask=None,
-                                                                             noise_model=None,
-                                                                             valid_members=None,
-                                                                             )
-
-                init_dist = torch.mean(dist, dim=0).detach().numpy()
-                plotting['init_dists'].append(init_dist)
-                team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
-                team_dist_non_ordered = dict()
-                for item in team_dist:
-                    key = tuple(sorted(item))
-                    if key not in team_dist_non_ordered:
-                        team_dist_non_ordered[key] = 0
-                    team_dist_non_ordered[key] += team_dist[item]
-                plotting['team_dists'].append(team_dist)
-                plotting['team_dists_non_ordered'].append(team_dist_non_ordered)
-                plotting['epochs'].append(trainer.epochs)
+            if not trainer.epochs%args.train_freq:
+                update_plotting_variables()
 
             if True:
                 id_to_idxs = dict()
@@ -462,7 +477,7 @@ if __name__ == '__main__':
                     print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
                 if plotting['init_dists']:
                     print('initial dist')
-                    print(plotting['init_dists'][-1])
+                    print(np.round(plotting['init_dists'][-1], 3))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
