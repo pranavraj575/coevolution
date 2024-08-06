@@ -388,7 +388,6 @@ class MLMTeamTrainer(TeamTrainer):
                                         obs_mask=obs_mask,
                                         mask_prob=mask_prob,
                                         replacement_probs=replacement_probs,
-                                        scalar=scalar,
                                         mask_obs_prob=mask_obs_prob,
                                         )
             # keep gradients
@@ -405,7 +404,6 @@ class MLMTeamTrainer(TeamTrainer):
                         obs_mask,
                         mask_prob,
                         replacement_probs=(.8, .1, .1),
-                        scalar=1.,
                         mask_obs_prob=.1,
                         ):
         """
@@ -419,9 +417,6 @@ class MLMTeamTrainer(TeamTrainer):
                 if None, uses (1/team_size, 2/team_size, ..., 1)
             replacement_probs: proportion of ([MASK], random element, same element) to replace masked elements with
                 default (.8, .1, .1) because BERT
-            scalar: thing to multiply losses by
-                should be 1 for normal MLM training
-                    -1 to push model away from 'bad' teamas
             mask_obs_prob: if >0, randomly mask observations with this prob
         Returns:
             avg crossentropy loss
@@ -440,7 +435,6 @@ class MLMTeamTrainer(TeamTrainer):
                                 obs_mask=temp_obs_mask,
                                 mask_prob=mask_prob,
                                 replacement_probs=replacement_probs,
-                                scalar=scalar,
                                 )
         return loss
 
@@ -450,7 +444,6 @@ class MLMTeamTrainer(TeamTrainer):
                     obs_mask,
                     mask_prob=.5,
                     replacement_probs=(.8, .1, .1),
-                    scalar=1.,
                     ):
         """
         randomly masks winning team members, runs the transformer token prediction model, and gets crossentropy loss
@@ -462,9 +455,6 @@ class MLMTeamTrainer(TeamTrainer):
             mask_prob: proportion of elements to mask (note that we will always mask at least one per batch
             replacement_probs: proportion of ([MASK], random element, same element) to replace masked elements with
                 default (.8, .1, .1) because BERT
-            scalar: thing to multiply final loss by
-                should be 1 for normal MLM training
-                    -1 to push model away from 'bad' teamas
         Returns:
             crossentropy loss of prediction
         """
@@ -481,7 +471,7 @@ class MLMTeamTrainer(TeamTrainer):
                                            )
         criterion = nn.CrossEntropyLoss()
 
-        loss = scalar*criterion(logits[mask_indices], teams[mask_indices])
+        loss = criterion(logits[mask_indices], teams[mask_indices])
         return loss
 
     def _randomly_mask_teams(self, teams, mask_prob, replacement_props):
