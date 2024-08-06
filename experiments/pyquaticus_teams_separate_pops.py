@@ -178,7 +178,8 @@ if __name__ == '__main__':
                                                  using_pyquaticus=True,
                                                  ), non_train_dict.copy()
                                     )
-    train_info_dict = {DICT_TRAIN: True,
+    train_info_dict = {DICT_TRAIN: False,
+                       DICT_COLLECT_ONLY: True,
                        DICT_CLONABLE: True,
                        DICT_CLONE_REPLACABLE: True,
                        DICT_MUTATION_REPLACABLE: True,

@@ -6,6 +6,7 @@ from src.utils.dict_keys import (DICT_IS_WORKER,
                                  DICT_COLLECT_ONLY,
                                  DICT_SAVE_BUFFER,
                                  DICT_SAVE_CLASS,
+                                 TEMP_DICT_TEAM_MEMBER_ID,
                                  )
 from src.utils.savele_baselines import overwrite_worker
 
@@ -286,8 +287,8 @@ class PettingZooOutcomeFn(OutcomeFn):
         if self.dir is None:
             print('WARNING, DIRECTORY NOT SET, AGENTS CANNOT BE SAVED, AND POP_LOCAL_MEM WILL RETURN NOTHING')
             return
-        for t in zip(agent_choices, index_choices, updated_train_infos):
-            for agent, global_idx, updated_train_dict in zip(*t):
+        for team_idx, t in enumerate(zip(agent_choices, index_choices, updated_train_infos)):
+            for member_idx, (agent, global_idx, updated_train_dict) in enumerate(zip(*t)):
                 is_worker = updated_train_dict.get(DICT_IS_WORKER, True)
                 agent_dir = os.path.join(self.dir, str(self.ident), str(self.counter))
                 if not os.path.exists(agent_dir):
@@ -300,10 +301,11 @@ class PettingZooOutcomeFn(OutcomeFn):
                                      save_class=updated_train_dict.get(DICT_SAVE_CLASS, True),
                                      )
                     agent = None
-                #else:
+                # else:
                 #    agent = None
                 if global_idx not in self.local_mem:
                     self.local_mem[global_idx] = []
+                updated_train_dict[TEMP_DICT_TEAM_MEMBER_ID] = (team_idx, member_idx)
                 self.local_mem[global_idx].append((agent_dir, agent, updated_train_dict))
                 self.counter += 1
 

@@ -15,6 +15,11 @@ DICT_MUTATION_AGE = 'mutation_age'
 DICT_IS_WORKER = 'is_worker'
 
 # whether an agent should only collect buffer examples, usually implies DICT_TRAIN is false
+# If using this, should probably have the following setup:
+#   all DICT_TRAIN for a particular agent is false
+#   all DICT_COLLECT_ONLY for that agent is true
+# this will result in the agent only training in one large batch after each epoch
+# this should be done automatically if  coevolver:PettingZooCaptianCoevolution.local_collection_mode
 DICT_COLLECT_ONLY = 'collect_only'
 
 # whether agent is clonable
@@ -52,13 +57,16 @@ TEMP_DICT_CAPTIAN = 'captian'
 # whether a captain is unique
 TEMP_DICT_CAPTIAN_UNIQUE = 'unique'
 
+# team id, member id
+TEMP_DICT_TEAM_MEMBER_ID = 'team_member_id'
+
 ###### these keys are for coevolution dict
 
 COEVOLUTION_DICT_ELOS = 'elos'
 COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE = 'captian_elo_update'
 COEVOLUTION_DICT_MEMBER_ELO_UPDATE = 'member_elo_update'
 COEVOLUTION_DICT_ELO_CONVERSION = 'elo_conversion'
-COEVOLUTION_DICT_DEPTH_OF_RETRY='depth_of_retry'
+COEVOLUTION_DICT_DEPTH_OF_RETRY = 'depth_of_retry'
 
 __all__ = ["DICT_TRAIN",
            "DICT_AGE",

@@ -4,6 +4,8 @@ from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
 
+from unstable_baselines3.common import OnPolicy, OffPolicy
+
 from src.utils.dict_keys import DICT_IS_WORKER
 from src.utils.savele_baselines import (overwrite_worker, load_worker, worker_exists,
                                         overwrite_other, load_other, other_exists,
@@ -203,7 +205,7 @@ class ZooCage:
                               worker_info=worker_info,
                               )
 
-    def update_worker_buffer(self, local_worker, worker_key: str, WorkerClass=None):
+    def update_worker_buffer(self, local_worker, worker_key: str, env, WorkerClass=None):
         """
         takes active agent's buffer and stores it into buffer of worker_key
             assumes buffer inherits BaseBuffer
@@ -213,23 +215,20 @@ class ZooCage:
             worker_key: folder to load from/save to
             WorkerClass: class to use, if known
         """
-
         worker, worker_info = self.load_worker(worker_key=worker_key,
                                                load_buffer=True,
                                                WorkerClass=WorkerClass,
                                                )
         if isinstance(worker, OffPolicyAlgorithm):
             assert isinstance(local_worker, OffPolicyAlgorithm)
-            self._update_off_policy_buffer(buffer=worker.replay_buffer,
-                                           local_buffer=local_worker.replay_buffer,
-                                           )
-
+            worker.set_env(env=env)
+            assert isinstance(worker, OffPolicy)
+            worker.update_from_buffer(local_buffer=local_worker.replay_buffer)
         elif isinstance(worker, OnPolicyAlgorithm):
             assert isinstance(local_worker, OnPolicyAlgorithm)
-
-            self._update_on_policy_buffer(buffer=worker.rollout_buffer,
-                                          local_buffer=local_worker.rollout_buffer,
-                                          )
+            worker.set_env(env=env)
+            assert isinstance(worker, OnPolicy)
+            worker.update_from_buffer(local_buffer=local_worker.rollout_buffer)
         else:
             raise Exception("what algorithigm is this", worker)
 

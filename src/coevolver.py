@@ -24,6 +24,7 @@ from src.utils.dict_keys import (DICT_AGE,
 
                                  TEMP_DICT_CAPTIAN,
                                  TEMP_DICT_CAPTIAN_UNIQUE,
+                                 TEMP_DICT_TEAM_MEMBER_ID,
 
                                  COEVOLUTION_DICT_ELOS,
                                  COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE,
@@ -934,6 +935,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  temp_zoo_dir=None,
                  max_steps_per_ep=float('inf'),
                  depth_to_retry_result=None,
+                 local_collection_mode=True,
                  ):
         """
         Args:
@@ -972,6 +974,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             max_steps_per_ep: maximum steps per episode, used to decide whether to parallelize
             depth_to_retry_result: (game outcome value -> max number of times to try for a different outcome)
                 if not specified, always 0
+            local_collection_mode: if true, every trainable worker will be used to collect experience, and central
+                workers will be updated at end of epoch with all relevant experience
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
@@ -989,6 +993,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          )
 
         self.env_constructor = env_constructor
+        self.local_collection_mode = local_collection_mode
 
         test_env = self.env_constructor(None)
         test_env.reset()
@@ -996,6 +1001,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         if team_idx_to_agent_id is not None:
             self.team_idx_to_agent_id = team_idx_to_agent_id
         else:
+            print('warning team_idx_to_agent_id not set, creating it in order')
             env_agents = iter(test_env.agents)
             dict_team_idx_to_agent_id = dict()
             for team_idx, team_size in enumerate(self.team_sizes):
@@ -1125,6 +1131,13 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                                      noise_model=noise_model,
                                                      )
         team_choices, updated_train_infos = pre_ep_dict['teams'], pre_ep_dict['train_infos']
+
+        for t in updated_train_infos:
+            for train_dict in t:
+                if self.local_collection_mode:
+                    if train_dict[DICT_IS_WORKER] and train_dict[DICT_TRAIN]:
+                        train_dict[DICT_COLLECT_ONLY] = True
+
         pre_ep_dict.update({'agents': [
             [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
             for t in zip(team_choices, updated_train_infos)]})
@@ -1137,6 +1150,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             outcome_fn_local_mem: output of PettingZooOutcomeFn.pop_local_mem()
                 is a dict of (global idx -> (trained agent, updated agent info))
         """
+        print('saving trained age')
         for global_idx in outcome_fn_local_mem:
             for agent_dir, agent, updated_train_dict in outcome_fn_local_mem[global_idx]:
                 pop_idx, local_idx = self.index_to_pop_index(global_idx)
@@ -1149,9 +1163,13 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                                )
 
                     if updated_train_dict.get(DICT_COLLECT_ONLY, False):
+                        agent_id = self.team_idx_to_agent_id(updated_train_dict[TEMP_DICT_TEAM_MEMBER_ID])
                         cage.update_worker_buffer(local_worker=agent,
                                                   worker_key=str(local_idx),
                                                   WorkerClass=None,
+                                                  env=DumEnv(action_space=self.action_space(agent_id),
+                                                             obs_space=self.observation_space(agent_id),
+                                                             ),
                                                   )
                     elif updated_train_dict.get(DICT_TRAIN, True):
                         cage.overwrite_worker(worker=agent,
@@ -1161,9 +1179,10 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                               worker_info=updated_train_dict,
                                               )
                 cage.overwrite_info(key=str(local_idx), info=updated_train_dict)
-                if updated_train_dict[TEMP_DICT_CAPTIAN]:
-                    # TODO: right now switching agents immediately after seeing captian, probably can do better
-                    break
+                if not self.local_collection_mode:
+                    if updated_train_dict[TEMP_DICT_CAPTIAN]:
+                        # TODO: right now switching agents immediately after seeing captian, probably can do better
+                        break
 
     def clear(self):
         super().clear()
@@ -1463,9 +1482,14 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 self.zoo[pop_idx].clear_worker_buffer(worker_key=str(local_idx),
                                                       WorkerClass=None,
                                                       )
+            sample_team_idx = self.sample_team_member_from_pop(pop_idx=pop_idx)
+            agent_id = self.team_idx_to_agent_id(sample_team_idx)
             self.zoo[pop_idx].update_worker_buffer(local_worker=old_worker,
                                                    worker_key=str(local_idx),
                                                    WorkerClass=None,
+                                                   env=DumEnv(action_space=self.action_space(agent_id),
+                                                              obs_space=self.observation_space(agent_id),
+                                                              ),
                                                    )
         if elo is not None:
             global_idx = self.pop_index_to_index(pop_local_idx=pop_local_idx)

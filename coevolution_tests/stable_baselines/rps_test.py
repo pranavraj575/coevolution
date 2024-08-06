@@ -97,7 +97,7 @@ elif isinstance(worker0, OnPolicyAlgorithm):
 
 for _ in range(2):
     # pushes the 220 examples from worker1 into file of worker0
-    worker0, _ = zoo.update_worker_buffer(local_worker=worker1, worker_key='0')
+    worker0, _ = zoo.update_worker_buffer(local_worker=worker1, worker_key='0',env=None)
     if isinstance(worker0, OffPolicyAlgorithm):
         print(worker0.replay_buffer.size())
     elif isinstance(worker0, OnPolicyAlgorithm):
