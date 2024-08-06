@@ -554,12 +554,13 @@ class CaptianCoevolution(CoevolutionBase):
                                                   )
         save_trained_agents = kwargs.get('save_trained_agents', True)
         save_into_team_buffer = kwargs.get('save_into_team_buffer', True)
+        add_no_input = kwargs.get('add_no_input', True)
         if save_trained_agents or save_into_team_buffer:
             for items_to_save in all_items_to_save:
                 if save_trained_agents:
                     self.update_results(items_to_save=items_to_save)
                 if save_into_team_buffer:
-                    self.update_team_buffer(items_to_save=items_to_save)
+                    self.update_team_buffer(items_to_save=items_to_save, add_no_input=add_no_input)
 
         depth = kwargs.get('depth', 0)
         noise_model = kwargs.get('noise_model', None)
@@ -612,6 +613,8 @@ class CaptianCoevolution(CoevolutionBase):
                                known_obs=(team_idx, combined_obs),
                                save_trained_agents=False,
                                save_into_team_buffer=True,
+                               add_no_input=False,
+                               # if the remade team wins, it should be only added with the correct context
                                )
                 else:
                     pre_ep_dicts.append(pre_ep_dict)
@@ -624,6 +627,8 @@ class CaptianCoevolution(CoevolutionBase):
                        known_obs=(None, None),
                        save_trained_agents=False,
                        save_into_team_buffer=True,
+                       add_no_input=False,
+                       # if the remade team wins, it should be only added with the correct context
                        )
 
     def clear(self):
@@ -764,7 +769,7 @@ class CaptianCoevolution(CoevolutionBase):
             for member in team:
                 self.elos[member] += self.member_elo_update*(team_outcome - expected_outcome)
 
-    def update_team_buffer(self, items_to_save):
+    def update_team_buffer(self, items_to_save, add_no_input=True):
         for (team,
              (team_outcome, player_infos),
              ) in zip(items_to_save['teams'],
@@ -780,6 +785,12 @@ class CaptianCoevolution(CoevolutionBase):
                                             team=team.reshape((1, -1)),
                                             obs_mask=obs_mask,
                                             )
+            if add_no_input:
+                self.team_trainer.add_to_buffer(scalar=team_outcome,
+                                                obs_preembed=None,
+                                                team=team.reshape((1, -1)),
+                                                obs_mask=None,
+                                                )
 
     def save_trained_agents(self, outcome_fn_local_mem):
         """
