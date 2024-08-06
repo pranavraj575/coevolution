@@ -333,19 +333,20 @@ if __name__ == '__main__':
                             # colors=['red']*3 + ['blue']*3 + ['black']
                             title="Total Dictribution",
                             )
-        # all keys that have random agents
-        random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
-        non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
+        if rand_cnt>0:
+            # all keys that have random agents
+            random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
+            non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
 
-        plot_dist_evolution(plot_dist=all_team_dist,
-                            x=plotting['epochs'],
-                            mapping=lambda dist: np.concatenate((dist[non_random_keys], [np.sum(dist[random_keys])])),
-                            labels=[possible_teams[i] for i in non_random_keys] + ['random'],
-                            save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
-                            # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            # colors=['red']*3 + ['blue']*3 + ['black']
-                            title="Total Distribution (Random combined)",
-                            )
+            plot_dist_evolution(plot_dist=all_team_dist,
+                                x=plotting['epochs'],
+                                mapping=lambda dist: np.concatenate((dist[non_random_keys], [np.sum(dist[random_keys])])),
+                                labels=[possible_teams[i] for i in non_random_keys] + ['random'],
+                                save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
+                                # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
+                                # colors=['red']*3 + ['blue']*3 + ['black']
+                                title="Total Distribution (Random combined)",
+                                )
         trainer.clear()
         quit()
     print('seting save directory as', save_dir)
