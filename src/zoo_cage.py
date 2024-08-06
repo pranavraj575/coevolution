@@ -1,12 +1,14 @@
 import torch, os, shutil
-import dill as pickle
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, DictRolloutBuffer
 
 from src.utils.dict_keys import DICT_IS_WORKER
-from src.utils.savele_baselines import overwrite_worker, load_worker, worker_exists
+from src.utils.savele_baselines import (overwrite_worker, load_worker, worker_exists,
+                                        overwrite_other, load_other, other_exists,
+                                        overwrite_info, load_info
+                                        )
 
 
 class ZooCage:
@@ -50,24 +52,14 @@ class ZooCage:
                        key: str,
                        info,
                        ):
-        if info is None:
-            info = dict()
-        info_file = os.path.join(self.zoo_dir, key, 'info.pkl')
-        f = open(info_file, 'wb')
-        pickle.dump(info, f)
-        f.close()
+        overwrite_info(info=info,
+                       save_path=os.path.join(self.zoo_dir, key, 'info.pkl'),
+                       )
 
     def load_info(self,
                   key: str,
                   ):
-        filename = os.path.join(self.zoo_dir, key, 'info.pkl')
-        if os.path.exists(filename):
-            f = open(filename, 'rb')
-            info = pickle.load(f)
-            f.close()
-            return info
-        else:
-            return {}
+        return load_info(save_path=os.path.join(self.zoo_dir, key, 'info.pkl'))
 
     ### worker methods
     def load_worker(self, worker_key: str, WorkerClass=None, load_buffer=True):
@@ -263,18 +255,10 @@ class ZooCage:
             other_info: info to save
         Returns:
         """
-
-        full_dir = os.path.join(self.zoo_dir, other_key)
-        if os.path.exists(full_dir):
-            shutil.rmtree(full_dir)
-        os.makedirs(full_dir)
-        f = open(os.path.join(full_dir, 'other.pkl'), 'wb')
-        pickle.dump(other, f)
-        f.close()
-
-        self.overwrite_info(key=other_key,
-                            info=other_info,
-                            )
+        overwrite_other(other=other,
+                        save_dir=os.path.join(self.zoo_dir, other_key),
+                        other_info=other_info
+                        )
 
     def load_other(self,
                    other_key: str,
@@ -285,16 +269,10 @@ class ZooCage:
             other_key: folder to load from
         Returns: other object, other info
         """
-        full_dir = os.path.join(self.zoo_dir, other_key)
-        f = open(os.path.join(full_dir, 'other.pkl'), 'rb')
-        other = pickle.load(f)
-        f.close()
-        return other, self.load_info(key=other_key)
+        return load_other(save_dir=os.path.join(self.zoo_dir, other_key))
 
     def other_exists(self, other_key: str):
-        full_dir = os.path.join(self.zoo_dir, other_key)
-        return (os.path.exists(os.path.join(full_dir, 'info.pkl')) and
-                os.path.exists(os.path.join(full_dir, 'other.pkl')))
+        return other_exists(save_dir=os.path.join(self.zoo_dir, other_key))
 
     ### misc
     def class_is_saved(self, worker_key: str):

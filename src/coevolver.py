@@ -1143,10 +1143,10 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 cage: ZooCage = self.zoo[pop_idx]
                 if updated_train_dict.get(DICT_IS_WORKER, True):
                     if agent is None:
-                        load_worker(save_dir=agent_dir,
-                                    WorkerClass=None,
-                                    load_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
-                                    )
+                        agent, _ = load_worker(save_dir=agent_dir,
+                                               WorkerClass=None,
+                                               load_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
+                                               )
 
                     if updated_train_dict.get(DICT_COLLECT_ONLY, False):
                         cage.update_worker_buffer(local_worker=agent,

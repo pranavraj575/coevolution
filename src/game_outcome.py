@@ -302,9 +302,9 @@ class PettingZooOutcomeFn(OutcomeFn):
                                      save_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
                                      save_class=updated_train_dict.get(DICT_SAVE_CLASS, True),
                                      )
-                else:
                     agent = None
-
+                #else:
+                #    agent = None
                 if global_idx not in self.local_mem:
                     self.local_mem[global_idx] = []
                 self.local_mem[global_idx].append((agent_dir, agent, updated_train_dict))

@@ -6,18 +6,77 @@ from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
 
-def overwrite_worker(worker, worker_info, save_dir, save_buffer=True, save_class=True):
+def overwrite_other(other,
+                    save_dir,
+                    other_info=None,
+                    ):
+    """
+    pickles another object and saves it into key
+    Args:
+        other: some object
+        other_key: folder to save into
+        other_info: info to save
+    Returns:
+    """
+
+    if os.path.exists(save_dir):
+        shutil.rmtree(save_dir)
+    os.makedirs(save_dir)
+    f = open(os.path.join(save_dir, 'other.pkl'), 'wb')
+    pickle.dump(other, f)
+    f.close()
+
+    overwrite_info(info=other_info,
+                   save_path=os.path.join(save_dir, 'info.pkl'),
+                   )
+
+
+def load_other(save_dir):
+    f = open(os.path.join(save_dir, 'other.pkl'), 'rb')
+    other = pickle.load(f)
+    f.close()
+    return other, load_info(save_path=os.path.join(save_dir, 'info.pkl'))
+
+
+def other_exists(save_dir):
+    return (os.path.exists(os.path.join(save_dir, 'info.pkl')) and
+            os.path.exists(os.path.join(save_dir, 'other.pkl')))
+
+
+def overwrite_info(info,
+                   save_path,
+                   ):
+    if info is None:
+        info = dict()
+    f = open(save_path, 'wb')
+    pickle.dump(info, f)
+    f.close()
+
+
+def load_info(save_path):
+    if os.path.exists(save_path):
+        f = open(save_path, 'rb')
+        info = pickle.load(f)
+        f.close()
+        return info
+    else:
+        return dict()
+
+
+def overwrite_worker(worker,
+                     worker_info,
+                     save_dir,
+                     save_buffer=True,
+                     save_class=True,
+                     ):
     if os.path.exists(save_dir):
         shutil.rmtree(save_dir)
     os.makedirs(save_dir)
 
     # save info
-    if worker_info is None:
-        worker_info = dict()
-    info_file = os.path.join(save_dir, 'info.pkl')
-    f = open(info_file, 'wb')
-    pickle.dump(worker_info, f)
-    f.close()
+    overwrite_info(info=worker_info,
+                   save_path=os.path.join(save_dir, 'info.pkl'),
+                   )
 
     # save class
     if save_class:
@@ -38,7 +97,10 @@ def overwrite_worker(worker, worker_info, save_dir, save_buffer=True, save_class
     worker.save(os.path.join(save_dir, 'worker.zip'))
 
 
-def load_worker(save_dir, WorkerClass=None, load_buffer=True):
+def load_worker(save_dir,
+                WorkerClass=None,
+                load_buffer=True,
+                ):
     # load info
     filename = os.path.join(save_dir, 'info.pkl')
     if os.path.exists(filename):
