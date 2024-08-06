@@ -302,13 +302,14 @@ if __name__ == '__main__':
     if args.plot:
         from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution
 
+        labels = (['att ezy', 'att mid', 'att hrd'] +
+                  ['def ezy', 'def mid', 'def hrd'] +
+                  ['random'])
         print('plotting and closing')
         plot_dist_evolution(plot_dist=plotting['init_dists'],
                             x=plotting['epochs'],
                             mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
-                            labels=(['att ezy', 'att mid', 'att hrd'] +
-                                    ['def ezy', 'def mid', 'def hrd'] +
-                                    ['random']),
+                            labels=labels,
                             save_dir=os.path.join(save_dir, 'initial_plot.png'),
                             alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
                             colors=['red']*3 + ['blue']*3 + ['black'],
@@ -324,6 +325,10 @@ if __name__ == '__main__':
             all_team_dist.append(np.array([team_dist[team]
                                            for team in possible_teams]))
 
+        extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
+                                           for i, lab in enumerate(labels[:6])])
+
+
         plot_dist_evolution(plot_dist=all_team_dist,
                             x=plotting['epochs'],
                             # mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
@@ -332,20 +337,23 @@ if __name__ == '__main__':
                             # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
                             # colors=['red']*3 + ['blue']*3 + ['black']
                             title="Total Dictribution",
+                            info=extra_text+('\n6+: random' if rand_cnt>0 else ''),
                             )
-        if rand_cnt>0:
+        if rand_cnt > 0:
             # all keys that have random agents
             random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
             non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
 
             plot_dist_evolution(plot_dist=all_team_dist,
                                 x=plotting['epochs'],
-                                mapping=lambda dist: np.concatenate((dist[non_random_keys], [np.sum(dist[random_keys])])),
+                                mapping=lambda dist: np.concatenate(
+                                    (dist[non_random_keys], [np.sum(dist[random_keys])])),
                                 labels=[possible_teams[i] for i in non_random_keys] + ['random'],
                                 save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
                                 # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
                                 # colors=['red']*3 + ['blue']*3 + ['black']
                                 title="Total Distribution (Random combined)",
+                                info=extra_text
                                 )
         trainer.clear()
         quit()
