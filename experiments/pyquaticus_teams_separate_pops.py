@@ -50,7 +50,7 @@ if __name__ == '__main__':
                         help="do not load from save")
     PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
                         help="checkpoint freq")
-    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
+    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_teams_separate_pops',
                         help='identification to add to folder')
 
     PARSER.add_argument('--display', action='store_true', required=False,

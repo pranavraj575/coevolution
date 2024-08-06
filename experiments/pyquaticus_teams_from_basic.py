@@ -62,7 +62,7 @@ if __name__ == '__main__':
     PARSER.add_argument('--processes', type=int, required=False, default=0,
                         help="number of processes to use")
 
-    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_team_MLM',
+    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_basic_team_MLM',
                         help='identification to add to folder')
     PARSER.add_argument('--reset', action='store_true', required=False,
                         help="do not load from save")
