@@ -360,7 +360,7 @@ class CoevolutionBase:
         all_items_to_save = seq_items_to_save + par_items_to_save
         for items_to_save in all_items_to_save:
             epoch_info['episodes'].append(items_to_save['episode_info'])
-
+        print('completing epoch/extra training')
         self.complete_epoch_and_extra_training(all_items_to_save=all_items_to_save,
                                                epoch_info=epoch_info,
                                                rechoose=rechoose,
@@ -1150,7 +1150,6 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             outcome_fn_local_mem: output of PettingZooOutcomeFn.pop_local_mem()
                 is a dict of (global idx -> (trained agent, updated agent info))
         """
-        print('saving trained age')
         for global_idx in outcome_fn_local_mem:
             for agent_dir, agent, updated_train_dict in outcome_fn_local_mem[global_idx]:
                 pop_idx, local_idx = self.index_to_pop_index(global_idx)
