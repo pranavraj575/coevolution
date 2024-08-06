@@ -320,7 +320,7 @@ if __name__ == '__main__':
             ip = i - len(test_animals)
             print(ip, ' (', typer(ip), '): ', None, sep='')
         for i, (identity, elo) in enumerate(idents_and_elos):
-            if i%sum(agent_counts):
+            if not i%sum(agent_counts):
                 print("POPULATION BOUNDARY")
             print(i, ' (', identity, '): ', elo, sep='')
         if idxs is None:
@@ -372,7 +372,7 @@ if __name__ == '__main__':
             )
 
         else:
-            A, B = [ast.literal_eval('(' +team+ ')') for team in idxs.split(';')]
+            A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
             print('playing second best (blue, ' + str([typer(idx) for idx in B])
                   + ') against best (red, ' + str([typer(idx) for idx in A]) + ')')
