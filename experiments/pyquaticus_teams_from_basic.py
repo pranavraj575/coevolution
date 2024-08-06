@@ -8,6 +8,9 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--team-size', type=int, required=False, default=2,
                         help="size of teams")
+    PARSER.add_argument('--arena-size', action='store', required=False, default='200.0,100.0',
+                        help="x,y dims of arena, in format '200.0,100.0'")
+
 
     PARSER.add_argument('--embedding-dim', type=int, required=False, default=128,
                         help="size of transformer embedding layer")
@@ -73,15 +76,14 @@ if __name__ == '__main__':
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
     PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
-                        help='which agent indexes to display, in the format "p1,p2;p1,p2" (used with --display)')
+                        help='which agent indexes to display, in the format "i1,i2;j1,j2" (used with --display)')
 
     PARSER.add_argument('--unblock-gpu', action='store_true', required=False,
                         help="unblock using gpu ")
     args = PARSER.parse_args()
 
-    import torch, os, sys, ast, time, random
+    import torch, os, sys, ast, time
     import dill as pickle
-    from matplotlib import pyplot as plt
 
     if not args.unblock_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -111,7 +113,7 @@ if __name__ == '__main__':
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
     # config_dict["world_size"] = [160.0, 80.0]
-    config_dict["world_size"] = [200.0, 100.0]
+    config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
                              config_dict=config_dict,
@@ -333,24 +335,68 @@ if __name__ == '__main__':
             return 'rand'
 
 
+
     if args.display:
         idxs = args.idxs_to_display
         elos = trainer.classic_elos.numpy().copy()
         worst = np.argmin(elos)
-
         best = np.argmax(elos)
+
         elos[best] = -np.inf
         second_best = np.argmax(elos)
+
+        classic_elos = trainer.classic_elos.numpy()
         if idxs is None:
-            classic_elos = trainer.classic_elos.numpy()
-            idents_and_elos = []
-            print('all elos by index')
-            for i, (identity, elo) in enumerate(idents_and_elos):
-                print(i, ' (', identity, '): ', elo, sep='')
+            print(trainer.team_trainer.create_teams(T=team_size))
+            print('best agent has elo', trainer.classic_elos[best],
+                  'and is type', typer(best))
+            print('second best agent has elo', trainer.classic_elos[second_best],
+                  'and is type', typer(second_best))
+            print('worst agents has elo', trainer.classic_elos[worst],
+                  'and is type', typer(worst))
+
+            print('playing worst (blue, ' + str([typer(worst) for idx in range(team_size)])
+                  + ') against best (red, ' + str([typer(best) for idx in range(team_size)]) + ')')
+
+            outcom = CTFOutcome()
+            agents = []
+            for team in [worst]*team_size, [best]*team_size:
+                m = []
+                for idx in team:
+                    agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                    m.append(agent)
+                agents.append(m)
+
+            outcom.get_outcome(
+                team_choices=[[torch.tensor(worst)]*team_size, [torch.tensor(best)]*team_size],
+                agent_choices=agents,
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict]*team_size]*2,
+            )
+
 
         else:
-            team_1, team_2 = [ast.literal_eval(team) for team in idxs.split(';')]
-            print('playing', team_1, '(blue) against', team_2, '(red)')
+            A, B = [ast.literal_eval('(' +team+ ')') for team in idxs.split(';')]
+
+            print('playing second best (blue, ' + str([typer(idx) for idx in B])
+                  + ') against best (red, ' + str([typer(idx) for idx in A]) + ')')
+
+            outcom = CTFOutcome()
+            agents = []
+            for team in B, A:
+                m = []
+                for idx in team:
+                    agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                    m.append(agent)
+                agents.append(m)
+
+            outcom.get_outcome(
+                team_choices=[[torch.tensor(worst)]*team_size, [torch.tensor(best)]*team_size],
+                agent_choices=agents,
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict]*team_size]*2,
+            )
+
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()

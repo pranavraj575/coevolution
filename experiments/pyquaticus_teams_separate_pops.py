@@ -57,7 +57,7 @@ if __name__ == '__main__':
                         help="skip training and display saved model")
 
     PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
-                        help='which agent indexes to display, in the format "i,j" (used with --display)')
+                        help='which agent indexes to display, in the format "i1,i2;j1,j2" (used with --display)')
 
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
@@ -305,11 +305,11 @@ if __name__ == '__main__':
     if args.display:
         idxs = args.idxs_to_display
         elos = trainer.classic_elos.numpy().copy()
-        worst = np.argmin(elos)
+        worst = [np.argmin(elos[i*sum(agent_counts):(i + 1)*sum(agent_counts)]) for i in range(team_size)]
 
-        best = np.argmax(elos)
+        best = [np.argmax(elos[i*sum(agent_counts):(i + 1)*sum(agent_counts)]) for i in range(team_size)]
         elos[best] = -np.inf
-        second_best = np.argmax(elos)
+        second_best = [np.argmax(elos[i*sum(agent_counts):(i + 1)*sum(agent_counts)]) for i in range(team_size)]
 
         classic_elos = trainer.classic_elos.numpy()
         idents_and_elos = []
@@ -320,58 +320,81 @@ if __name__ == '__main__':
             ip = i - len(test_animals)
             print(ip, ' (', typer(ip), '): ', None, sep='')
         for i, (identity, elo) in enumerate(idents_and_elos):
+            if i%sum(agent_counts):
+                print("POPULATION BOUNDARY")
             print(i, ' (', identity, '): ', elo, sep='')
         if idxs is None:
 
-            print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
-            print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
-            print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
-            print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
+            print('best agents have elo', trainer.classic_elos[best],
+                  'and are types', [typer(idx) for idx in best])
+            print('second best agents have elo', trainer.classic_elos[second_best],
+                  'and are types', [typer(idx) for idx in second_best])
+            print('worst agents have elo', trainer.classic_elos[worst],
+                  'and are type', [typer(idx) for idx in worst])
+
+            print('playing worst (blue, ' + str([typer(idx) for idx in worst])
+                  + ') against best (red, ' + str([typer(idx) for idx in best]) + ')')
 
             outcom = CTFOutcome()
-            agents = (trainer.load_animal(trainer.index_to_pop_index(worst))[0],
-                      trainer.load_animal(trainer.index_to_pop_index(best))[0])
-            for agent in agents:
-                agent.policy.set_training_mode(False)
-            outcom.get_outcome(
-                team_choices=[[torch.tensor(worst)], [torch.tensor(best)]],
-                agent_choices=[[agents[0]], [agents[1]]],
-                env=env_constructor(None),
-                updated_train_infos=[[non_train_dict],
-                                     [non_train_dict]]
-            )
-            print('playing second best (blue, ' + typer(second_best) + ') against best (red, ' + typer(best) + ')')
-
-            agents = (trainer.load_animal(trainer.index_to_pop_index(second_best))[0],
-                      trainer.load_animal(trainer.index_to_pop_index(best))[0])
-            for agent in agents:
-                agent.policy.set_training_mode(False)
-
-            outcom.get_outcome(
-                team_choices=[[torch.tensor(second_best)], [torch.tensor(best)]],
-                agent_choices=[[agents[0]], [agents[1]]],
-                env=env_constructor(None),
-                updated_train_infos=[[non_train_dict],
-                                     [non_train_dict]]
-            )
-        else:
-            i, j = ast.literal_eval('(' + idxs + ')')
-            print('playing', i, '(blue, ' + typer(i) + ') against', j, '(red, ' + typer(j) + ')')
             agents = []
-            for k, idx in enumerate((i, j)):
-                if idx >= 0:
+            for team in worst, best:
+                m = []
+                for idx in team:
                     agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
                     agent.policy.set_training_mode(False)
-                    agents.append(agent)
-                else:
-                    agents.append(test_animals[idx][0])
+                    m.append(agent)
+                agents.append(m)
+
+            outcom.get_outcome(
+                team_choices=[torch.tensor(worst), torch.tensor(best)],
+                agent_choices=agents,
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict]*team_size]*2,
+            )
+
+            print('playing second best (blue, ' + str([typer(idx) for idx in second_best])
+                  + ') against best (red, ' + str([typer(idx) for idx in best]) + ')')
+
+            agents = []
+            for team in second_best, best:
+                m = []
+                for idx in team:
+                    agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                    agent.policy.set_training_mode(False)
+                    m.append(agent)
+                agents.append(m)
+
+            outcom.get_outcome(
+                team_choices=[torch.tensor(second_best), torch.tensor(best)],
+                agent_choices=agents,
+                env=env_constructor(None),
+                updated_train_infos=[[non_train_dict]*team_size]*2,
+            )
+
+        else:
+            A, B = [ast.literal_eval('(' +team+ ')') for team in idxs.split(';')]
+
+            print('playing second best (blue, ' + str([typer(idx) for idx in B])
+                  + ') against best (red, ' + str([typer(idx) for idx in A]) + ')')
+            agents = []
+
+            for team in B, A:
+                m = []
+                for idx in team:
+                    if idx >= 0:
+                        agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                        agent.policy.set_training_mode(False)
+                    else:
+                        agent = test_animals[idx][0]
+                    m.append(agent)
+                agents.append(m)
+
             outcom = CTFOutcome()
             outcom.get_outcome(
-                team_choices=[[torch.tensor(i)], [torch.tensor(j)]],
-                agent_choices=[[agents[0]], [agents[1]]],
+                team_choices=[torch.tensor(B), torch.tensor(A)],
+                agent_choices=agents,
                 env=env_constructor(None),
-                updated_train_infos=[[non_train_dict],
-                                     [non_train_dict]]
+                updated_train_infos=[[non_train_dict]*team_size]*2,
             )
     else:
         while trainer.epochs < args.epochs:
