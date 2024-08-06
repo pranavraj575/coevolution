@@ -11,7 +11,6 @@ if __name__ == '__main__':
     PARSER.add_argument('--arena-size', action='store', required=False, default='200.0,100.0',
                         help="x,y dims of arena, in format '200.0,100.0'")
 
-
     PARSER.add_argument('--embedding-dim', type=int, required=False, default=128,
                         help="size of transformer embedding layer")
 
@@ -335,7 +334,6 @@ if __name__ == '__main__':
             return 'rand'
 
 
-
     if args.display:
         idxs = args.idxs_to_display
         elos = trainer.classic_elos.numpy().copy()
@@ -376,7 +374,7 @@ if __name__ == '__main__':
 
 
         else:
-            A, B = [ast.literal_eval('(' +team+ ')') for team in idxs.split(';')]
+            A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
             print('playing second best (blue, ' + str([typer(idx) for idx in B])
                   + ') against best (red, ' + str([typer(idx) for idx in A]) + ')')
@@ -462,7 +460,7 @@ if __name__ == '__main__':
                     print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
                 if plotting['init_dists']:
                     print('initial dist')
-                    print(plotting['init_dists'][-1])
+                    print(np.round(plotting['init_dists'][-1], 3))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 print('saving')
