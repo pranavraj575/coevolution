@@ -630,8 +630,8 @@ class MLMTeamTrainer(TeamTrainer):
         else:
             for i, idx in enumerate(zip(*indices)):
                 for member, value in enumerate(dist[i]):
-                    init_team = init_team.clone()
-                    init_team[idx] = member
+                    temp_team = init_team.clone()
+                    temp_team[idx] = member
                     # probability of sleceting this is prob of selecting init_team
                     # times prob of selecting this index (1/ number of indices)
                     # times transformer prob
@@ -639,7 +639,7 @@ class MLMTeamTrainer(TeamTrainer):
                     selection_prob = value*prob/len(indices[0])
                     self.get_total_distribution(T=T,
                                                 N=N,
-                                                init_team=init_team,
+                                                init_team=temp_team,
                                                 prob=selection_prob,
                                                 tracked=tracked,
                                                 obs_preembed=obs_preembed,
