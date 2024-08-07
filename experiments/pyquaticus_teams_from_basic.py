@@ -38,7 +38,7 @@ if __name__ == '__main__':
     PARSER.add_argument('--train-freq', type=int, required=False, default=10,
                         help="train freq for Multi Level Marketing training")
 
-    PARSER.add_argument('--half-life', type=float, required=False, default=400,
+    PARSER.add_argument('--half-life', type=float, required=False, default=400.,
                         help="noise goes from uniform distribution to this wrt agents age")
 
     PARSER.add_argument('--loss-retrials', type=int, required=False, default=0,
@@ -171,7 +171,7 @@ if __name__ == '__main__':
              '_train_freq_' + str(args.train_freq) +
              '_batch_size_' + str(args.batch_size) +
              '_minibatch_size_' + str(args.minibatch_size) +
-             '_half_life_' + str(args.half_life).replace('.', '_') +
+             '_half_life_' + str(float(args.half_life)).replace('.', '_') +
 
              ('_dont_normalize_obs' if not normalize else '')
              )
@@ -273,6 +273,7 @@ if __name__ == '__main__':
         f = open(os.path.join(save_dir, 'plotting.pkl'), 'rb')
         plotting = pickle.load(f)
         f.close()
+    print('seting save directory as', save_dir)
 
 
     def update_plotting_variables():
@@ -302,18 +303,19 @@ if __name__ == '__main__':
     if args.plot:
         from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution
 
-        labels = (['att ezy', 'att mid', 'att hrd'] +
-                  ['def ezy', 'def mid', 'def hrd'] +
+        labels = (['att easy', 'att mid', 'att hard'] +
+                  ['def easy', 'def mid', 'def hard'] +
                   ['random'])
         print('plotting and closing')
         plot_dist_evolution(plot_dist=plotting['init_dists'],
                             x=plotting['epochs'],
                             mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
-                            labels=labels,
                             save_dir=os.path.join(save_dir, 'initial_plot.png'),
-                            alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            colors=['red']*3 + ['blue']*3 + ['black'],
-                            title='Initial Distributions'
+                            title='Initial Distributions',
+                            label=labels,
+                            alpha=[.25, .5, 1] + [.25, .5, 1] + [1],
+                            color=['red']*3 + ['blue']*3 + ['black'],
+                            legend_position=(-.31, .5),
                             )
         possible_teams = sorted(plotting['team_dists_non_ordered'][-1].keys(),
                                 key=lambda k: plotting['team_dists_non_ordered'][-1][k],
@@ -340,13 +342,11 @@ if __name__ == '__main__':
 
         plot_dist_evolution(plot_dist=all_team_dist,
                             x=plotting['epochs'],
-                            # mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
-                            labels=possible_teams,
                             save_dir=os.path.join(save_dir, 'total_plot.png'),
-                            # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            # colors=['red']*3 + ['blue']*3 + ['black']
-                            title="Total Dictribution",
+                            title="Total Distribution",
                             info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
+                            legend_position=(-.3, .5 + .4/2),  # info takes up about .4
+                            label=possible_teams,
                             )
 
         extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
@@ -355,12 +355,13 @@ if __name__ == '__main__':
         plot_dist_evolution(plot_dist=all_team_dist,
                             x=plotting['epochs'],
                             mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
-                            labels=possible_teams[:10] + ['other'],
                             save_dir=os.path.join(save_dir, 'first_10_total_plot.png'),
-                            # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            # colors=['red']*3 + ['blue']*3 + ['black']
-                            title="Total Dictribution",
+                            title="Total Distribution (top 10)",
+                            legend_position=(-.3, .3),
                             info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
+                            info_position=(-.27, .69),
+                            label=possible_teams[:10] + ['other'],
+                            color=[None]*10 + ['black'],
                             )
 
         if rand_cnt > 0:
@@ -372,16 +373,15 @@ if __name__ == '__main__':
                                 x=plotting['epochs'],
                                 mapping=lambda dist: np.concatenate(
                                     (dist[non_random_keys], [np.sum(dist[random_keys])])),
-                                labels=[possible_teams[i] for i in non_random_keys] + ['random'],
                                 save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
-                                # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
-                                # colors=['red']*3 + ['blue']*3 + ['black']
-                                title="Total Distribution (Random combined)",
-                                info=extra_text
+                                title="Total Distribution (random combined)",
+                                info=extra_text,
+                                legend_position=(-.3, .69 - .09),
+                                label=[possible_teams[i] for i in non_random_keys] + ['random'],
+                                color=[None]*len(non_random_keys) + ['black'],
                                 )
         trainer.clear()
         quit()
-    print('seting save directory as', save_dir)
 
 
     def typer(global_idx):
