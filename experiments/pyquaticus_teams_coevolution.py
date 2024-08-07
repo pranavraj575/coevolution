@@ -250,7 +250,7 @@ if __name__ == '__main__':
                                            team_sizes=(team_size, team_size),
                                            depth_to_retry_result=retrial_fn,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
-                                           team_member_elo_update=1*np.log(10)/400,
+                                           # team_member_elo_update=1*np.log(10)/400,
                                            mutation_prob=args.mutation_prob,
                                            clone_replacements=clone_replacements,
                                            )
