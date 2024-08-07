@@ -126,7 +126,6 @@ if __name__ == '__main__':
             )
 
 
-
     def env_constructor(train_infos):
         return MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
@@ -220,6 +219,8 @@ if __name__ == '__main__':
                 result_dict[A][B][2] += 1
                 result_dict[B][A][0] += 1
         print('total time:', round(time.time() - tim))
+        print('saving')
         f = open(save_dir, 'wb')
         pickle.dump(result_dict, f)
         f.close()
+        print('done saving')
