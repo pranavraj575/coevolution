@@ -32,11 +32,16 @@ if __name__ == '__main__':
     from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv, policy_wrapper
     from experiments.pyquaticus_utils.outcomes import CTFOutcome
 
-    from networks.positional_encoder import IdentityEncoding, ClassicPositionalEncoding, PositionalAppender
-    from networks.input_embedding import LSTEmbedding
 
-    from src.language_replay_buffer import BinnedReplayBufferDiskStorage
-    from src.team_trainer import MLMTeamTrainer, BERTeam, TeamBuilder
+    from BERTeam.networks import (BERTeam,
+                                  TeamBuilder,
+                                  LSTEmbedding,
+                                  IdentityEncoding,
+                                  ClassicPositionalEncoding,
+                                  PositionalAppender)
+    from BERTeam.buffer import BinnedReplayBufferDiskStorage
+    from BERTeam.trainer import MLMTeamTrainer
+
 
     from src.coevolver import PettingZooCaptianCoevolution
     from src.utils.dict_keys import *

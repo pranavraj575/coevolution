@@ -1,8 +1,10 @@
 import torch
 
+from BERTeam.outcome import PlayerInfo
+
 from repos.pyquaticus.pyquaticus.base_policies.base import BaseAgentPolicy
 from repos.pyquaticus.pyquaticus.structs import Team
-from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
+from src.petting_zoo_outcome import PettingZooOutcomeFn
 from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv
 
 from unstable_baselines3.common.auto_multi_alg import AutoMultiAgentAlgorithm

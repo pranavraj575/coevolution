@@ -6,11 +6,13 @@ setup(
     version='6.9.0',
     packages=find_packages(),
     install_requires=[
+        'BERTeam',
+        'dill',
         'gymnasium',
         'matplotlib',
         'pettingzoo',
         'pathos',
-        'torch==2.3.1',# TODO: test which versions of torch work with pathos
+        'torch==2.3.1',  # TODO: test which versions of torch work with pathos
         'stable-baselines3',
         'unstable-baselines3',
     ],

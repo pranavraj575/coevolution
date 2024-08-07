@@ -4,8 +4,11 @@ import dill as pickle
 # from multiprocessing import Pool
 from pathos.multiprocessing import Pool
 
-from src.team_trainer import TeamTrainer
-from src.game_outcome import PlayerInfo, PettingZooOutcomeFn
+from BERTeam.trainer import TeamTrainer
+from BERTeam.outcome import PlayerInfo
+
+from src.petting_zoo_outcome import  PettingZooOutcomeFn
+
 from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_AGE,
                                  DICT_MUTATION_AGE,
@@ -782,13 +785,13 @@ class CaptianCoevolution(CoevolutionBase):
             obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
             self.team_trainer.add_to_buffer(scalar=team_outcome,
                                             obs_preembed=obs_preembed,
-                                            team=team.reshape((1, -1)),
+                                            team=team,
                                             obs_mask=obs_mask,
                                             )
             if add_no_input:
                 self.team_trainer.add_to_buffer(scalar=team_outcome,
                                                 obs_preembed=None,
-                                                team=team.reshape((1, -1)),
+                                                team=team,
                                                 obs_mask=None,
                                                 )
 
