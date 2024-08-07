@@ -82,18 +82,18 @@ if __name__ == '__main__':
     ident = (args.ident +
              '_agent_count_' +
              (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
-             (('_defend_' + str(defend_cnt)) if defend_cnt else '') +
-             (('_attack_' + str(attack_cnt)) if attack_cnt else '') +
-             (('_net_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
+             (('_def_' + str(defend_cnt)) if defend_cnt else '') +
+             (('_att_' + str(attack_cnt)) if attack_cnt else '') +
+             (('_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
              (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
              (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
              '_' +
-             (('_replay_buffer_capacity_' + str(buffer_cap)) if dqn_cnt else '') +
-             ('_split_learners_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
-             '_protect_new_' + str(args.protect_new) +
-             '_mutation_prob_' + str(args.mutation_prob).replace('.', '_') +
-             ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
-             ('_dont_normalize_obs' if not normalize else '')
+             (('_rb_cap_' + str(buffer_cap)) if dqn_cnt else '') +
+             ('_split_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
+             '_protect_' + str(args.protect_new) +
+             '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
+             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
+             ('_no_norm_obs' if not normalize else '')
              )
 
     data_folder = os.path.join(DIR, 'data', 'temp', ident)

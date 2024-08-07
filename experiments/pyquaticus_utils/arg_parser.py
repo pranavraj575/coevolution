@@ -8,7 +8,7 @@ def add_pyquaticus_args(PARSER: argparse.ArgumentParser, arena_size=True):
 
     PARSER.add_argument('--max-time', type=float, required=False, default=420.,
                         help="max sim time of each episode")
-    PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
+    PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=10,
                         help="skips frames to speed up episodes")
     PARSER.add_argument('--unnormalize', action='store_true', required=False,
                         help="do not normalize, arg is necessary to use some pyquaticus bots")
@@ -35,12 +35,12 @@ def add_learning_agent_args(PARSER: argparse.ArgumentParser, split_learners=Fals
                             help="learning agents types each go in their own population to avoid interspecies replacement")
 
 
-def add_coevolution_args(PARSER: argparse.ArgumentParser):
+def add_coevolution_args(PARSER: argparse.ArgumentParser, clone_default=None):
     PARSER.add_argument('--protect-new', type=int, required=False, default=500,
                         help="protect new agents for this number of breeding epochs")
     PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
                         help="probabality of mutating agents each epoch (should probably be very small)")
-    PARSER.add_argument('--clone-replacements', type=int, required=False, default=None,
+    PARSER.add_argument('--clone-replacements', type=int, required=False, default=clone_default,
                         help="number of agents to try replacing each epoch (default all)")
 
 
@@ -48,26 +48,26 @@ def add_berteam_args(PARSER: argparse.ArgumentParser):
     PARSER.add_argument('--embedding-dim', type=int, required=False, default=128,
                         help="size of transformer embedding layer")
 
-    PARSER.add_argument('--heads', type=int, required=False, default=8,
+    PARSER.add_argument('--heads', type=int, required=False, default=4,
                         help="transformer number of attention heads to use")
-    PARSER.add_argument('--encoders', type=int, required=False, default=8,
+    PARSER.add_argument('--encoders', type=int, required=False, default=3,
                         help="transformer number of decoder layers")
-    PARSER.add_argument('--decoders', type=int, required=False, default=8,
+    PARSER.add_argument('--decoders', type=int, required=False, default=3,
                         help="transformer number of decoder layers")
     PARSER.add_argument('--dropout', type=float, required=False, default=.1,
                         help="transformer dropout")
 
-    PARSER.add_argument('--lstm-layers', type=int, required=False, default=4,
+    PARSER.add_argument('--lstm-layers', type=int, required=False, default=2,
                         help="LSTM number of layers")
     PARSER.add_argument('--lstm-dropout', type=int, required=False, default=None,
                         help="LSTM dropout (defaults to transformer dropout)")
 
-    PARSER.add_argument('--capacity', type=int, required=False, default=1e4,
+    PARSER.add_argument('--capacity', type=int, required=False, default=5000,
                         help="capacity of game replay buffer")
 
-    PARSER.add_argument('--batch-size', type=int, required=False, default=128,
+    PARSER.add_argument('--batch-size', type=int, required=False, default=1024,
                         help="batch size for Multi Level Marketing training")
-    PARSER.add_argument('--minibatch-size', type=int, required=False, default=1,
+    PARSER.add_argument('--minibatch-size', type=int, required=False, default=256,
                         help="minibatch size for Multi Level Marketing training (1 is equivalent to sgd)")
     PARSER.add_argument('--train-freq', type=int, required=False, default=10,
                         help="train freq for Multi Level Marketing training")

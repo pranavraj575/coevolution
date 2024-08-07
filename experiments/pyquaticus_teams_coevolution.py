@@ -6,7 +6,7 @@ if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
     add_team_args(PARSER)
     add_learning_agent_args(PARSER, split_learners=True)
-    add_coevolution_args(PARSER)
+    add_coevolution_args(PARSER, clone_default=1)
     add_pyquaticus_args(PARSER)
     add_berteam_args(PARSER)
     add_experiment_args(PARSER, 'pyquaticus_coev_berteam')
@@ -85,45 +85,45 @@ if __name__ == '__main__':
         lstm_dropout = args.dropout
     ident = (args.ident +
              '_COEVOLUTION_'
-             '_agent_count_' +
-             (('_net_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
+             '_agents_' +
+             (('_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
              (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
              (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
              '_' +
-             (('_replay_buffer_capacity_' + str(buffer_cap)) if dqn_cnt else '') +
-             ('_split_learners_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
-             '_protect_new_' + str(args.protect_new) +
-             '_mutation_prob_' + str(args.mutation_prob).replace('.', '_') +
-             ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
+             (('_rb_cap_' + str(buffer_cap)) if dqn_cnt else '') +
+             ('_split_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
+             '_protect_' + str(args.protect_new) +
+             '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
+             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
              '_BERTEAM_'
-             '_team_size_' + str(team_size) +
-             '_arena_size_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
-             '_embedding_dim_' + str(args.embedding_dim) +
-             '_transformer_' +
+             '_tm_sz_' + str(team_size) +
+             '_arena_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
+             '_embed_dim_' + str(args.embedding_dim) +
+             '_trans_' +
              (
-                     '_heads_' + str(args.heads) +
-                     '_encoders_' + str(args.encoders) +
-                     '_decoders_' + str(args.decoders) +
-                     '_dropout_' + str(args.dropout).replace('.', '_')
+                     '_head_' + str(args.heads) +
+                     '_enc_' + str(args.encoders) +
+                     '_dec_' + str(args.decoders) +
+                     '_drop_' + str(args.dropout).replace('.', '_')
              ) +
-             '_input_embedder_' +
+             '_inp_emb_' +
              (
-                     '_layers_' + str(args.lstm_layers) +
-                     ('_dropout_' + lstm_dropout if args.lstm_dropout is not None else '')
+                     '_lyrs_' + str(args.lstm_layers) +
+                     ('_drop_' + lstm_dropout if args.lstm_dropout is not None else '')
              ) +
              (
-                 ('_retrials_' +
-                  ('_loss_' + str(args.loss_retrials) if args.loss_retrials else '') +
-                  ('_tie_' + str(args.tie_retrials) if args.tie_retrials else '')
+                 ('_retr_' +
+                  ('_l_' + str(args.loss_retrials) if args.loss_retrials else '') +
+                  ('_t_' + str(args.tie_retrials) if args.tie_retrials else '')
                   )
                  if args.loss_retrials or args.tie_retrials else ''
              ) +
-             '_train_freq_' + str(args.train_freq) +
-             '_batch_size_' + str(args.batch_size) +
-             '_minibatch_size_' + str(args.minibatch_size) +
+             '_train_frq_' + str(args.train_freq) +
+             '_btch_' + str(args.batch_size) +
+             '_minibtch_' + str(args.minibatch_size) +
              '_half_life_' + str(float(args.half_life)).replace('.', '_') +
 
-             ('_dont_normalize_obs' if not normalize else '')
+             ('_no_norm_obs' if not normalize else '')
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)

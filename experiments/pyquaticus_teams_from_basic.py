@@ -79,35 +79,35 @@ if __name__ == '__main__':
         lstm_dropout = args.dropout
     rand_cnt = args.rand_count
     ident = (args.ident +
-             '_team_size_' + str(team_size) +
-             '_arena_size_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
-             '_embedding_dim_' + str(args.embedding_dim) +
-             '_transformer_' +
+             '_tm_sz_' + str(team_size) +
+             '_arena_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
+             '_embed_dim_' + str(args.embedding_dim) +
+             '_trans_' +
              (
-                     '_heads_' + str(args.heads) +
-                     '_encoders_' + str(args.encoders) +
-                     '_decoders_' + str(args.decoders) +
-                     '_dropout_' + str(args.dropout).replace('.', '_')
+                     '_head_' + str(args.heads) +
+                     '_enc_' + str(args.encoders) +
+                     '_dec_' + str(args.decoders) +
+                     '_drop_' + str(args.dropout).replace('.', '_')
              ) +
-             '_input_embedder_' +
+             '_inp_emb_' +
              (
-                     '_layers_' + str(args.lstm_layers) +
-                     ('_dropout_' + lstm_dropout if args.lstm_dropout is not None else '')
+                     '_lyrs_' + str(args.lstm_layers) +
+                     ('_drop_' + lstm_dropout if args.lstm_dropout is not None else '')
              ) +
-             (('_random_agents_' + str(rand_cnt)) if rand_cnt else '') +
+             (('_rand_cnt_' + str(rand_cnt)) if rand_cnt else '') +
              (
-                 ('_retrials_' +
-                  ('_loss_' + str(args.loss_retrials) if args.loss_retrials else '') +
-                  ('_tie_' + str(args.tie_retrials) if args.tie_retrials else '')
+                 ('_retr_' +
+                  ('_l_' + str(args.loss_retrials) if args.loss_retrials else '') +
+                  ('_t_' + str(args.tie_retrials) if args.tie_retrials else '')
                   )
                  if args.loss_retrials or args.tie_retrials else ''
              ) +
-             '_train_freq_' + str(args.train_freq) +
-             '_batch_size_' + str(args.batch_size) +
-             '_minibatch_size_' + str(args.minibatch_size) +
+             '_train_frq_' + str(args.train_freq) +
+             '_btch_' + str(args.batch_size) +
+             '_minibtch_' + str(args.minibatch_size) +
              '_half_life_' + str(float(args.half_life)).replace('.', '_') +
 
-             ('_dont_normalize_obs' if not normalize else '')
+             ('_no_norm_obs' if not normalize else '')
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
