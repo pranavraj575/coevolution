@@ -9,7 +9,7 @@ if __name__ == '__main__':
     add_coevolution_args(PARSER, clone_default=1)
     add_pyquaticus_args(PARSER)
     add_berteam_args(PARSER)
-    add_experiment_args(PARSER, 'pyquaticus_coev_berteam')
+    add_experiment_args(PARSER, 'pyquaticus_coev_MLM')
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
 
