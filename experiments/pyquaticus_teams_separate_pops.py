@@ -1,14 +1,11 @@
 if __name__ == '__main__':
     import argparse, os, sys, ast
+    from experiments.pyquaticus_utils.arg_parser import *
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     PARSER = argparse.ArgumentParser()
-
-    PARSER.add_argument('--team-size', type=int, required=False, default=2,
-                        help="size of teams")
-    PARSER.add_argument('--arena-size', action='store', required=False, default='200.0,100.0',
-                        help="x,y dims of arena, in format '200.0,100.0'")
+    add_team_args(PARSER)
 
     PARSER.add_argument('--rand-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
@@ -17,54 +14,11 @@ if __name__ == '__main__':
                         help="number of random agents to use")
     PARSER.add_argument('--attack-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
+    add_learning_agent_args(PARSER)
+    add_pyquaticus_args(PARSER)
+    add_experiment_args(PARSER, 'pyquaticus_teams_separate_pops')
+    add_coevolution_args(PARSER)
 
-    PARSER.add_argument('--ppo-agents', type=int, required=False, default=0,
-                        help="number of ppo agents to use")
-    PARSER.add_argument('--dqn-agents', type=int, required=False, default=0,
-                        help="number of dqn agents to use")
-    PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
-                        help="replay buffer capacity")
-    PARSER.add_argument('--net-arch', action='store', required=False, default='64,64',
-                        help="hidden layers of network, should be readable as a list or tuple")
-
-    PARSER.add_argument('--protect-new', type=int, required=False, default=500,
-                        help="protect new agents for this number of breeding epochs")
-    PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
-                        help="probabality of mutating agents each epoch (should probably be very small)")
-    PARSER.add_argument('--clone-replacements', type=int, required=False, default=None,
-                        help="number of agents to try replacing each epoch (default all)")
-
-    PARSER.add_argument('--max-time', type=float, required=False, default=420.,
-                        help="max sim time of each episode")
-    PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
-                        help="skips frames to speed up episodes")
-    PARSER.add_argument('--unnormalize', action='store_true', required=False,
-                        help="do not normalize, arg is necessary to use some pyquaticus bots")
-
-    PARSER.add_argument('--epochs', type=int, required=False, default=5000,
-                        help="epochs to train for")
-    PARSER.add_argument('--processes', type=int, required=False, default=0,
-                        help="number of processes to use")
-
-    PARSER.add_argument('--reset', action='store_true', required=False,
-                        help="do not load from save")
-    PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
-                        help="checkpoint freq")
-    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_teams_separate_pops',
-                        help='identification to add to folder')
-
-    PARSER.add_argument('--display', action='store_true', required=False,
-                        help="skip training and display saved model")
-
-    PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
-                        help='which agent indexes to display, in the format "i1,i2;j1,j2" (used with --display)')
-
-    PARSER.add_argument('--render', action='store_true', required=False,
-                        help="Enable rendering")
-    PARSER.add_argument('--seed', type=int, required=False, default=0,
-                        help="random seed")
-    PARSER.add_argument('--unblock-gpu', action='store_true', required=False,
-                        help="unblock using gpu ")
     args = PARSER.parse_args()
     if not args.unblock_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""

@@ -1,23 +1,26 @@
-import argparse
-
 if __name__ == '__main__':
     import numpy as np
+    import argparse
     from experiments.pyquaticus_utils.arg_parser import *
 
     PARSER = argparse.ArgumentParser()
     add_team_args(PARSER)
-    PARSER.add_argument('--rand-count', type=int, required=False, default=0,
-                        help="number of random agents to add into population to try confusing team selector")
+    add_learning_agent_args(PARSER, split_learners=True)
+    add_coevolution_args(PARSER)
     add_pyquaticus_args(PARSER)
     add_berteam_args(PARSER)
-    add_experiment_args(PARSER, 'pyquaticus_basic_team_MLM')
+    add_experiment_args(PARSER, 'pyquaticus_coev_berteam')
+    PARSER.add_argument('--dont-backup', action='store_true', required=False,
+                        help="do not backup a copy of previous save")
 
-    PARSER.add_argument('--plot', action='store_true', required=False,
-                        help="skip training and plot")
     args = PARSER.parse_args()
 
-    import torch, os, sys, ast, time
+    import torch, os, sys, ast, time, random, shutil
     import dill as pickle
+
+    from unstable_baselines3 import WorkerPPO, WorkerDQN
+    from unstable_baselines3.dqn import MlpPolicy as DQNMlp
+    from unstable_baselines3.ppo import MlpPolicy as PPOMlp
 
     if not args.unblock_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -25,7 +28,7 @@ if __name__ == '__main__':
     from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
     from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker
 
-    from experiments.pyquaticus_utils.reward_fns import RandPolicy
+    from experiments.pyquaticus_utils.reward_fns import custom_rew, custom_rew2, RandPolicy
     from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv, policy_wrapper
     from experiments.pyquaticus_utils.outcomes import CTFOutcome
 
@@ -38,47 +41,61 @@ if __name__ == '__main__':
     from src.coevolver import PettingZooCaptianCoevolution
     from src.utils.dict_keys import *
 
+    torch.random.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     team_size = args.team_size
 
+    reward_config = {i: custom_rew2 for i in range(2*team_size)}  # Example Reward Config
+
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
-    # config_dict["world_size"] = [160.0, 80.0]
     config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
+
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
                              config_dict=config_dict,
                              )
 
     obs_normalizer = test_env.agent_obs_normalizer
+    DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
+    AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
+
     obs_dim = obs_normalizer.flattened_length
-    policies = dict()
-    modes = ['easy', 'medium', 'hard']
-    for key, Class in (('def', BaseDefender),
-                       ('att', BaseAttacker),
-                       ):
-        policies[key] = []
-        for mode in modes:
-            policies[key].append(
-                policy_wrapper(Class,
-                               agent_obs_normalizer=obs_normalizer,
-                               identity=key + ' ' + mode,
-                               )
-            )
 
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
-    RENDER_MODE = 'human' if args.render or args.display else None
-
     normalize = not args.unnormalize
     config_dict['normalize'] = normalize
+    RENDER_MODE = 'human' if args.render or args.display else None
+
+    clone_replacements = args.clone_replacements
+
+    ppo_cnt = args.ppo_agents
+
+    dqn_cnt = args.dqn_agents
+    buffer_cap = args.replay_buffer_capacity
+    net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
 
     lstm_dropout = args.lstm_dropout
     if lstm_dropout is None:
         lstm_dropout = args.dropout
-    rand_cnt = args.rand_count
     ident = (args.ident +
+             '_COEVOLUTION_'
+             '_agent_count_' +
+             (('_net_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
+             (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
+             (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
+             '_' +
+             (('_replay_buffer_capacity_' + str(buffer_cap)) if dqn_cnt else '') +
+             ('_split_learners_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
+             '_protect_new_' + str(args.protect_new) +
+             '_mutation_prob_' + str(args.mutation_prob).replace('.', '_') +
+             ('_clone_replacments_' + str(clone_replacements) if clone_replacements is not None else '') +
+             '_BERTEAM_'
              '_team_size_' + str(team_size) +
              '_arena_size_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
              '_embedding_dim_' + str(args.embedding_dim) +
@@ -94,7 +111,6 @@ if __name__ == '__main__':
                      '_layers_' + str(args.lstm_layers) +
                      ('_dropout_' + lstm_dropout if args.lstm_dropout is not None else '')
              ) +
-             (('_random_agents_' + str(rand_cnt)) if rand_cnt else '') +
              (
                  ('_retrials_' +
                   ('_loss_' + str(args.loss_retrials) if args.loss_retrials else '') +
@@ -111,11 +127,14 @@ if __name__ == '__main__':
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
+    backup_dir = os.path.join(DIR, 'data', 'save', 'backups', ident)
+
     retrial_fn = lambda val: args.loss_retrials if val == 0 else (args.tie_retrials if val == .5 else 0)
 
 
     def env_constructor(train_infos):
         return MyQuaticusEnv(render_mode=RENDER_MODE,
+                             reward_config=reward_config,
                              team_size=team_size,
                              config_dict=config_dict,
                              )
@@ -127,30 +146,59 @@ if __name__ == '__main__':
                       DICT_MUTATION_REPLACABLE: False,
                       DICT_IS_WORKER: False,
                       }
-    create_attack = lambda i, env: (policies['att'][i](agent_id=0,
-                                                       mode=modes[i%len(modes)],
-                                                       using_pyquaticus=True,
-                                                       ), non_train_dict.copy()
-                                    )
-    create_defend = lambda i, env: (policies['def'][i](agent_id=0,
-                                                       team='red',
-                                                       mode=modes[i%len(modes)],
-                                                       flag_keepout=config_dict['flag_keepout'],
-                                                       catch_radius=config_dict["catch_radius"],
-                                                       using_pyquaticus=True,
-                                                       ), non_train_dict.copy()
-                                    )
-    create_rand = lambda i, env: (RandPolicy(env.action_space), non_train_dict.copy())
+    train_info_dict = {DICT_TRAIN: True,
+                       DICT_CLONABLE: True,
+                       DICT_CLONE_REPLACABLE: True,
+                       DICT_MUTATION_REPLACABLE: True,
+                       DICT_IS_WORKER: True,
+                       }
 
-    non_learning_sizes = [3,
-                          3,
-                          rand_cnt,
-                          ]
-    non_lerning_construct = [create_attack,
-                             create_defend,
-                             create_rand,
-                             ]
+    ppokwargs = dict()
 
+    policy_kwargs = {
+        'net_arch': dict(pi=net_arch,
+                         vf=net_arch),
+    }
+    create_ppo = lambda i, env: (WorkerPPO(policy=PPOMlp,
+                                           env=env,
+                                           policy_kwargs={
+                                               'net_arch': dict(pi=[64, 64],
+                                                                vf=[64, 64]),
+                                           },
+                                           **ppokwargs
+                                           ), train_info_dict.copy()
+                                 )
+    dqnkwargs = {
+        'buffer_size': buffer_cap,
+    }
+    create_dqn = lambda i, env: (WorkerDQN(policy=DQNMlp,
+                                           env=env,
+                                           **dqnkwargs
+                                           ), train_info_dict.copy()
+                                 )
+
+    if args.split_learners:
+        pop_sizes = [ppo_cnt,
+                     dqn_cnt,
+                     ]
+
+        worker_constructors = [create_ppo,
+                               create_dqn,
+                               ]
+    else:
+        pop_sizes = [ppo_cnt + dqn_cnt]
+
+
+        def create_learner(i, env):
+            if i < ppo_cnt:
+                return create_ppo(i, env)
+            else:
+                return create_dqn(i - ppo_cnt, env)
+
+
+        worker_constructors = [create_learner]
+    if sum(pop_sizes) == 0:
+        raise Exception("no agents specified, at least one of --*-agents must be greater than 0")
     max_cores = len(os.sched_getaffinity(0))
     if args.display:
         proc = 0
@@ -166,7 +214,7 @@ if __name__ == '__main__':
                 device=None,
             ),
             berteam=BERTeam(
-                num_agents=sum(non_learning_sizes),
+                num_agents=sum(pop_sizes),
                 embedding_dim=args.embedding_dim,
                 nhead=args.heads,
                 num_encoder_layers=args.encoders,
@@ -182,17 +230,24 @@ if __name__ == '__main__':
             bounds=[1/2, 1],
         )
     )
-    trainer = PettingZooCaptianCoevolution(population_sizes=non_learning_sizes,
+    trainer = PettingZooCaptianCoevolution(population_sizes=pop_sizes,
                                            team_trainer=team_trainer,
                                            outcome_fn_gen=CTFOutcome,
                                            env_constructor=env_constructor,
-                                           worker_constructors=non_lerning_construct,
+                                           worker_constructors=worker_constructors,
                                            storage_dir=data_folder,
+                                           protect_new=args.protect_new,
                                            processes=proc,
+                                           # for some reason this overesetimates by a factor of 3, so we fix it
+                                           max_steps_per_ep=(
+                                                   1 + (1/3)*config_dict['render_fps']*config_dict['max_time']/
+                                                   config_dict['sim_speedup_factor']),
                                            team_sizes=(team_size, team_size),
                                            depth_to_retry_result=retrial_fn,
                                            # member_to_population=lambda team_idx, member_idx: {team_idx},
                                            team_member_elo_update=1*np.log(10)/400,
+                                           mutation_prob=args.mutation_prob,
+                                           clone_replacements=clone_replacements,
                                            )
     plotting = {'init_dists': [],
                 'team_dists': [],
@@ -233,94 +288,42 @@ if __name__ == '__main__':
         plotting['epochs'].append(trainer.epochs)
 
 
-    if args.plot:
-        from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution
-
-        labels = (['att easy', 'att mid', 'att hard'] +
-                  ['def easy', 'def mid', 'def hard'] +
-                  ['random'])
-        print('plotting and closing')
-        plot_dist_evolution(plot_dist=plotting['init_dists'],
-                            x=plotting['epochs'],
-                            mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
-                            save_dir=os.path.join(save_dir, 'initial_plot.png'),
-                            title='Initial Distributions',
-                            label=labels,
-                            alpha=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            color=['red']*3 + ['blue']*3 + ['black'],
-                            legend_position=(-.31, .5),
-                            )
-        possible_teams = sorted(plotting['team_dists_non_ordered'][-1].keys(),
-                                key=lambda k: plotting['team_dists_non_ordered'][-1][k],
-                                reverse=True,
-                                )
-        print('final occurence probs')
-        occurence_probs = torch.tensor([plotting['team_dists_non_ordered'][-1][team]
-                                        for team in possible_teams])
-        guesstimated_elos = torch.log(occurence_probs)
-        guesstimated_elos = guesstimated_elos - torch.mean(guesstimated_elos)
-
-        elo_conversion = 400/np.log(10)
-        scaled = guesstimated_elos*elo_conversion + 1000
-        for team, prob, elo in zip(possible_teams, occurence_probs, scaled):
-            print(team, ':', elo.item(), ':', prob.item())
-
-        all_team_dist = []
-        for team_dist in plotting['team_dists_non_ordered']:
-            all_team_dist.append(np.array([team_dist[team]
-                                           for team in possible_teams]))
-
-        extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
-                                           for i, lab in enumerate(labels[:6])])
-
-        plot_dist_evolution(plot_dist=all_team_dist,
-                            x=plotting['epochs'],
-                            save_dir=os.path.join(save_dir, 'total_plot.png'),
-                            title="Total Distribution",
-                            info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                            legend_position=(-.3, .5 + .4/2),  # info takes up about .4
-                            label=possible_teams,
-                            )
-
-        extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
-                                           for i, lab in enumerate(labels[:6])])
-
-        plot_dist_evolution(plot_dist=all_team_dist,
-                            x=plotting['epochs'],
-                            mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
-                            save_dir=os.path.join(save_dir, 'first_10_total_plot.png'),
-                            title="Total Distribution (top 10)",
-                            legend_position=(-.3, .3),
-                            info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                            info_position=(-.27, .69),
-                            label=possible_teams[:10] + ['other'],
-                            color=[None]*10 + ['black'],
-                            )
-
-        if rand_cnt > 0:
-            # all keys that have random agents
-            random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
-            non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
-
-            plot_dist_evolution(plot_dist=all_team_dist,
-                                x=plotting['epochs'],
-                                mapping=lambda dist: np.concatenate(
-                                    (dist[non_random_keys], [np.sum(dist[random_keys])])),
-                                save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
-                                title="Total Distribution (random combined)",
-                                info=extra_text,
-                                legend_position=(-.3, .69 - .09),
-                                label=[possible_teams[i] for i in non_random_keys] + ['random'],
-                                color=[None]*len(non_random_keys) + ['black'],
-                                )
-        trainer.clear()
-        quit()
+    if args.display:
+        test_animals = ([(RandPolicy(test_env.action_space(0)), non_train_dict.copy())] +
+                        [(DefendPolicy(agent_id=0,
+                                       team='red',
+                                       mode=mode,
+                                       flag_keepout=config_dict['flag_keepout'],
+                                       catch_radius=config_dict["catch_radius"],
+                                       using_pyquaticus=True,
+                                       ), non_train_dict.copy()
+                          )
+                         for mode in ('easy', 'medium', 'hard')
+                         ] +
+                        [(AttackPolicy(agent_id=0,
+                                       mode=mode,
+                                       using_pyquaticus=True,
+                                       ), non_train_dict.copy()
+                          )
+                         for mode in ('easy', 'medium', 'hard')
+                         ]
+                        )
+    else:
+        test_animals = []
 
 
     def typer(global_idx):
-        animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
-        if 'WrappedPolicy' in str(type(animal)):
-            return animal.identity
+        if global_idx >= 0:
+            animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
+        else:
+            animal, _ = test_animals[global_idx]
+
+        if isinstance(animal, WorkerPPO):
+            return 'ppo'
+        elif isinstance(animal, WorkerDQN):
+            return 'dqn'
+        elif 'WrappedPolicy' in str(type(animal)):
+            return animal.identity + ' ' + animal.mode
         else:
             return 'rand'
 
@@ -335,14 +338,15 @@ if __name__ == '__main__':
         second_best = np.argmax(elos)
 
         classic_elos = trainer.classic_elos.numpy()
-        print('agent list')
-        for i in range(6):
-            print(str(i) + ':', typer(i))
-        if rand_cnt > 0:
-            if rand_cnt > 1:
-                print('6-' + str(6 + rand_cnt - 1) + ':', typer(6))
-            else:
-                print('6:', typer(6))
+        idents_and_elos = []
+        for i in range(sum(pop_sizes)):
+            idents_and_elos.append((typer(i), classic_elos[i]))
+        print('all elos by index')
+        for i, animal in enumerate(test_animals):
+            ip = i - len(test_animals)
+            print(ip, ' (', typer(ip), '): ', None, sep='')
+        for i, (identity, elo) in enumerate(idents_and_elos):
+            print(i, ' (', identity, '): ', elo, sep='')
 
         if idxs is None:
             gen_team = [t.item()
@@ -373,7 +377,6 @@ if __name__ == '__main__':
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
 
-
         else:
             A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
@@ -400,8 +403,6 @@ if __name__ == '__main__':
         while trainer.epochs < args.epochs:
             tim = time.time()
             print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
-            # print(trainer.team_trainer.get_total_distribution(T=team_size))
-            # quit()
             if trainer.epochs == 0:
                 update_plotting_variables()
             epoch_info = trainer.epoch(
@@ -424,7 +425,7 @@ if __name__ == '__main__':
 
             if True:
                 id_to_idxs = dict()
-                for i in range(sum(non_learning_sizes)):
+                for i in range(sum(pop_sizes)):
                     identity = typer(i)
                     if identity not in id_to_idxs:
                         id_to_idxs[identity] = []
@@ -446,9 +447,14 @@ if __name__ == '__main__':
                     print(np.round(plotting['init_dists'][-1], 3))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
+                if not args.dont_backup and os.path.exists(save_dir):
+                    print('backing up')
+                    if os.path.exists(backup_dir):
+                        shutil.rmtree(backup_dir)
+                    shutil.copytree(save_dir, backup_dir)
+                    print('done backing up')
                 print('saving')
                 trainer.save(save_dir)
-
                 f = open(os.path.join(save_dir, 'plotting.pkl'), 'wb')
                 pickle.dump(plotting, f)
                 f.close()
@@ -458,6 +464,5 @@ if __name__ == '__main__':
             print()
 
     trainer.clear()
-    import shutil
 
     shutil.rmtree(data_folder)

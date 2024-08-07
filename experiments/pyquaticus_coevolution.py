@@ -24,9 +24,8 @@ config_dict["max_time"] = 420.
 reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
 
 if __name__ == '__main__':
-    import time
-    import numpy as np
-    import random
+    import time, numpy as np, random
+    from experiments.pyquaticus_utils.arg_parser import *
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
@@ -34,65 +33,17 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--rand-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
-
     PARSER.add_argument('--defend-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
     PARSER.add_argument('--attack-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
-
-    PARSER.add_argument('--ppo-agents', type=int, required=False, default=0,
-                        help="number of ppo agents to use")
-    PARSER.add_argument('--dqn-agents', type=int, required=False, default=0,
-                        help="number of dqn agents to use")
-    PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
-                        help="replay buffer capacity")
-    PARSER.add_argument('--net-arch', action='store', required=False, default='64,64',
-                        help="hidden layers of network, should be readable as a list or tuple")
-
-    PARSER.add_argument('--split-learners', action='store_true', required=False,
-                        help="learning agents types each go in their own population to avoid interspecies replacement")
-
-    PARSER.add_argument('--protect-new', type=int, required=False, default=500,
-                        help="protect new agents for this number of breeding epochs")
-    PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
-                        help="probabality of mutating agents each epoch (should probably be very small)")
-    PARSER.add_argument('--clone-replacements', type=int, required=False, default=None,
-                        help="number of agents to try replacing each epoch (default all)")
-
-    PARSER.add_argument('--max-time', type=float, required=False, default=420.,
-                        help="max sim time of each episode")
-    PARSER.add_argument('--sim-speedup-factor', type=int, required=False, default=40,
-                        help="skips frames to speed up episodes")
-    PARSER.add_argument('--unnormalize', action='store_true', required=False,
-                        help="do not normalize, arg is necessary to use some pyquaticus bots")
-
-    PARSER.add_argument('--epochs', type=int, required=False, default=5000,
-                        help="epochs to train for")
-    PARSER.add_argument('--processes', type=int, required=False, default=0,
-                        help="number of processes to use")
-
-    PARSER.add_argument('--reset', action='store_true', required=False,
-                        help="do not load from save")
-    PARSER.add_argument('--ckpt_freq', type=int, required=False, default=25,
-                        help="checkpoint freq")
+    add_learning_agent_args(PARSER,split_learners=True)
+    add_coevolution_args(PARSER)
+    add_pyquaticus_args(PARSER, arena_size=False)
+    add_experiment_args(PARSER,'pyquaticus_coevolution')
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
-    PARSER.add_argument('--ident', action='store', required=False, default='pyquaticus_coevolution',
-                        help='identification to add to folder')
 
-    PARSER.add_argument('--display', action='store_true', required=False,
-                        help="skip training and display saved model")
-
-    PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
-                        help='which agent indexes to display, in the format "i,j" (used with --display)')
-
-    PARSER.add_argument('--render', action='store_true', required=False,
-                        help="Enable rendering")
-    PARSER.add_argument('--seed', type=int, required=False, default=0,
-                        help="random seed")
-
-    PARSER.add_argument('--unblock-gpu', action='store_true', required=False,
-                        help="unblock using gpu ")
     args = PARSER.parse_args()
     if not args.unblock_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -110,6 +61,8 @@ if __name__ == '__main__':
 
     config_dict["sim_speedup_factor"] = args.sim_speedup_factor
     config_dict["max_time"] = args.max_time
+    normalize = not args.unnormalize
+    config_dict['normalize'] = normalize
     RENDER_MODE = 'human' if args.render or args.display else None
 
     clone_replacements = args.clone_replacements
@@ -125,8 +78,6 @@ if __name__ == '__main__':
     buffer_cap = args.replay_buffer_capacity
 
     net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
-    normalize = not args.unnormalize
-    config_dict['normalize'] = normalize
 
     ident = (args.ident +
              '_agent_count_' +
@@ -261,8 +212,6 @@ if __name__ == '__main__':
         trainer.load(save_dir=save_dir)
     print('seting save directory as', save_dir)
     if args.display:
-        from unstable_baselines3.common import DumEnv
-
         test_animals = ([(RandPolicy(test_env.action_space(0)), non_train_dict.copy())] +
                         [(DefendPolicy(agent_id=0,
                                        team='red',
