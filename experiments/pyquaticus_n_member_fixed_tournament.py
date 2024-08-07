@@ -65,7 +65,6 @@ if __name__ == '__main__':
                 break
             break
         if total >= args.samples:
-
             elo_conversion = 400/np.log(10)
             elo_update = 32*np.log(10)/400
             print('total value', total, 'is more than num samples', args.samples)
@@ -77,19 +76,39 @@ if __name__ == '__main__':
                 f = open(save_dir, 'rb')
                 result_dict = pickle.load(f)
                 f.close()
-                elos = torch.zeros(len(possible_teams))
-                for _ in range(10000):
-                    old_elos = elos.clone()
-                    for (A, B) in itertools.combinations(temp_possible_teams, 2):
+                elos = torch.nn.Parameter(torch.zeros(len(possible_teams)))
+                optim = torch.optim.Adam(params=torch.nn.ParameterList([elos]),
+                                         lr=1e-2)
+                batch = 128
+                for tt in range(1000):
+
+                    optim.zero_grad()
+                    old_elos = elos.clone().detach()
+                    matches = list(itertools.combinations(temp_possible_teams, 2))
+                    matches = [matches[t] for t in torch.randperm(len(matches))]
+                    cnt = 0
+                    for (A, B) in matches:
                         w, t, l = result_dict[A][B]
 
                         if not tie_counts and (w > 0 or l > 0):
                             t = 0
                         expectation = torch.softmax(elos[(team_to_idx[A], team_to_idx[B]),], dim=-1)
                         actual = torch.tensor([w + t/2, l + t/2])/(w + t + l)
-                        elos[(team_to_idx[A], team_to_idx[B]),] += elo_update*(actual - expectation)
-                    if torch.linalg.norm(elos - old_elos) == 0:
+                        loss = torch.nn.MSELoss().forward(expectation, actual)
+                        loss.backward()
+                        if cnt >= batch:
+                            cnt = 0
+                            optim.step()
+                            optim.zero_grad()
+                    optim.step()
+
+                    diff = torch.mean(torch.abs(elos - old_elos)).item()*elo_conversion
+
+                    print('diff', round(diff, 6), end='            \r')
+                    # if we are updating elos by less than .001 of an elo, terminate
+                    if tt > 10 and diff <= 1E-3:
                         break
+
                 converted = elos*elo_conversion + 1000
                 win_prob = torch.softmax(elos, -1)
                 temp_possible_teams.sort(key=lambda team: elos[team_to_idx[team]].item())
