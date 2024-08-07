@@ -138,7 +138,7 @@ if __name__ == '__main__':
     outcom.set_dir(os.path.join(DIR, 'data', 'temp', 'trash'))
     # result_dict[A][B] is a win/loss/tie count for A vs B (win means A won)
     tim = time.time()
-    for i in range(0):
+    for i in range(5):
         for A, B in itertools.combinations(possible_teams, 2):
             agents = []
             stim = time.time()

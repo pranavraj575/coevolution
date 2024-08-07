@@ -320,8 +320,15 @@ if __name__ == '__main__':
                                 reverse=True,
                                 )
         print('final occurence probs')
-        for team in possible_teams:
-            print(team,':',plotting['team_dists_non_ordered'][-1][team])
+        occurence_probs = torch.tensor([plotting['team_dists_non_ordered'][-1][team]
+                                        for team in possible_teams])
+        guesstimated_elos = torch.log(occurence_probs)
+        guesstimated_elos = guesstimated_elos - torch.mean(guesstimated_elos)
+
+        elo_conversion = 400/np.log(10)
+        scaled = guesstimated_elos*elo_conversion + 1000
+        for team, prob, elo in zip(possible_teams, occurence_probs, scaled):
+            print(team, ':', elo.item(), ':', prob.item())
 
         all_team_dist = []
         for team_dist in plotting['team_dists_non_ordered']:
@@ -331,7 +338,6 @@ if __name__ == '__main__':
         extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
                                            for i, lab in enumerate(labels[:6])])
 
-
         plot_dist_evolution(plot_dist=all_team_dist,
                             x=plotting['epochs'],
                             # mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
@@ -340,7 +346,7 @@ if __name__ == '__main__':
                             # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
                             # colors=['red']*3 + ['blue']*3 + ['black']
                             title="Total Dictribution",
-                            info=extra_text+('\n6+: random' if rand_cnt>0 else ''),
+                            info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
                             )
         if rand_cnt > 0:
             # all keys that have random agents
