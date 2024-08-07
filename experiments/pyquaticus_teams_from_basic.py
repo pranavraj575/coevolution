@@ -319,6 +319,9 @@ if __name__ == '__main__':
                                 key=lambda k: plotting['team_dists_non_ordered'][-1][k],
                                 reverse=True,
                                 )
+        print('final occurence probs')
+        for team in possible_teams:
+            print(team,':',plotting['team_dists_non_ordered'][-1][team])
 
         all_team_dist = []
         for team_dist in plotting['team_dists_non_ordered']:
