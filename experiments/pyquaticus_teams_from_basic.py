@@ -348,6 +348,21 @@ if __name__ == '__main__':
                             title="Total Dictribution",
                             info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
                             )
+
+        extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
+                                           for i, lab in enumerate(labels[:6])])
+
+        plot_dist_evolution(plot_dist=all_team_dist,
+                            x=plotting['epochs'],
+                            mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
+                            labels=possible_teams[:10] + ['other'],
+                            save_dir=os.path.join(save_dir, 'first_10_total_plot.png'),
+                            # alphas=[.25, .5, 1] + [.25, .5, 1] + [1],
+                            # colors=['red']*3 + ['blue']*3 + ['black']
+                            title="Total Dictribution",
+                            info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
+                            )
+
         if rand_cnt > 0:
             # all keys that have random agents
             random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
