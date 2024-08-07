@@ -45,6 +45,8 @@ if __name__ == '__main__':
     elo_update = 32*np.log(10)/400
 
     if os.path.exists(save_dir):
+        temp_possible_teams = possible_teams
+        temp_possible_teams = [t for t in possible_teams if 2 in t]
         for tie_counts in True, False:
             print()
             print('tie counts:', tie_counts)
@@ -54,12 +56,11 @@ if __name__ == '__main__':
             elos = torch.zeros(len(possible_teams))
             for _ in range(100):
                 old_elos = elos.clone()
-                for (A, B) in itertools.combinations(possible_teams, 2):
+                for (A, B) in itertools.combinations(temp_possible_teams, 2):
                     w, t, l = result_dict[A][B]
 
                     if not tie_counts and (w > 0 or l > 0):
                         t = 0
-
                     expectation = torch.softmax(elos[(team_to_idx[A], team_to_idx[B]),], dim=-1)
                     actual = torch.tensor([w + t/2, l + t/2])/(w + t + l)
                     elos[(team_to_idx[A], team_to_idx[B]),] += elo_update*(actual - expectation)
@@ -67,8 +68,8 @@ if __name__ == '__main__':
                     break
             converted = elos*elo_conversion + 1000
             win_prob = torch.softmax(elos, -1)
-            possible_teams.sort(key=lambda team: elos[team_to_idx[team]])
-            for team in possible_teams:
+            temp_possible_teams.sort(key=lambda team: elos[team_to_idx[team]])
+            for team in temp_possible_teams:
                 idx = team_to_idx[team]
                 print(team, ':', converted[idx].item(), ':', win_prob[idx].item())
         quit()
