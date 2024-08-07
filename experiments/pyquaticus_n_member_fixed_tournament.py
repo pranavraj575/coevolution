@@ -78,7 +78,7 @@ if __name__ == '__main__':
                 result_dict = pickle.load(f)
                 f.close()
                 elos = torch.zeros(len(possible_teams))
-                for _ in range(100):
+                for _ in range(10000):
                     old_elos = elos.clone()
                     for (A, B) in itertools.combinations(temp_possible_teams, 2):
                         w, t, l = result_dict[A][B]
