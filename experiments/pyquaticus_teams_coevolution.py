@@ -280,15 +280,15 @@ if __name__ == '__main__':
 
         init_dist = torch.mean(dist, dim=0).detach().numpy()
         plotting['init_dists'].append(init_dist)
-        team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
-        team_dist_non_ordered = dict()
-        for item in team_dist:
-            key = tuple(sorted(item))
-            if key not in team_dist_non_ordered:
-                team_dist_non_ordered[key] = 0
-            team_dist_non_ordered[key] += team_dist[item]
-        plotting['team_dists'].append(team_dist)
-        plotting['team_dists_non_ordered'].append(team_dist_non_ordered)
+        # team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
+        # team_dist_non_ordered = dict()
+        # for item in team_dist:
+        #    key = tuple(sorted(item))
+        #    if key not in team_dist_non_ordered:
+        #        team_dist_non_ordered[key] = 0
+        #    team_dist_non_ordered[key] += team_dist[item]
+        # plotting['team_dists'].append(team_dist)
+        # plotting['team_dists_non_ordered'].append(team_dist_non_ordered)
         plotting['epochs'].append(trainer.epochs)
 
 
