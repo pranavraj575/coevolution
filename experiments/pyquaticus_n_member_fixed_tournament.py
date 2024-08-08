@@ -206,10 +206,8 @@ if __name__ == '__main__':
         for A, B in itertools.combinations(possible_teams, 2):
             agents = []
             stim = time.time()
-            if torch.rand(1) < .5:
-                A = A[::-1]
-            if torch.rand(1) < .5:
-                B = B[::-1]
+            A = tuple(A[i] for i in torch.randperm(team_size))
+            B = tuple(B[i] for i in torch.randperm(team_size))
 
             if torch.rand(1) < .5:
                 A, B = B, A
