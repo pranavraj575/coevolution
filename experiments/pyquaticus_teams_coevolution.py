@@ -449,6 +449,10 @@ if __name__ == '__main__':
                 if plotting['init_dists']:
                     print('initial dist')
                     print(np.round(plotting['init_dists'][-1], 3))
+                    print('with elos')
+                    for prob, elo in zip(np.round(plotting['init_dists'][-1], 3), classic_elos):
+                        print('(', prob, ',', round(elo, 2), ')', sep='', end=';\t')
+                    print()
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
                 if not args.dont_backup and os.path.exists(save_dir):

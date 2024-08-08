@@ -1,3 +1,5 @@
+from pettingzoo.utils.env import AgentID
+
 from repos.pyquaticus.pyquaticus.envs.pyquaticus import PyQuaticusEnv
 from repos.pyquaticus.pyquaticus.structs import Team
 from repos.pyquaticus.pyquaticus.base_policies.base import BaseAgentPolicy
@@ -11,6 +13,12 @@ class MyQuaticusEnv(PyQuaticusEnv):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.obs_record = []
+
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
+
+    def action_space(self, agent):
+        return self.action_spaces[agent]
 
     def step(self, *args, **kwargs):
         obs, rewards, terminated, truncated, info = super().step(*args, **kwargs)
