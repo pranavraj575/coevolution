@@ -2,7 +2,7 @@ import torch, shutil, os, sys
 import numpy as np
 import dill as pickle
 # from multiprocessing import Pool
-from pathos.multiprocessing import Pool
+from pathos.multiprocessing import ProcessPool as Pool
 
 from BERTeam.trainer import TeamTrainer
 from BERTeam.outcome import PlayerInfo

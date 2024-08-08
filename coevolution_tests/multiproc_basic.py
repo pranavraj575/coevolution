@@ -1,4 +1,26 @@
-# from pathos.multiprocessing import Pool
+from pathos.multiprocessing import ProcessPool as Pool
+#from pathos.multiprocessing import ThreadPool as Pool
+#from pathos.multiprocessing import Pool
+import time
+
+
+def f(x):
+    i = 0
+    tim = time.time()
+    for _ in range(x):
+        i += 1
+    return {'tim': time.time() - tim}
+
+
+add_ops = 31690000
+processes = 6
+with Pool(processes=processes) as pool:
+    # print "[0, 1, 4,..., 81]"
+    tim = time.time()
+    print(pool.map(f, [add_ops for _ in range(processes)]))
+    print(time.time() - tim)
+quit()
+
 from multiprocessing import set_start_method, get_context
 
 set_start_method("spawn")
