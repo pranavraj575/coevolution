@@ -510,7 +510,7 @@ class CaptianCoevolution(CoevolutionBase):
 
     def set_storage_dir(self, storage_dir):
         super().set_storage_dir(storage_dir=storage_dir)
-        self.team_trainer.set_storage_dir(storage_dir=os.path.join(storage_dir, 'team_trainer'))
+        self.team_trainer.reset_storage_dir(storage_dir=os.path.join(storage_dir, 'team_trainer'))
 
     def epoch(self,
               rechoose=True,
