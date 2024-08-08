@@ -26,9 +26,11 @@ if __name__ == '__main__':
     from src.utils.dict_keys import *
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
+    arena_size = ast.literal_eval('(' + args.arena_size + ')')
 
     save_file = 'torunament' + ('_team_size_' + str(args.team_size) +
-                                '_arena_size_' + args.arena_size.replace('.', '_').replace(',', '__'))
+                                '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
+                                )
 
     save_dir = os.path.join(DIR, 'data', 'save', 'basic_team_tournament', save_file + '.pkl')
     if not os.path.exists(os.path.dirname(save_dir)):
@@ -122,7 +124,7 @@ if __name__ == '__main__':
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
     config_dict["sim_speedup_factor"] = 10
     config_dict["max_time"] = 420.
-    config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
+    config_dict["world_size"] = arena_size
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
                              config_dict=config_dict,

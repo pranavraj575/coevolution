@@ -49,8 +49,8 @@ if __name__ == '__main__':
 
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
-    # config_dict["world_size"] = [160.0, 80.0]
-    config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
+    arena_size = ast.literal_eval('(' + args.arena_size + ')')
+    config_dict["world_size"] = arena_size
     # config_dict['tag_on_wall_collision']=True
     reward_config = {i: custom_rew2 for i in range(team_size*2)}  # Example Reward Config
 
@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
     ident = (args.ident +
              '_tm_sz_' + str(team_size) +
-             '_arena_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
+             '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size])) +
              '_agents_' +
              (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
              (('_def_' + str(defend_cnt)) if defend_cnt else '') +

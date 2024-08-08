@@ -32,7 +32,6 @@ if __name__ == '__main__':
     from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv, policy_wrapper
     from experiments.pyquaticus_utils.outcomes import CTFOutcome
 
-
     from BERTeam.networks import (BERTeam,
                                   TeamBuilder,
                                   LSTEmbedding,
@@ -41,7 +40,6 @@ if __name__ == '__main__':
                                   PositionalAppender)
     from BERTeam.buffer import BinnedReplayBufferDiskStorage
     from BERTeam.trainer import MLMTeamTrainer
-
 
     from src.coevolver import PettingZooCaptianCoevolution
     from src.utils.dict_keys import *
@@ -58,7 +56,8 @@ if __name__ == '__main__':
 
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
-    config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
+    arena_size = ast.literal_eval('(' + args.arena_size + ')')
+    config_dict["world_size"] = arena_size
 
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
@@ -102,7 +101,7 @@ if __name__ == '__main__':
              ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
              '_BERTEAM_'
              '_tm_sz_' + str(team_size) +
-             '_arena_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
+             '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size])) +
              '_embed_dim_' + str(args.embedding_dim) +
              '_trans_' +
              (

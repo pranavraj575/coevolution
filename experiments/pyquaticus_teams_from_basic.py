@@ -47,8 +47,8 @@ if __name__ == '__main__':
 
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
-    # config_dict["world_size"] = [160.0, 80.0]
-    config_dict["world_size"] = ast.literal_eval('(' + args.arena_size + ')')
+    arena_size = ast.literal_eval('(' + args.arena_size + ')')
+    config_dict["world_size"] = arena_size
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
                              config_dict=config_dict,
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     rand_cnt = args.rand_count
     ident = (args.ident +
              '_tm_sz_' + str(team_size) +
-             '_arena_' + str(args.arena_size.replace('.', '_').replace(',', '__')) +
+             '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size])) +
              '_embed_dim_' + str(args.embedding_dim) +
              '_trans_' +
              (
