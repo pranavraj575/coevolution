@@ -16,7 +16,7 @@ if __name__ == '__main__':
                         help="skip training and plot")
     args = PARSER.parse_args()
 
-    import torch, os, sys, ast, time
+    import torch, os, sys, ast, time, shutil
     import dill as pickle
 
     if not args.unblock_gpu:
@@ -114,6 +114,7 @@ if __name__ == '__main__':
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
+    backup_dir = os.path.join(DIR, 'data', 'save', 'backups', ident)
     retrial_fn = lambda val: args.loss_retrials if val == 0 else (args.tie_retrials if val == .5 else 0)
 
 
@@ -449,6 +450,11 @@ if __name__ == '__main__':
                     print(np.round(plotting['init_dists'][-1], 3))
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
+                print('backing up')
+                if os.path.exists(backup_dir):
+                    shutil.rmtree(backup_dir)
+                shutil.copytree(save_dir, backup_dir)
+                print('done backing up')
                 print('saving')
                 trainer.save(save_dir)
 
@@ -461,6 +467,5 @@ if __name__ == '__main__':
             print()
 
     trainer.clear()
-    import shutil
 
     shutil.rmtree(data_folder)
