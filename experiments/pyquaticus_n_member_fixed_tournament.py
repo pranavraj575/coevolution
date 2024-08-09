@@ -27,6 +27,7 @@ if __name__ == '__main__':
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
+    arena_size = tuple(float(t) for t in arena_size)
 
     save_file = 'torunament' + ('_team_size_' + str(args.team_size) +
                                 '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))

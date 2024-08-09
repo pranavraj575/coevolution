@@ -50,6 +50,7 @@ if __name__ == '__main__':
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
+    arena_size = tuple(float(t) for t in arena_size)
     config_dict["world_size"] = arena_size
     # config_dict['tag_on_wall_collision']=True
     reward_config = {i: custom_rew2 for i in range(team_size*2)}  # Example Reward Config

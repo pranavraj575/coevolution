@@ -11,6 +11,7 @@ def plot_dist_evolution(plot_dist,
                         legend_position=(-.3, .5),
                         info=None,
                         info_position=(.0, 1.05),
+                        fontsize=None,
                         **kwargs
                         ):
     """
@@ -24,6 +25,8 @@ def plot_dist_evolution(plot_dist,
         labels: labels for each pop (or for each mapped pop)
         title:
     """
+    if fontsize is not None:
+        plt.rcParams.update({'font.size': fontsize})
     fig, ax = plt.subplots()
     if x is None:
         x = range(len(plot_dist))

@@ -8,7 +8,7 @@ if __name__ == '__main__':
     add_team_args(PARSER)
     PARSER.add_argument('--rand-count', type=int, required=False, default=0,
                         help="number of random agents to add into population to try confusing team selector")
-    add_pyquaticus_args(PARSER)
+    add_pyquaticus_args(PARSER, arena_size=True)
     add_berteam_args(PARSER)
     add_experiment_args(PARSER, 'pyquaticus_basic_team_MLM')
 
@@ -48,6 +48,7 @@ if __name__ == '__main__':
     config_dict = config_dict_std
     config_dict["max_screen_size"] = (float('inf'), float('inf'))
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
+    arena_size = tuple(float(t) for t in arena_size)
     config_dict["world_size"] = arena_size
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
@@ -294,11 +295,12 @@ if __name__ == '__main__':
                             mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
                             save_dir=os.path.join(save_dir, 'first_10_total_plot.png'),
                             title="Total Distribution (top 10)",
-                            legend_position=(-.3, .3),
+                            legend_position=(-.45, .2),
                             info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                            info_position=(-.27, .69),
+                            info_position=(-.42, .8),
                             label=possible_teams[:10] + ['other'],
                             color=[None]*10 + ['black'],
+                            fontsize=17,
                             )
 
         if rand_cnt > 0:
