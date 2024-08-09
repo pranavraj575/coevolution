@@ -362,8 +362,8 @@ if __name__ == '__main__':
             print('worst agents has elo', trainer.classic_elos[worst],
                   'and is type', typer(worst))
 
-            print('playing double best (blue, ' + str([typer(best) for idx in range(team_size)])
-                  + ') against generated (red, ' + str([typer(idx) for idx in gen_team]) + ')')
+            print('playing double best (blue, ' + str(tuple((best, typer(best)) for idx in range(team_size)))
+                  + ') against generated (red, ' + str(tuple((idx, typer(idx)) for idx in gen_team)) + ')')
 
             outcom = CTFOutcome()
             agents = []
