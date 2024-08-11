@@ -393,8 +393,11 @@ if __name__ == '__main__':
             for team in B, A:
                 m = []
                 for idx in team:
-                    agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
-                    m.append(agent)
+                    if idx >= 0:
+                        agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                        m.append(agent)
+                    else:
+                        m.append(test_animals[idx][0])
                 agents.append(m)
 
             outcom.get_outcome(
