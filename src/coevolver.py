@@ -179,10 +179,11 @@ class CoevolutionBase:
         if os.path.exists(save_dir):
             shutil.rmtree(save_dir)
         os.makedirs(save_dir)
-
+        print('saving info')
         f = open(os.path.join(save_dir, 'info.pkl'), 'wb')
         pickle.dump(self.info, f)
         f.close()
+        print('done saving info')
 
     def load(self, save_dir):
         f = open(os.path.join(save_dir, 'info.pkl'), 'rb')
@@ -640,7 +641,9 @@ class CaptianCoevolution(CoevolutionBase):
 
     def save(self, save_dir):
         super().save(save_dir=save_dir)
+        print('saving trainer')
         self.team_trainer.save(save_dir=os.path.join(save_dir, 'team_trainer'))
+        print('done saving trainer')
 
     def load(self, save_dir):
         super().load(save_dir=save_dir)
@@ -1204,7 +1207,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     def save(self, save_dir):
         super().save(save_dir=save_dir)
+        print('saving zoo')
         self.save_zoo(save_dir=os.path.join(save_dir, 'zoo'))
+        print('done saving zoo')
 
     def load(self, save_dir):
         super().load(save_dir=save_dir)
