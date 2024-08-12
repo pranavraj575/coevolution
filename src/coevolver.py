@@ -1,13 +1,14 @@
 import torch, shutil, os, sys
 import numpy as np
-import dill as pickle
+import dill as dill
+import pickle
 # from multiprocessing import Pool
 from pathos.multiprocessing import ProcessPool as Pool
 
 from BERTeam.trainer import TeamTrainer
 from BERTeam.outcome import PlayerInfo
 
-from src.petting_zoo_outcome import  PettingZooOutcomeFn
+from src.petting_zoo_outcome import PettingZooOutcomeFn
 
 from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_AGE,
@@ -175,10 +176,8 @@ class CoevolutionBase:
         return self.outcome_fn_gen()
 
     def save(self, save_dir):
-
-        if os.path.exists(save_dir):
-            shutil.rmtree(save_dir)
-        os.makedirs(save_dir)
+        if not os.path.exists(save_dir): 
+            os.makedirs(save_dir)
         print('saving info')
         f = open(os.path.join(save_dir, 'info.pkl'), 'wb')
         pickle.dump(self.info, f)
@@ -187,8 +186,15 @@ class CoevolutionBase:
 
     def load(self, save_dir):
         f = open(os.path.join(save_dir, 'info.pkl'), 'rb')
-        self.info.update(pickle.load(f))
+        self.info.update(dill.load(f))
         f.close()
+
+        # convert
+        if COEVOLUTION_DICT_DEPTH_OF_RETRY in self.info:
+            print('convertin')
+            self.info.pop(COEVOLUTION_DICT_DEPTH_OF_RETRY)
+            self.save(save_dir=save_dir)
+
 
     def build_pop_to_member_and_team(self, original_member_to_pop):
         if original_member_to_pop is None:
@@ -499,15 +505,15 @@ class CaptianCoevolution(CoevolutionBase):
             self.set_storage_dir(storage_dir=storage_dir)
         self.clone_fn = clone_fn
         self.mutation_fn = mutation_fn
-        if depth_to_retry_result is None:
-            depth_to_retry_result = lambda _: 0
         self.info.update({
             COEVOLUTION_DICT_ELOS: torch.zeros(self.N),
             COEVOLUTION_DICT_CAPTIAN_ELO_UPDATE: captian_elo_update,
             COEVOLUTION_DICT_MEMBER_ELO_UPDATE: team_member_elo_update,
             COEVOLUTION_DICT_ELO_CONVERSION: elo_conversion,
-            COEVOLUTION_DICT_DEPTH_OF_RETRY: depth_to_retry_result,
         })
+        if depth_to_retry_result is None:
+            depth_to_retry_result = lambda _: 0
+        self.depth_to_retry_result = depth_to_retry_result
 
     def set_storage_dir(self, storage_dir):
         super().set_storage_dir(storage_dir=storage_dir)
@@ -921,9 +927,6 @@ class CaptianCoevolution(CoevolutionBase):
     @property
     def elo_conversion(self):
         return self.info[COEVOLUTION_DICT_ELO_CONVERSION]
-
-    def depth_to_retry_result(self, outcome_value):
-        return self.info[COEVOLUTION_DICT_DEPTH_OF_RETRY](outcome_value)
 
 
 class PettingZooCaptianCoevolution(CaptianCoevolution):
