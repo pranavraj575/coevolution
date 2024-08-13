@@ -176,13 +176,32 @@ class CoevolutionBase:
         return self.outcome_fn_gen()
 
     def save(self, save_dir):
-        if not os.path.exists(save_dir): 
+        if not os.path.exists(save_dir):
             os.makedirs(save_dir)
+        # since this is sometimes large, we save it separately
+        epoch_infos = self.info.pop('epoch_infos')
         print('saving info')
         f = open(os.path.join(save_dir, 'info.pkl'), 'wb')
         pickle.dump(self.info, f)
         f.close()
         print('done saving info')
+        if epoch_infos:
+            print('dumping epoch infos')
+            epoch_info_save_dir = os.path.join(save_dir, 'epoch_infos')
+            if not os.path.exists(epoch_info_save_dir):
+                os.makedirs(epoch_info_save_dir)
+            start_epoch = epoch_infos[0]['epoch']
+            end_epoch = epoch_infos[-1]['epoch']
+            filename = os.path.join(epoch_info_save_dir,
+                                    str(start_epoch) + '_to_' +
+                                    str(end_epoch) + '.pkl'
+                                    )
+            f = open(filename, 'wb')
+            pickle.dump(epoch_infos, f)
+            f.close()
+            self.info['epoch_info_save_dir'] = epoch_info_save_dir
+            print('done dumping epoch infos')
+        self.info['epoch_infos'] = []
 
     def load(self, save_dir):
         f = open(os.path.join(save_dir, 'info.pkl'), 'rb')
@@ -194,7 +213,6 @@ class CoevolutionBase:
             print('convertin')
             self.info.pop(COEVOLUTION_DICT_DEPTH_OF_RETRY)
             self.save(save_dir=save_dir)
-
 
     def build_pop_to_member_and_team(self, original_member_to_pop):
         if original_member_to_pop is None:
@@ -386,7 +404,7 @@ class CoevolutionBase:
         if update_epoch_infos:
             self.info['epochs'] += 1
             if save_epoch_info:
-                self.epoch_infos.append(epoch_info)
+                self.info['epoch_infos'].append(epoch_info)
 
         return epoch_info
 
@@ -437,7 +455,21 @@ class CoevolutionBase:
 
     @property
     def epoch_infos(self):
-        return self.info['epoch_infos']
+        if 'epoch_info_save_dir' in self.info:
+            # must grab past epoch infos
+            epoch_info_save_dir = self.info['epoch_info_save_dir']
+            files = [f for f in os.listdir(epoch_info_save_dir) if '_to_' in f]
+            # sort by start epoch
+            files.sort(key=lambda n: int(n.split('_to_')[0]))
+            epoch_infos = []
+            for fn in files:
+                f = open(os.path.join(epoch_info_save_dir, fn), 'rb')
+                epoch_infos.extend(pickle.load(f))
+                f.close()
+            epoch_infos.extend(self.info['epoch_infos'])
+            return epoch_infos
+        else:
+            return self.info['epoch_infos']
 
 
 class CaptianCoevolution(CoevolutionBase):
