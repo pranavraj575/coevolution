@@ -15,12 +15,6 @@ from experiments.pyquaticus_utils.wrappers import policy_wrapper
 from src.coevolver import PettingZooCaptianCoevolution
 from src.utils.dict_keys import *
 
-config_dict = config_dict_std
-config_dict["max_screen_size"] = (float('inf'), float('inf'))
-# reset later
-config_dict["sim_speedup_factor"] = 40
-config_dict["max_time"] = 420.
-# config_dict['tag_on_wall_collision']=True
 reward_config = {0: custom_rew2, 1: custom_rew2, 5: None}  # Example Reward Config
 
 if __name__ == '__main__':
@@ -37,10 +31,10 @@ if __name__ == '__main__':
                         help="number of random agents to use")
     PARSER.add_argument('--attack-agents', type=int, required=False, default=0,
                         help="number of random agents to use")
-    add_learning_agent_args(PARSER,split_learners=True)
+    add_learning_agent_args(PARSER, split_learners=True)
     add_coevolution_args(PARSER)
-    add_pyquaticus_args(PARSER, arena_size=False)
-    add_experiment_args(PARSER,'pyquaticus_coevolution')
+    add_pyquaticus_args(PARSER, arena_size=False, flag_keepout=False)
+    add_experiment_args(PARSER, 'pyquaticus_coevolution')
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
 
@@ -51,6 +45,9 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     random.seed(args.seed)
 
+    config_dict = config_dict_std
+    update_config_dict(config_dict, args)
+
     test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
                                            team_size=1,
                                            config_dict=config_dict,
@@ -59,10 +56,6 @@ if __name__ == '__main__':
     DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
     AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
 
-    config_dict["sim_speedup_factor"] = args.sim_speedup_factor
-    config_dict["max_time"] = args.max_time
-    normalize = not args.unnormalize
-    config_dict['normalize'] = normalize
     RENDER_MODE = 'human' if args.render or args.display else None
 
     clone_replacements = args.clone_replacements
@@ -80,20 +73,15 @@ if __name__ == '__main__':
     net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
 
     ident = (args.ident +
+             pyquaticus_string(args) +
              '_agent_count_' +
              (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
              (('_def_' + str(defend_cnt)) if defend_cnt else '') +
              (('_att_' + str(attack_cnt)) if attack_cnt else '') +
-             (('_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
-             (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
-             (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
-             '_' +
-             (('_rb_cap_' + str(buffer_cap)) if dqn_cnt else '') +
-             ('_split_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
+             learning_agents_string(args) +
              '_protect_' + str(args.protect_new) +
              '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
-             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
-             ('_no_norm_obs' if not normalize else '')
+             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '')
              )
 
     data_folder = os.path.join(DIR, 'data', 'temp', ident)

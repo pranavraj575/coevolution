@@ -48,11 +48,10 @@ if __name__ == '__main__':
     random.seed(args.seed)
 
     config_dict = config_dict_std
-    config_dict["max_screen_size"] = (float('inf'), float('inf'))
+    update_config_dict(config_dict, args)
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
     arena_size = tuple(float(t) for t in arena_size)
-    config_dict["world_size"] = arena_size
-    # config_dict['tag_on_wall_collision']=True
+
     reward_config = {i: custom_rew2 for i in range(team_size*2)}  # Example Reward Config
 
     test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
@@ -63,8 +62,6 @@ if __name__ == '__main__':
     DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
     AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
 
-    config_dict["sim_speedup_factor"] = args.sim_speedup_factor
-    config_dict["max_time"] = args.max_time
     RENDER_MODE = 'human' if args.render or args.display else None
 
     clone_replacements = args.clone_replacements
@@ -81,24 +78,17 @@ if __name__ == '__main__':
 
     net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
     normalize = not args.unnormalize
-    config_dict['normalize'] = normalize
 
     ident = (args.ident +
-             '_tm_sz_' + str(team_size) +
-             '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size])) +
+             pyquaticus_string(args)+
              '_agents_' +
              (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
              (('_def_' + str(defend_cnt)) if defend_cnt else '') +
              (('_att_' + str(attack_cnt)) if attack_cnt else '') +
-             (('_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
-             (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
-             (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
-             '_' +
-             (('_rb_cap_' + str(buffer_cap)) if dqn_cnt else '') +
+             learning_agents_string(args) +
              '_protect_' + str(args.protect_new) +
              '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
-             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
-             ('_no_norm_obs' if not normalize else '')
+             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '')
              )
 
     data_folder = os.path.join(DIR, 'data', 'temp', ident)

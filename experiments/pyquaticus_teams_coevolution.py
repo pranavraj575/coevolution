@@ -55,10 +55,9 @@ if __name__ == '__main__':
     reward_config = {i: custom_rew2 for i in range(2*team_size)}  # Example Reward Config
 
     config_dict = config_dict_std
-    config_dict["max_screen_size"] = (float('inf'), float('inf'))
+    update_config_dict(config_dict, args)
+
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
-    arena_size = tuple(float(t) for t in arena_size)
-    config_dict["world_size"] = arena_size
 
     test_env = MyQuaticusEnv(render_mode=None,
                              team_size=team_size,
@@ -71,10 +70,6 @@ if __name__ == '__main__':
 
     obs_dim = obs_normalizer.flattened_length
 
-    config_dict["sim_speedup_factor"] = args.sim_speedup_factor
-    config_dict["max_time"] = args.max_time
-    normalize = not args.unnormalize
-    config_dict['normalize'] = normalize
     RENDER_MODE = 'human' if args.render or args.display else None
 
     clone_replacements = args.clone_replacements
@@ -89,46 +84,13 @@ if __name__ == '__main__':
     if lstm_dropout is None:
         lstm_dropout = args.dropout
     ident = (args.ident +
-             '_COEVOLUTION_'
              '_agents_' +
-             (('_arch_' + '_'.join([str(s) for s in net_arch])) if ppo_cnt + dqn_cnt else '') +
-             (('_ppo_' + str(ppo_cnt)) if ppo_cnt else '') +
-             (('_dqn_' + str(dqn_cnt)) if dqn_cnt else '') +
-             '_' +
-             (('_rb_cap_' + str(buffer_cap)) if dqn_cnt else '') +
-             ('_split_' if args.split_learners and ppo_cnt and dqn_cnt else '') +
+             learning_agents_string(args) +
              '_protect_' + str(args.protect_new) +
              '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
              ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
-             '_BERTEAM_'
-             '_tm_sz_' + str(team_size) +
-             '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size])) +
-             '_embed_dim_' + str(args.embedding_dim) +
-             '_trans_' +
-             (
-                     '_head_' + str(args.heads) +
-                     '_enc_' + str(args.encoders) +
-                     '_dec_' + str(args.decoders) +
-                     '_drop_' + str(args.dropout).replace('.', '_')
-             ) +
-             '_inp_emb_' +
-             (
-                     '_lyrs_' + str(args.lstm_layers) +
-                     ('_drop_' + lstm_dropout if args.lstm_dropout is not None else '')
-             ) +
-             (
-                 ('_retr_' +
-                  ('_l_' + str(args.loss_retrials) if args.loss_retrials else '') +
-                  ('_t_' + str(args.tie_retrials) if args.tie_retrials else '')
-                  )
-                 if args.loss_retrials or args.tie_retrials else ''
-             ) +
-             '_train_frq_' + str(args.train_freq) +
-             '_btch_' + str(args.batch_size) +
-             '_minibtch_' + str(args.minibatch_size) +
-             '_half_life_' + str(float(args.half_life)).replace('.', '_') +
-
-             ('_no_norm_obs' if not normalize else '')
+             pyquaticus_string(args) +
+             berteam_string(args)
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
