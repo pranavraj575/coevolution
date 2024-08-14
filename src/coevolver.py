@@ -981,6 +981,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  reinit_agents=True,
                  mutation_prob=.001,
                  protect_new=20,
+                 protect_elite=1,
                  clone_replacements=None,
                  team_idx_to_agent_id=None,
                  processes=0,
@@ -1020,6 +1021,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             clone_replacements: max number of agents to replace with clones each epoch
                 if None, replaces all potentially
             protect_new: protect agents younger than this
+            protect_elite: protect the top k agents in each population from replacemnet
             processes: if positive, uses multiprocessing
             temp_zoo_dir: place to store temp files
                 if None, uses zoo_dir/temp_cage
@@ -1097,6 +1099,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         self.set_protect_new(protect_new=protect_new)
         self.set_clone_replacements(clone_replacements=clone_replacements)
         self.set_max_steps_per_ep(max_steps_per_ep=max_steps_per_ep)
+        self.set_protect_elite(protect_elite=protect_elite)
 
     def complete_epoch_and_extra_training(self, all_items_to_save, epoch_info, **kwargs):
         super().complete_epoch_and_extra_training(all_items_to_save=all_items_to_save,
@@ -1113,6 +1116,13 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 )[0]
             )
             for global_idx in range(self.N))
+
+    @property
+    def protect_elite(self):
+        return self.info['protect_elite']
+
+    def set_protect_elite(self, protect_elite):
+        self.info['protect_elite'] = protect_elite
 
     @property
     def max_steps_per_ep(self):
@@ -1323,16 +1333,15 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
         if type(number_to_replace) == int:
             number_to_replace = [number_to_replace for _ in self.population_sizes]
-        k = 0
+        cum_popsize = 0
         for pop_idx, popsize in enumerate(self.population_sizes):
             if number_to_replace[pop_idx] <= 0:
                 continue
-
             # pick the agents to potentially clone
             candidate_clone_idxs = list(self._get_valid_idxs(validity_fn=
                                                              lambda info:
                                                              info.get(DICT_CLONABLE, True),
-                                                             indices=range(k, k + popsize),
+                                                             indices=range(cum_popsize, cum_popsize + popsize),
                                                              )
                                         )
             if not candidate_clone_idxs:
@@ -1344,10 +1353,16 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 candidate_target_idxs = list(
                     self._get_valid_idxs(validity_fn=lambda info: info.get(DICT_CLONE_REPLACABLE, True) and
                                                                   (info.get(DICT_AGE, 0) > self.protect_new),
-                                         indices=range(k, k + popsize),
+                                         indices=range(cum_popsize, cum_popsize + popsize),
                                          ))
             else:
-                candidate_target_idxs = list(range(k, k + popsize))
+                candidate_target_idxs = list(range(cum_popsize, cum_popsize + popsize))
+
+            # remove the elite from potential targets
+            elite = cum_popsize + torch.topk(self.elos[cum_popsize, cum_popsize + popsize],
+                                             k=self.protect_elite
+                                             ).indices
+            candidate_target_idxs = [idx for idx in candidate_target_idxs if idx not in elite]
             # can replace at most this number
             number_to_replace[pop_idx] = min(len(candidate_target_idxs), number_to_replace[pop_idx])
             if not candidate_target_idxs:
@@ -1395,7 +1410,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                     breed_dic['target_elos'].append(target_elo)
                     # note: it is probably necessary to save clone_elo and target_elo lists beforehand as self.captain_elos
                     # are being reassigned with self.replace_agent
-            k += popsize
+            cum_popsize += popsize
         breed_dic['based_elos'] = base_elo
         if base_elo is not None:
             self.rebase_elos(base_elo=base_elo)
@@ -1428,6 +1443,11 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             self._get_valid_idxs(validity_fn=lambda info: info.get(DICT_MUTATION_REPLACABLE, True) and
                                                           (info.get(DICT_MUTATION_AGE, 0) > self.protect_new)
                                  ))
+
+        # remove the elite from potential mutations
+        elite = torch.topk(self.elos, k=self.protect_elite).indices
+        mutatable_idxs = [idx for idx in mutatable_idxs if idx not in elite]
+
         # get the number to mutate, choose each with probability self.mutation_prob
         # equivalent to the sum of a bunch of bernoulli variables
         num_to_mutate = int(torch.sum(
