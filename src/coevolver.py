@@ -1359,7 +1359,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                 candidate_target_idxs = list(range(cum_popsize, cum_popsize + popsize))
 
             # remove the elite from potential targets
-            elite = cum_popsize + torch.topk(self.elos[cum_popsize, cum_popsize + popsize],
+            elite = cum_popsize + torch.topk(self.elos[cum_popsize: cum_popsize + popsize],
                                              k=self.protect_elite
                                              ).indices
             candidate_target_idxs = [idx for idx in candidate_target_idxs if idx not in elite]
