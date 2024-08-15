@@ -79,9 +79,7 @@ if __name__ == '__main__':
              (('_def_' + str(defend_cnt)) if defend_cnt else '') +
              (('_att_' + str(attack_cnt)) if attack_cnt else '') +
              learning_agents_string(args) +
-             '_protect_' + str(args.protect_new) +
-             '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
-             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '')
+             coevolution_string(args)
              )
 
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
@@ -194,6 +192,7 @@ if __name__ == '__main__':
                                                    config_dict['sim_speedup_factor']),
                                            mutation_prob=args.mutation_prob,
                                            clone_replacements=clone_replacements,
+                                           protect_elite=args.elite_protection,
                                            )
     if not args.reset and os.path.exists(save_dir):
         print('loading from', save_dir)

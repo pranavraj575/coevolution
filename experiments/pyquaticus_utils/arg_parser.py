@@ -89,7 +89,20 @@ def add_coevolution_args(PARSER: argparse.ArgumentParser, clone_default=None):
     PARSER.add_argument('--mutation-prob', type=float, required=False, default=0.,
                         help="probabality of mutating agents each epoch (should probably be very small)")
     PARSER.add_argument('--clone-replacements', type=int, required=False, default=clone_default,
-                        help="number of agents to try replacing each epoch (default all)")
+                        help="number of agents to try replacing each epoch (default " +
+                             (str(clone_default) if clone_default is not None else 'all') +
+                             ")")
+    PARSER.add_argument('--elite-protection', type=int, required=False, default=1,
+                        help='protect top k agents from mutation/replacement'
+                        )
+
+
+def coevolution_string(args):
+    return ('_protect_' + str(args.protect_new) +
+            '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
+            ('_clone_' + str(args.clone_replacements) if args.clone_replacements is not None else '') +
+            '_elite_' + str(args.elite_protection)
+            )
 
 
 def add_berteam_args(PARSER: argparse.ArgumentParser):

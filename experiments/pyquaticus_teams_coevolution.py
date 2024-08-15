@@ -86,9 +86,7 @@ if __name__ == '__main__':
     ident = (args.ident +
              '_agents_' +
              learning_agents_string(args) +
-             '_protect_' + str(args.protect_new) +
-             '_mut_prob_' + str(args.mutation_prob).replace('.', '_') +
-             ('_clone_' + str(clone_replacements) if clone_replacements is not None else '') +
+             coevolution_string(args) +
              pyquaticus_string(args) +
              berteam_string(args)
              )
@@ -215,6 +213,7 @@ if __name__ == '__main__':
                                            # team_member_elo_update=1*np.log(10)/400,
                                            mutation_prob=args.mutation_prob,
                                            clone_replacements=clone_replacements,
+                                           protect_elite=args.elite_protection,
                                            )
     plotting = {'init_dists': [],
                 'team_dists': [],
