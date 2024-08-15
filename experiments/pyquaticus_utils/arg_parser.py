@@ -190,3 +190,15 @@ def add_experiment_args(PARSER: argparse.ArgumentParser, ident):
                         help="Enable rendering")
     PARSER.add_argument('--seed', type=int, required=False, default=0,
                         help="random seed")
+    PARSER.add_argument('--save-video', action='store', required=False, default=None,
+                        help='save video of display trial')
+    PARSER.add_argument('--frame-freq', type=int, required=False, default=1,
+                        help="frequency to save video frames")
+
+
+def get_render_mode(args):
+    if args.render:
+        return 'human'
+    if args.display:
+        return 'human'
+    return None

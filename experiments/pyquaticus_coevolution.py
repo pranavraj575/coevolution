@@ -4,13 +4,12 @@ from unstable_baselines3 import WorkerPPO, WorkerDQN
 from unstable_baselines3.dqn import MlpPolicy as DQNMlp
 from unstable_baselines3.ppo import MlpPolicy as PPOMlp
 
-from repos.pyquaticus.pyquaticus import pyquaticus_v0
 from repos.pyquaticus.pyquaticus.config import config_dict_std
 from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
 from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker
 from experiments.pyquaticus_utils.reward_fns import custom_rew, custom_rew2, RandPolicy
 from experiments.pyquaticus_utils.outcomes import CTFOutcome
-from experiments.pyquaticus_utils.wrappers import policy_wrapper
+from experiments.pyquaticus_utils.wrappers import policy_wrapper, MyQuaticusEnv
 
 from src.coevolver import PettingZooCaptianCoevolution
 from src.utils.dict_keys import *
@@ -48,15 +47,15 @@ if __name__ == '__main__':
     config_dict = config_dict_std
     update_config_dict(config_dict, args)
 
-    test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
-                                           team_size=1,
-                                           config_dict=config_dict,
-                                           )
+    test_env = MyQuaticusEnv(render_mode=None,
+                             team_size=1,
+                             config_dict=config_dict,
+                             )
     obs_normalizer = test_env.agent_obs_normalizer
     DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
     AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
 
-    RENDER_MODE = 'human' if args.render or args.display else None
+    RENDER_MODE = get_render_mode(args)
 
     clone_replacements = args.clone_replacements
 
@@ -88,11 +87,13 @@ if __name__ == '__main__':
 
 
     def env_constructor(train_infos):
-        return pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE,
-                                           reward_config=reward_config,
-                                           team_size=1,
-                                           config_dict=config_dict,
-                                           )
+        return MyQuaticusEnv(save_video=args.save_video is not None,
+                             render_mode=RENDER_MODE,
+                             reward_config=reward_config,
+                             team_size=1,
+                             config_dict=config_dict,
+                             frame_freq=args.frame_freq,
+                             )
 
 
     non_train_dict = {DICT_TRAIN: False,
@@ -257,6 +258,8 @@ if __name__ == '__main__':
             print(ip, ' (', typer(ip), '): ', None, sep='')
         for i, (identity, elo) in enumerate(idents_and_elos):
             print(i, ' (', identity, '): ', elo, sep='')
+
+        env = env_constructor(None)
         if idxs is None:
 
             print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
@@ -272,7 +275,7 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[[torch.tensor(worst)], [torch.tensor(best)]],
                 agent_choices=[[agents[0]], [agents[1]]],
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict],
                                      [non_train_dict]]
             )
@@ -286,7 +289,7 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[[torch.tensor(second_best)], [torch.tensor(best)]],
                 agent_choices=[[agents[0]], [agents[1]]],
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict],
                                      [non_train_dict]]
             )
@@ -305,10 +308,12 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[[torch.tensor(i)], [torch.tensor(j)]],
                 agent_choices=[[agents[0]], [agents[1]]],
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict],
                                      [non_train_dict]]
             )
+        if args.save_video is not None:
+            env.write_video(video_file=args.save_video)
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()
@@ -348,6 +353,5 @@ if __name__ == '__main__':
             print()
 
     trainer.clear()
-    import shutil
 
     shutil.rmtree(data_folder)

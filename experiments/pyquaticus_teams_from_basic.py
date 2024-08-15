@@ -70,7 +70,7 @@ if __name__ == '__main__':
                                )
             )
 
-    RENDER_MODE = 'human' if args.render or args.display else None
+    RENDER_MODE = get_render_mode(args)
 
     lstm_dropout = args.lstm_dropout
     if lstm_dropout is None:
@@ -88,9 +88,11 @@ if __name__ == '__main__':
 
 
     def env_constructor(train_infos):
-        return MyQuaticusEnv(render_mode=RENDER_MODE,
-                             team_size=team_size,
+        return MyQuaticusEnv(save_video=args.save_video is not None,
+                             render_mode=RENDER_MODE,
+                             team_size=1,
                              config_dict=config_dict,
+                             frame_freq=args.frame_freq,
                              )
 
 
@@ -317,7 +319,7 @@ if __name__ == '__main__':
                 print('6-' + str(6 + rand_cnt - 1) + ':', typer(6))
             else:
                 print('6:', typer(6))
-
+        env = env_constructor(None)
         if idxs is None:
             gen_team = [t.item()
                         for t in trainer.team_trainer.create_teams(T=team_size).flatten()]
@@ -343,11 +345,9 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[[torch.tensor(worst)]*team_size, [torch.tensor(best)]*team_size],
                 agent_choices=agents,
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
-
-
         else:
             A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
@@ -366,10 +366,12 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[[torch.tensor(worst)]*team_size, [torch.tensor(best)]*team_size],
                 agent_choices=agents,
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
 
+        if args.save_video is not None:
+            env.write_video(video_file=args.save_video)
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()

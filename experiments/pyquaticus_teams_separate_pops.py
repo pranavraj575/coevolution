@@ -28,13 +28,12 @@ if __name__ == '__main__':
     from unstable_baselines3.dqn import MlpPolicy as DQNMlp
     from unstable_baselines3.ppo import MlpPolicy as PPOMlp
 
-    from repos.pyquaticus.pyquaticus import pyquaticus_v0
     from repos.pyquaticus.pyquaticus.config import config_dict_std
     from repos.pyquaticus.pyquaticus.base_policies.base_defend import BaseDefender
     from repos.pyquaticus.pyquaticus.base_policies.base_attack import BaseAttacker
     from experiments.pyquaticus_utils.reward_fns import custom_rew, custom_rew2, RandPolicy
     from experiments.pyquaticus_utils.outcomes import CTFOutcome
-    from experiments.pyquaticus_utils.wrappers import policy_wrapper
+    from experiments.pyquaticus_utils.wrappers import MyQuaticusEnv, policy_wrapper
 
     from src.coevolver import PettingZooCaptianCoevolution
     from src.utils.dict_keys import *
@@ -54,15 +53,15 @@ if __name__ == '__main__':
 
     reward_config = {i: custom_rew2 for i in range(team_size*2)}  # Example Reward Config
 
-    test_env = pyquaticus_v0.PyQuaticusEnv(render_mode=None,
-                                           team_size=team_size,
-                                           config_dict=config_dict,
-                                           )
+    test_env = MyQuaticusEnv(render_mode=None,
+                             team_size=team_size,
+                             config_dict=config_dict,
+                             )
     obs_normalizer = test_env.agent_obs_normalizer
     DefendPolicy = policy_wrapper(BaseDefender, agent_obs_normalizer=obs_normalizer, identity='def')
     AttackPolicy = policy_wrapper(BaseAttacker, agent_obs_normalizer=obs_normalizer, identity='att')
 
-    RENDER_MODE = 'human' if args.render or args.display else None
+    RENDER_MODE = get_render_mode(args)
 
     clone_replacements = args.clone_replacements
 
@@ -80,7 +79,7 @@ if __name__ == '__main__':
     normalize = not args.unnormalize
 
     ident = (args.ident +
-             pyquaticus_string(args)+
+             pyquaticus_string(args) +
              '_agents_' +
              (('_rand_' + str(rand_cnt)) if rand_cnt else '') +
              (('_def_' + str(defend_cnt)) if defend_cnt else '') +
@@ -94,11 +93,13 @@ if __name__ == '__main__':
 
 
     def env_constructor(train_infos):
-        return pyquaticus_v0.PyQuaticusEnv(render_mode=RENDER_MODE,
-                                           reward_config=reward_config,
-                                           team_size=team_size,
-                                           config_dict=config_dict,
-                                           )
+        return MyQuaticusEnv(save_video=args.save_video is not None,
+                             render_mode=RENDER_MODE,
+                             reward_config=reward_config,
+                             team_size=team_size,
+                             config_dict=config_dict,
+                             frame_freq=args.frame_freq,
+                             )
 
 
     non_train_dict = {DICT_TRAIN: False,
@@ -268,6 +269,8 @@ if __name__ == '__main__':
             if not i%sum(agent_counts):
                 print("POPULATION BOUNDARY")
             print(i, ' (', identity, '): ', elo, sep='')
+
+        env = env_constructor(None)
         if idxs is None:
 
             print('best agents have elo', trainer.classic_elos[best],
@@ -293,7 +296,7 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[torch.tensor(worst), torch.tensor(best)],
                 agent_choices=agents,
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
 
@@ -312,7 +315,7 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[torch.tensor(second_best), torch.tensor(best)],
                 agent_choices=agents,
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
 
@@ -338,9 +341,12 @@ if __name__ == '__main__':
             outcom.get_outcome(
                 team_choices=[torch.tensor(B), torch.tensor(A)],
                 agent_choices=agents,
-                env=env_constructor(None),
+                env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
+
+        if args.save_video is not None:
+            env.write_video(video_file=args.save_video)
     else:
         while trainer.epochs < args.epochs:
             tim = time.time()
