@@ -1119,10 +1119,10 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
     @property
     def protect_elite(self):
-        return self.info['protect_elite']
+        return self.info['divine_proteciton']
 
     def set_protect_elite(self, protect_elite):
-        self.info['protect_elite'] = protect_elite
+        self.info['divine_proteciton'] = protect_elite
 
     @property
     def max_steps_per_ep(self):
