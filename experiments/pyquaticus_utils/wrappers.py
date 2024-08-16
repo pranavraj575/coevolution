@@ -1,6 +1,5 @@
 import pygame, colorsys
 from pygame import draw
-from moviepy.editor import ImageSequenceClip
 import numpy as np
 from pygame.math import Vector2
 from pygame.transform import rotozoom
@@ -43,6 +42,7 @@ class MyQuaticusEnv(PyQuaticusEnv):
         return obs, rewards, terminated, truncated, info
 
     def write_video(self, video_file, fps=30):
+        from moviepy.editor import ImageSequenceClip
         real_fps = fps//self.frame_freq  # fps//(self.render_fps*self.frame_freq)
         clip = ImageSequenceClip(self.images, fps=real_fps)
         clip.write_videofile(video_file, fps=real_fps)
