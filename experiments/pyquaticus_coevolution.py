@@ -265,29 +265,29 @@ if __name__ == '__main__':
             print('best agent has elo', trainer.classic_elos[best], 'and is type', typer(best))
             print('second best agent has elo', trainer.classic_elos[second_best], 'and is type', typer(second_best))
             print('worst agent has elo', trainer.classic_elos[worst], 'and is type', typer(worst))
-            print('playing worst (blue, ' + typer(worst) + ') against best (red, ' + typer(best) + ')')
+            print('playing best (blue, ' + typer(best) + ') against worst (red, ' + typer(worst) + ')')
 
             outcom = CTFOutcome()
-            agents = (trainer.load_animal(trainer.index_to_pop_index(worst))[0],
-                      trainer.load_animal(trainer.index_to_pop_index(best))[0])
+            agents = (trainer.load_animal(trainer.index_to_pop_index(best))[0],
+                      trainer.load_animal(trainer.index_to_pop_index(worst))[0])
             for agent in agents:
                 agent.policy.set_training_mode(False)
             outcom.get_outcome(
-                team_choices=[[torch.tensor(worst)], [torch.tensor(best)]],
+                team_choices=[[torch.tensor(best)], [torch.tensor(worst)]],
                 agent_choices=[[agents[0]], [agents[1]]],
                 env=env,
                 updated_train_infos=[[non_train_dict],
                                      [non_train_dict]]
             )
-            print('playing second best (blue, ' + typer(second_best) + ') against best (red, ' + typer(best) + ')')
+            print('playing best (blue, ' + typer(best) + ') against second best (red, ' + typer(second_best) + ')')
 
-            agents = (trainer.load_animal(trainer.index_to_pop_index(second_best))[0],
-                      trainer.load_animal(trainer.index_to_pop_index(best))[0])
+            agents = (trainer.load_animal(trainer.index_to_pop_index(best))[0],
+                      trainer.load_animal(trainer.index_to_pop_index(second_best))[0])
             for agent in agents:
                 agent.policy.set_training_mode(False)
 
             outcom.get_outcome(
-                team_choices=[[torch.tensor(second_best)], [torch.tensor(best)]],
+                team_choices=[[torch.tensor(best)], [torch.tensor(second_best)]],
                 agent_choices=[[agents[0]], [agents[1]]],
                 env=env,
                 updated_train_infos=[[non_train_dict],

@@ -326,12 +326,12 @@ if __name__ == '__main__':
             print('worst agents has elo', trainer.classic_elos[worst],
                   'and is type', typer(worst))
 
-            print('playing double best (blue, ' + str(tuple((best, typer(best)) for idx in range(team_size)))
-                  + ') against generated (red, ' + str(tuple((idx, typer(idx)) for idx in gen_team)) + ')')
+            print('playing generated (blue, ' + str(tuple((idx, typer(idx)) for idx in gen_team))
+                  + ') against double best (red, ' + str(tuple((best, typer(best)) for idx in range(team_size))) + ')')
 
             outcom = CTFOutcome()
             agents = []
-            for team in [best]*team_size, gen_team:
+            for team in gen_team, [best]*team_size:
                 m = []
                 for idx in team:
                     agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
@@ -339,7 +339,7 @@ if __name__ == '__main__':
                 agents.append(m)
 
             outcom.get_outcome(
-                team_choices=[[torch.tensor(worst)]*team_size, [torch.tensor(best)]*team_size],
+                team_choices=[[torch.tensor(idx) for idx in gen_team], [torch.tensor(best)]*team_size],
                 agent_choices=agents,
                 env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
@@ -348,12 +348,12 @@ if __name__ == '__main__':
         else:
             A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
-            print('playing', B, '(blue, ' + str([typer(idx) for idx in B])
-                  + ') against', A, '(red, ' + str([typer(idx) for idx in A]) + ')')
+            print('playing', A, '(blue, ' + str([typer(idx) for idx in A])
+                  + ') against', B, '(red, ' + str([typer(idx) for idx in B]) + ')')
 
             outcom = CTFOutcome()
             agents = []
-            for team in B, A:
+            for team in A, B:
                 m = []
                 for idx in team:
                     if idx >= 0:
@@ -364,7 +364,7 @@ if __name__ == '__main__':
                 agents.append(m)
 
             outcom.get_outcome(
-                team_choices=[[torch.tensor(worst)]*team_size, [torch.tensor(best)]*team_size],
+                team_choices=[[torch.tensor(a) for a in A], [torch.tensor(b) for b in B]],
                 agent_choices=agents,
                 env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,

@@ -280,12 +280,12 @@ if __name__ == '__main__':
             print('worst agents have elo', trainer.classic_elos[worst],
                   'and are type', [typer(idx) for idx in worst])
 
-            print('playing worst (blue, ' + str([typer(idx) for idx in worst])
-                  + ') against best (red, ' + str([typer(idx) for idx in best]) + ')')
+            print('playing best (blue, ' + str([typer(idx) for idx in best])
+                  + ') against worst (red, ' + str([typer(idx) for idx in worst]) + ')')
 
             outcom = CTFOutcome()
             agents = []
-            for team in worst, best:
+            for team in best, worst:
                 m = []
                 for idx in team:
                     agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
@@ -294,17 +294,17 @@ if __name__ == '__main__':
                 agents.append(m)
 
             outcom.get_outcome(
-                team_choices=[torch.tensor(worst), torch.tensor(best)],
+                team_choices=[torch.tensor(best), torch.tensor(worst)],
                 agent_choices=agents,
                 env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
             )
 
-            print('playing second best (blue, ' + str([typer(idx) for idx in second_best])
-                  + ') against best (red, ' + str([typer(idx) for idx in best]) + ')')
+            print('playing best (blue, ' + str([typer(idx) for idx in best])
+                  + ') against second best (red, ' + str([typer(idx) for idx in second_best]) + ')')
 
             agents = []
-            for team in second_best, best:
+            for team in best, second_best:
                 m = []
                 for idx in team:
                     agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
@@ -313,7 +313,7 @@ if __name__ == '__main__':
                 agents.append(m)
 
             outcom.get_outcome(
-                team_choices=[torch.tensor(second_best), torch.tensor(best)],
+                team_choices=[torch.tensor(best), torch.tensor(second_best)],
                 agent_choices=agents,
                 env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
@@ -322,11 +322,11 @@ if __name__ == '__main__':
         else:
             A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
 
-            print('playing second best (blue, ' + str([typer(idx) for idx in B])
-                  + ') against best (red, ' + str([typer(idx) for idx in A]) + ')')
+            print('playing ' + str(A) + ' (blue, ' + str([typer(idx) for idx in A])
+                  + ') against ' + str(B) + ' (red, ' + str([typer(idx) for idx in B]) + ')')
             agents = []
 
-            for team in B, A:
+            for team in A, B:
                 m = []
                 for idx in team:
                     if idx >= 0:
@@ -339,7 +339,7 @@ if __name__ == '__main__':
 
             outcom = CTFOutcome()
             outcom.get_outcome(
-                team_choices=[torch.tensor(B), torch.tensor(A)],
+                team_choices=[torch.tensor(A), torch.tensor(B)],
                 agent_choices=agents,
                 env=env,
                 updated_train_infos=[[non_train_dict]*team_size]*2,
