@@ -318,8 +318,12 @@ if __name__ == '__main__':
         env = env_constructor(None)
         if idxs is None:
             gen_team = [t.item()
-                        for t in trainer.team_trainer.create_teams(T=team_size).flatten()]
-            print('generated team has elos', trainer.classic_elos[gen_team])
+                        for t in trainer.create_team(team_idx=0,
+                                                     captian=best,
+                                                     obs_preembed=None,
+                                                     obs_mask=None,
+                                                     )[0].flatten()]
+            print('generated team (around the strongest) has elos', trainer.classic_elos[gen_team])
 
             print('best agent has elo', trainer.classic_elos[best],
                   'and is type', typer(best))
