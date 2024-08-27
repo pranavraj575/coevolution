@@ -284,9 +284,9 @@ class MyQuaticusEnv(PyQuaticusEnv):
         return pygame.transform.flip(self.screen, False, True)
 
 
-def policy_wrapper(Policy: BaseAgentPolicy, agent_obs_normalizer, identity='wrapped_policy'):
+def policy_wrapper(Policy, agent_obs_normalizer, identity='wrapped_policy'):
     class WrappedPolicy(Policy):
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, identity=None, **kwargs):
             super().__init__(*args, **kwargs)
             self.identity = identity
 

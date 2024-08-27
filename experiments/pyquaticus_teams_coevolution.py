@@ -316,13 +316,14 @@ if __name__ == '__main__':
         for i, (identity, elo) in enumerate(idents_and_elos):
             print(i, ' (', identity, '): ', elo, sep='')
         env = env_constructor(None)
+        gen_team = [t.item()
+                    for t in trainer.create_team(team_idx=0,
+                                                 captian=best,
+                                                 obs_preembed=None,
+                                                 obs_mask=None,
+                                                 )[0].flatten()]
         if idxs is None:
-            gen_team = [t.item()
-                        for t in trainer.create_team(team_idx=0,
-                                                     captian=best,
-                                                     obs_preembed=None,
-                                                     obs_mask=None,
-                                                     )[0].flatten()]
+
             print('generated team (around the strongest) has elos', trainer.classic_elos[gen_team])
 
             print('best agent has elo', trainer.classic_elos[best],
@@ -350,7 +351,10 @@ if __name__ == '__main__':
             )
 
         else:
-            A, B = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
+            teams = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
+            if len(teams) == 1:
+                teams = [gen_team] + teams
+            A, B = teams
 
             print('playing', A, '(blue, ' + str([typer(idx) for idx in A])
                   + ') against', B, '(red, ' + str([typer(idx) for idx in B]) + ')')

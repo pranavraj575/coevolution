@@ -185,7 +185,7 @@ def add_experiment_args(PARSER: argparse.ArgumentParser, ident):
     PARSER.add_argument('--display', action='store_true', required=False,
                         help="skip training and display saved model")
     PARSER.add_argument('--idxs-to-display', action='store', required=False, default=None,
-                        help='which agent indexes to display, in the format "(i1,i2);(j1,j2)" (used with --display)')
+                        help='which agent indexes to display, in the format \'(i1,i2);(j1,j2)\' (used with --display)')
     PARSER.add_argument('--render', action='store_true', required=False,
                         help="Enable rendering")
     PARSER.add_argument('--seed', type=int, required=False, default=0,

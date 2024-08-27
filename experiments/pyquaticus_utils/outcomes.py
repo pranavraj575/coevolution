@@ -59,3 +59,58 @@ class CTFOutcome(PettingZooOutcomeFn):
                 (0, team_0_player_infos),
                 (1, team_1_player_infos),
             ]
+
+    def outcome_return_env(self, agent_choices, index_choices, updated_train_infos, env):
+        outcomes = self._get_outcome_from_agents(agent_choices=agent_choices,
+                                                 index_choices=index_choices,
+                                                 updated_train_infos=updated_train_infos,
+                                                 env=env,
+                                                 )
+        return outcomes, env
+
+    def outcome_agent_ratings(self, agent_choices, index_choices, updated_train_infos, env):
+        outcomes, env = self.outcome_return_env(agent_choices=agent_choices,
+                                                index_choices=index_choices,
+                                                updated_train_infos=updated_train_infos,
+                                                env=env,
+                                                )
+        blue_results = (env.unwrapped.game_score['blue_tags'],
+                        env.unwrapped.game_score['blue_grabs'],
+                        env.unwrapped.game_score['blue_captures'],
+                        )
+
+        red_results = (env.unwrapped.game_score['blue_tags'],
+                       env.unwrapped.game_score['blue_grabs'],
+                       env.unwrapped.game_score['blue_captures'],
+                       )
+
+        return blue_results, red_results
+
+    def outcome_team_offensiveness(self, agent_choices, index_choices, updated_train_infos, env):
+        (blue_tags, blue_grabs, blue_captures), (red_tags, red_grabs, red_captures) = self.outcome_agent_ratings(
+            agent_choices=agent_choices,
+            index_choices=index_choices,
+            updated_train_infos=updated_train_infos,
+            env=env,
+        )
+        # offensiveness params
+        # how much grabbing the flag is weighted
+        grab_scl = .5
+        # how much capturing a flag is weighted
+        capture_scl = 1
+        # how much getting tagged is weighted
+        getting_tagged_scl = .25
+
+        # this will only affect the scale of the output
+        # how much the tagging of an opponent is weighted for defense
+        tagging_scl = 1
+
+        # blue team is offensive if they grab/capture the flag and partially if they are captured by opponent
+        blue_off = grab_scl*blue_grabs + capture_scl*blue_captures + getting_tagged_scl*red_tags
+        # blue team is defensive if they successfully tag an opponent
+        blue_def = tagging_scl*blue_tags
+
+        red_off = grab_scl*red_grabs + capture_scl*red_captures + getting_tagged_scl*blue_tags
+        red_def = tagging_scl*red_tags
+
+        return blue_off/blue_def, red_off/red_def
