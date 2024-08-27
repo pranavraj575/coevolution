@@ -1,5 +1,12 @@
 from matplotlib import pyplot as plt
-
+def deorder_total_dist(total_dist):
+    total_dist_non_ordered = dict()
+    for item in total_dist:
+        key = tuple(sorted(item))
+        if key not in total_dist_non_ordered:
+            total_dist_non_ordered[key] = 0
+        total_dist_non_ordered[key] += total_dist[item]
+    return total_dist_non_ordered
 
 def plot_dist_evolution(plot_dist,
                         x=None,

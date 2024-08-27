@@ -450,6 +450,63 @@ if __name__ == '__main__':
             print('time', time.time() - tim)
             print()
 
+        print("TRAINING FINISHED, now checking aggression for anal")
+        from experiments.pyquaticus_utils.agent_aggression import all_agent_aggression
+        from experiments.pyquaticus_utils.dist_plot import deorder_total_dist
+
+        divisions = None
+        # divisions to use to divide aggresion
+        # if divisions is None, does quartiles
+
+        start = time.time()
+        classic_elos = trainer.classic_elos
+        agents = (trainer.load_animal(trainer.index_to_pop_index(idx), load_buffer=False)[0]
+                  for idx in range(sum(pop_sizes)))
+        aggression = all_agent_aggression(agents=agents,
+                                          env_constructor=env_constructor,
+                                          team_size=team_size,
+                                          processes=proc,
+                                          )
+        if divisions is None:
+            test = np.array(sorted(aggression))
+            divisions = [np.quantile(test, q).item() for q in (.333, .666)  # (.25, .5, .75)
+                         ]
+
+        print('done with aggression, time:', round(time.time() - start))
+
+        print('calculating total dist')
+        start = time.time()
+        total_dist = deorder_total_dist(
+            trainer.team_trainer.get_total_distribution(T=team_size,
+                                                        N=1,
+                                                        )
+        )
+        print('done with total dist, time:', round(time.time() - start))
+
+
+        # analyze based on bins of 'aggressiveness'
+        def idx_to_bin(idx):
+            agg = aggression[idx]
+            bin = 0
+            while bin < len(divisions) and divisions[bin] < agg:
+                bin += 1
+            return bin
+
+
+        def team_to_team_type(team):
+            team_bins = tuple(idx_to_bin(idx) for idx in team)
+            team_type = tuple(sorted(team_bins))
+            return team_type
+
+
+        team_type_dist = dict()
+        for team in total_dist:
+            prob = total_dist[team]
+            team_type = team_to_team_type(team)
+            if team_type not in team_type_dist:
+                team_type_dist[team_type] = 0
+            team_type_dist[team_type] += prob
+        print(team_type_dist)
     trainer.clear()
 
     shutil.rmtree(data_folder)

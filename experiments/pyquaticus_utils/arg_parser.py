@@ -33,7 +33,7 @@ def pyquaticus_string(args):
         thing += '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
     if 'flag_keepout' in dir(args):
         if args.flag_keepout != 5.:
-            print("WARNING FLAG KEEPOUT IS DIFFERENT MAKE SURE YOU CHANGED PYQUATICUS")
+            print("WARNING FLAG KEEPOUT IS DIFFERENT MAKE SURE YOU CHANGED PYQUATICUS LINE 870 TO ADD TO UNTAG RADIUS")
             thing += '_kpout_' + str(float(args.flag_keepout)).replace('.', '_')
     if args.unnormalize:
         thing += '_no_norm_obs'

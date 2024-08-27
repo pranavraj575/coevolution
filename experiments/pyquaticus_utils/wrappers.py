@@ -286,7 +286,7 @@ class MyQuaticusEnv(PyQuaticusEnv):
 
 def policy_wrapper(Policy, agent_obs_normalizer, identity='wrapped_policy'):
     class WrappedPolicy(Policy):
-        def __init__(self, *args, identity=None, **kwargs):
+        def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.identity = identity
 

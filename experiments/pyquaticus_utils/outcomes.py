@@ -79,14 +79,13 @@ class CTFOutcome(PettingZooOutcomeFn):
                         env.unwrapped.game_score['blue_captures'],
                         )
 
-        red_results = (env.unwrapped.game_score['blue_tags'],
-                       env.unwrapped.game_score['blue_grabs'],
-                       env.unwrapped.game_score['blue_captures'],
+        red_results = (env.unwrapped.game_score['red_tags'],
+                       env.unwrapped.game_score['red_grabs'],
+                       env.unwrapped.game_score['red_captures'],
                        )
-
         return blue_results, red_results
 
-    def outcome_team_offensiveness(self, agent_choices, index_choices, updated_train_infos, env):
+    def outcome_team_aggressiveness(self, agent_choices, index_choices, updated_train_infos, env):
         (blue_tags, blue_grabs, blue_captures), (red_tags, red_grabs, red_captures) = self.outcome_agent_ratings(
             agent_choices=agent_choices,
             index_choices=index_choices,
@@ -95,22 +94,31 @@ class CTFOutcome(PettingZooOutcomeFn):
         )
         # offensiveness params
         # how much grabbing the flag is weighted
-        grab_scl = .5
+        grab_scl = 1.5
         # how much capturing a flag is weighted
-        capture_scl = 1
+        capture_scl = 2.0
         # how much getting tagged is weighted
-        getting_tagged_scl = .25
+        getting_tagged_scl = 1.0
 
         # this will only affect the scale of the output
         # how much the tagging of an opponent is weighted for defense
-        tagging_scl = 1
+        tagging_scl = 1.0
 
+        # add one to avoid div 0
         # blue team is offensive if they grab/capture the flag and partially if they are captured by opponent
-        blue_off = grab_scl*blue_grabs + capture_scl*blue_captures + getting_tagged_scl*red_tags
+        blue_off = 1 + grab_scl*blue_grabs + capture_scl*blue_captures + getting_tagged_scl*red_tags
         # blue team is defensive if they successfully tag an opponent
-        blue_def = tagging_scl*blue_tags
+        blue_def = 1 + tagging_scl*blue_tags
 
-        red_off = grab_scl*red_grabs + capture_scl*red_captures + getting_tagged_scl*blue_tags
-        red_def = tagging_scl*red_tags
-
+        red_off = 1 + grab_scl*red_grabs + capture_scl*red_captures + getting_tagged_scl*blue_tags
+        red_def = 1 + tagging_scl*red_tags
+        if False:
+            print('OFF blue grabs: ', blue_grabs,
+              '; OFF blue captures: ', blue_captures,
+              '; DEF blue tags: ', blue_tags,
+              '; OFF red tags: ', red_tags,
+              '; NAN red grabs: ', red_grabs,
+              '; NAN red captures: ', red_captures,
+              sep=''
+              )
         return blue_off/blue_def, red_off/red_def
