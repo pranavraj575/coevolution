@@ -102,9 +102,34 @@ if __name__ == '__main__':
                                 catch_radius=config_dict["catch_radius"],
                                 using_pyquaticus=True,
                                 )
+    def_hard = policy_wrapper(BaseDefender,
+                              agent_obs_normalizer=obs_normalizer,
+                              )(agent_id=0,
+                                team='blue',
+                                mode='hard',
+                                flag_keepout=config_dict['flag_keepout'],
+                                catch_radius=config_dict["catch_radius"],
+                                using_pyquaticus=True,
+                                )
     att_easy = policy_wrapper(BaseAttacker,
                               agent_obs_normalizer=obs_normalizer,
                               )(agent_id=0,
                                 mode='easy',
                                 using_pyquaticus=True,
                                 )
+    att_hard = policy_wrapper(BaseAttacker,
+                              agent_obs_normalizer=obs_normalizer,
+                              )(agent_id=0,
+                                mode='hard',
+                                using_pyquaticus=True,
+                                )
+
+    off_att = test_agent_offensiveness(agent=att_hard,
+                                       env=test_env,
+                                       test_team=[att_easy, att_easy],
+                                       )
+    off_def = test_agent_offensiveness(agent=def_hard,
+                                       env=test_env,
+                                       test_team=[att_easy, att_easy],
+                                       )
+    print(off_att, off_def)
