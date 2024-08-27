@@ -451,28 +451,45 @@ if __name__ == '__main__':
             print()
 
         print("TRAINING FINISHED, now checking aggression for anal")
-        from experiments.pyquaticus_utils.agent_aggression import all_agent_aggression
+        classic_elos = trainer.classic_elos
+        plot_dir=os.path.join(save_dir, 'plots')
+        if os.path.exists(plot_dir):
+            # clear any plots
+            shutil.rmtree(plot_dir)
+        os.makedirs(plot_dir)
+        aggression_file = os.path.join(save_dir, 'aggression.pkl')
+        if os.path.exists(aggression_file):
+            f = open(aggression_file, 'rb')
+            aggression = pickle.load(f)
+            f.close()
+        else:
+            from experiments.pyquaticus_utils.agent_aggression import all_agent_aggression
+
+            start = time.time()
+            agents = (trainer.load_animal(trainer.index_to_pop_index(idx), load_buffer=False)[0]
+                      for idx in range(sum(pop_sizes)))
+            aggression = all_agent_aggression(agents=agents,
+                                              env_constructor=env_constructor,
+                                              team_size=team_size,
+                                              processes=proc,
+                                              )
+
+            f = open(aggression_file, 'wb')
+            pickle.dump(aggression, f)
+            f.close()
+            print('done with aggression, time:', round(time.time() - start))
+
         from experiments.pyquaticus_utils.dist_plot import deorder_total_dist
 
-        divisions = None
+        # divisions = None
+        divisions= [1.]
+        default_num_divisions=4
         # divisions to use to divide aggresion
-        # if divisions is None, does quartiles
-
-        start = time.time()
-        classic_elos = trainer.classic_elos
-        agents = (trainer.load_animal(trainer.index_to_pop_index(idx), load_buffer=False)[0]
-                  for idx in range(sum(pop_sizes)))
-        aggression = all_agent_aggression(agents=agents,
-                                          env_constructor=env_constructor,
-                                          team_size=team_size,
-                                          processes=proc,
-                                          )
+        # if divisions is None, does tertiles
         if divisions is None:
             test = np.array(sorted(aggression))
-            divisions = [np.quantile(test, q).item() for q in (.333, .666)  # (.25, .5, .75)
+            divisions = [np.quantile(test, q).item() for q in (i/default_num_divisions for i in range(1,default_num_divisions))
                          ]
-
-        print('done with aggression, time:', round(time.time() - start))
 
         print('calculating total dist')
         start = time.time()
@@ -506,7 +523,54 @@ if __name__ == '__main__':
             if team_type not in team_type_dist:
                 team_type_dist[team_type] = 0
             team_type_dist[team_type] += prob
-        print(team_type_dist)
+
+        import matplotlib.pyplot as plt
+
+        values = sorted(team_type_dist.keys(), key=lambda t: team_type_dist[t], reverse=True)
+
+        ax = plt.gca()
+        plt.bar(range(len(values)), [team_type_dist[t] for t in values])
+        ax.set_xticks(range(len(values)), values)
+        plt.title('BERTeam Occurrence Probabilities')
+        key = None
+        if len(divisions) == 2:
+            key = 'AGENT KEY:\n0: defensive\n1: balanced\n2: aggressive'
+        else:
+            key = 'AGENT KEY:\n0: defensive\n' + str(len(divisions)) + ': aggressive'
+        if key is not None:
+            plt.text(.75, .3, key,
+                     bbox=dict(boxstyle='round', facecolor='white', alpha=0.5),
+                     transform=ax.transAxes,
+                     verticalalignment='center',
+                     # horizontalalignment='center',
+                     )
+        plt.xlabel('Team Composition')
+        plt.ylabel("Probability")
+        plt.savefig(os.path.join(plot_dir, 'berteam_aggression_plot.png'), bbox_inches='tight')
+        plt.close()
+        plt.scatter(aggression, classic_elos)
+        plt.ylabel('Elo')
+        plt.xlabel('Aggression Metric')
+        plt.title('Evolved Population Elos and Aggression')
+        plt.savefig(os.path.join(plot_dir, 'berteam_aggression_with_elo.png'), bbox_inches='tight')
+        plt.close()
+        for binno in range(len(divisions) + 1):
+            agent_idxs = [idx for idx in range(sum(pop_sizes)) if idx_to_bin(idx) == binno]
+            plt.scatter([aggression[i] for i in agent_idxs],
+                        classic_elos[agent_idxs])
+            plt.ylabel('Elo')
+            plt.xlabel('Aggression Metric')
+            if binno==0:
+                name='Defensive'
+            elif binno == len(divisions):
+                name = 'Aggressive'
+            else:
+                name='Bin '+str(binno)
+
+            plt.title('Evolved Population '+name+' Agents Elos and Aggression')
+            plt.savefig(os.path.join(plot_dir, 'berteam_aggression_with_elo_bin_'+str(binno)+'.png'),
+                        bbox_inches='tight')
+            plt.close()
     trainer.clear()
 
     shutil.rmtree(data_folder)
