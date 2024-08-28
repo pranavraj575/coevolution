@@ -560,7 +560,7 @@ if __name__ == '__main__':
             ax.set_xticks(range(len(values)), values)
             # plt.bar(range(4), [team_type_dist[t] for t in values[:4]])
             # ax.set_xticks(range(4), values[:4])
-            plt.title(('' if ordered else 'Unordered') + 'BERTeam Occurrence Probabilities')
+            plt.title(('' if ordered else 'Unordered ') + 'BERTeam Occurrence Probabilities')
             key = None
             if len(divisions) == 2:
                 key = 'AGENT KEY:\n0: Defensive\n1: Balanced\n2: Aggressive'
