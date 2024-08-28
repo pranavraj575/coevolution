@@ -1,3 +1,5 @@
+import itertools
+
 if __name__ == '__main__':
     import numpy as np
     import argparse
@@ -452,7 +454,7 @@ if __name__ == '__main__':
 
         print("TRAINING FINISHED, now checking aggression for anal")
         classic_elos = trainer.classic_elos
-        plot_dir=os.path.join(save_dir, 'plots')
+        plot_dir = os.path.join(save_dir, 'plots')
         if os.path.exists(plot_dir):
             # clear any plots
             shutil.rmtree(plot_dir)
@@ -481,96 +483,133 @@ if __name__ == '__main__':
 
         from experiments.pyquaticus_utils.dist_plot import deorder_total_dist
 
+        import matplotlib.pyplot as plt
+
+        plt.rcParams.update({'font.size': 14})
+
         # divisions = None
-        divisions= [1.]
-        default_num_divisions=4
+        divisions = [1.]
+        default_num_divisions = 3
         # divisions to use to divide aggresion
         # if divisions is None, does tertiles
         if divisions is None:
             test = np.array(sorted(aggression))
-            divisions = [np.quantile(test, q).item() for q in (i/default_num_divisions for i in range(1,default_num_divisions))
+            divisions = [np.quantile(test, q).item() for q in
+                         (i/default_num_divisions for i in range(1, default_num_divisions))
                          ]
 
         print('calculating total dist')
+
         start = time.time()
-        total_dist = deorder_total_dist(
-            trainer.team_trainer.get_total_distribution(T=team_size,
-                                                        N=1,
-                                                        )
-        )
+        total_dist = trainer.team_trainer.get_total_distribution(T=team_size,
+                                                                 N=1,
+                                                                 )
         print('done with total dist, time:', round(time.time() - start))
 
-
-        # analyze based on bins of 'aggressiveness'
-        def idx_to_bin(idx):
-            agg = aggression[idx]
-            bin = 0
-            while bin < len(divisions) and divisions[bin] < agg:
-                bin += 1
-            return bin
-
-
-        def team_to_team_type(team):
-            team_bins = tuple(idx_to_bin(idx) for idx in team)
-            team_type = tuple(sorted(team_bins))
-            return team_type
-
-
-        team_type_dist = dict()
-        for team in total_dist:
-            prob = total_dist[team]
-            team_type = team_to_team_type(team)
-            if team_type not in team_type_dist:
-                team_type_dist[team_type] = 0
-            team_type_dist[team_type] += prob
-
-        import matplotlib.pyplot as plt
-
-        values = sorted(team_type_dist.keys(), key=lambda t: team_type_dist[t], reverse=True)
-
-        ax = plt.gca()
-        plt.bar(range(len(values)), [team_type_dist[t] for t in values])
-        ax.set_xticks(range(len(values)), values)
-        plt.title('BERTeam Occurrence Probabilities')
-        key = None
-        if len(divisions) == 2:
-            key = 'AGENT KEY:\n0: defensive\n1: balanced\n2: aggressive'
-        else:
-            key = 'AGENT KEY:\n0: defensive\n' + str(len(divisions)) + ': aggressive'
-        if key is not None:
-            plt.text(.75, .3, key,
-                     bbox=dict(boxstyle='round', facecolor='white', alpha=0.5),
-                     transform=ax.transAxes,
-                     verticalalignment='center',
-                     # horizontalalignment='center',
-                     )
-        plt.xlabel('Team Composition')
-        plt.ylabel("Probability")
-        plt.savefig(os.path.join(plot_dir, 'berteam_aggression_plot.png'), bbox_inches='tight')
-        plt.close()
-        plt.scatter(aggression, classic_elos)
-        plt.ylabel('Elo')
-        plt.xlabel('Aggression Metric')
-        plt.title('Evolved Population Elos and Aggression')
-        plt.savefig(os.path.join(plot_dir, 'berteam_aggression_with_elo.png'), bbox_inches='tight')
-        plt.close()
-        for binno in range(len(divisions) + 1):
-            agent_idxs = [idx for idx in range(sum(pop_sizes)) if idx_to_bin(idx) == binno]
-            plt.scatter([aggression[i] for i in agent_idxs],
-                        classic_elos[agent_idxs])
-            plt.ylabel('Elo')
-            plt.xlabel('Aggression Metric')
-            if binno==0:
-                name='Defensive'
-            elif binno == len(divisions):
-                name = 'Aggressive'
+        for ordered in (True,False):
+            if ordered:
+                total_dist=total_dist
             else:
-                name='Bin '+str(binno)
+                total_dist = deorder_total_dist(total_dist)
 
-            plt.title('Evolved Population '+name+' Agents Elos and Aggression')
-            plt.savefig(os.path.join(plot_dir, 'berteam_aggression_with_elo_bin_'+str(binno)+'.png'),
+
+            # analyze based on bins of 'aggressiveness'
+            def idx_to_bin(idx):
+                agg = aggression[idx]
+                bin = 0
+                while bin < len(divisions) and divisions[bin] < agg:
+                    bin += 1
+                return bin
+                elo = classic_elos[idx].item()
+                return str(bin) + ['b', 'g'][int(elo > 1000)]
+
+
+            all_bins = list(set(idx_to_bin(idx) for idx in range(sum(pop_sizes))))
+
+
+            def team_to_team_type(team):
+                team_type = tuple(idx_to_bin(idx) for idx in team)
+                if not ordered:
+                    team_type = tuple(sorted(team_type))
+                return team_type
+
+
+            def avg_cosine_similarity(idxs):
+                cos_sim = 0
+                cnt = 0
+                for choice in itertools.combinations(idxs, 2):
+                    agenti_embed, agentj_embed = [team_trainer.team_builder.berteam.agent_embedding(torch.tensor(idx))
+                                                  for idx in choice]
+                    cos_sim += torch.nn.CosineSimilarity(0)(agenti_embed, agentj_embed).detach().item()
+                    cnt += 1
+                return cos_sim/cnt
+
+
+            team_type_dist = dict()
+            for team in total_dist:
+                prob = total_dist[team]
+                team_type = team_to_team_type(team)
+                if team_type not in team_type_dist:
+                    team_type_dist[team_type] = 0
+                team_type_dist[team_type] += prob
+
+            values = sorted(team_type_dist.keys(), key=lambda t: team_type_dist[t], reverse=True)
+
+            ax = plt.gca()
+            plt.bar(range(len(values)), [team_type_dist[t] for t in values])
+            ax.set_xticks(range(len(values)), values)
+            # plt.bar(range(4), [team_type_dist[t] for t in values[:4]])
+            # ax.set_xticks(range(4), values[:4])
+            plt.title(('' if ordered else 'Unordered') + 'BERTeam Occurrence Probabilities')
+            key = None
+            if len(divisions) == 2:
+                key = 'AGENT KEY:\n0: Defensive\n1: Balanced\n2: Aggressive'
+            else:
+                key = 'AGENT KEY:\n0: Defensive\n' + str(len(divisions)) + ': Aggressive'
+            if key is not None:
+                plt.text(.69, .4, key,
+                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.5),
+                         transform=ax.transAxes,
+                         verticalalignment='center',
+                         # horizontalalignment='center',
+                         )
+            plt.xlabel('Team Composition')
+            plt.ylabel("Probability")
+            plt.ylim(0,1)
+            plt.savefig(os.path.join(plot_dir, ('' if ordered else 'unordered_') + 'berteam_aggression_plot.png'),
                         bbox_inches='tight')
             plt.close()
+            # plt.scatter(aggression, classic_elos)
+            plt.ylabel('Elo')
+            plt.xlabel('Aggression Metric')
+            plt.title('Evolved Population Elos and Aggression')
+            cos_similarity_rec = dict()
+            for binnm in all_bins:
+                agent_idxs = [idx for idx in range(sum(pop_sizes)) if idx_to_bin(idx) == binnm]
+                # plt.ylabel('Elo')
+                # plt.xlabel('Aggression Metric')
+                if binnm == 0:
+                    name = 'Defensive'
+                elif binnm == len(divisions):
+                    name = 'Aggressive'
+                else:
+                    name = 'Bin ' + str(binnm)
+                plt.scatter([aggression[i] for i in agent_idxs],
+                            classic_elos[agent_idxs],
+                            label=name)
+                if ordered:
+                    avg_cos = avg_cosine_similarity(agent_idxs)
+                    print('\nbin', binnm)
+                    print('average cosine similarity:', avg_cos)
+                    print('count', len(agent_idxs))
+                    cos_similarity_rec[binnm] = avg_cos
+
+            plt.legend()
+            plt.savefig(os.path.join(plot_dir, 'aggression_with_elo.png'), bbox_inches='tight')
+            plt.close()
+            if ordered:
+                avg_cos = avg_cosine_similarity(range(sum(pop_sizes)))
+                print('overall avg cosine similarity:', avg_cos)
     trainer.clear()
 
     shutil.rmtree(data_folder)

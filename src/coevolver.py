@@ -298,12 +298,14 @@ class CoevolutionBase:
     def get_info(self, pop_local_idx):
         return dict()
 
-    def create_random_captians(self):
+    def create_random_captians(self, **kwargs):
         """
         Returns: iterable of edges (i,j) that is a matching on (0,...,N)
             if N is not divisible by number of teams, a set of agents are chosen twice
             othewise, each agent is chosen once
         """
+        # TODO: allow for a kwarg that samples one pair of random captians according
+        #  to team chooser and noise dist
 
         unused = set(range(self.N))
         # this will always terminate as long as every population is used by at least one team
@@ -364,7 +366,7 @@ class CoevolutionBase:
                                                         update_epoch_infos=update_epoch_infos,
                                                         **kwargs,
                                                         )
-                            for cap_choice, unq in self.create_random_captians()]
+                            for cap_choice, unq in self.create_random_captians(**kwargs)]
         for i, pre_ep_dict in enumerate(pre_ep_dicts):
             pre_ep_dict['ident'] = str(i)
 
@@ -1212,6 +1214,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             outcome_fn_local_mem: output of PettingZooOutcomeFn.pop_local_mem()
                 is a dict of (global idx -> (trained agent, updated agent info))
         """
+        # TODO: do we save the full updated train dict? or maybe choose which keys to save
         for global_idx in outcome_fn_local_mem:
             for agent_dir, agent, updated_train_dict in outcome_fn_local_mem[global_idx]:
                 pop_idx, local_idx = self.index_to_pop_index(global_idx)
@@ -1222,7 +1225,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                                WorkerClass=None,
                                                load_buffer=updated_train_dict.get(DICT_SAVE_BUFFER, True),
                                                )
-
+                    # TODO: if collect only, we should consider what happens when
+                    #  the episode is longer than buffer capacity
                     if updated_train_dict.get(DICT_COLLECT_ONLY, False):
                         agent_id = self.team_idx_to_agent_id(updated_train_dict[TEMP_DICT_TEAM_MEMBER_ID])
                         cage.update_worker_buffer(local_worker=agent,
