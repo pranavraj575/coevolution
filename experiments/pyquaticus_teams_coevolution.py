@@ -533,7 +533,7 @@ if __name__ == '__main__':
                 if team_idxs not in completed_elo_trieals:
                     completed_elo_trieals[team_idxs] = 0
 
-                if completed_elo_trieals[team_idxs] < trial_nm:
+                if completed_elo_trieals[team_idxs] <= completed_elo_trieals['overall']:
                     left_to_inc += 1
                     if len(teams_to_inc) >= proc*3:
                         # we dont want to do too many at a time
