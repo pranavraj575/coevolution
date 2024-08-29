@@ -535,12 +535,13 @@ if __name__ == '__main__':
 
                 if completed_elo_trieals[team_idxs] <= completed_elo_trieals['overall']:
                     left_to_inc += 1
-                    if len(teams_to_inc) >= proc*3:
+                    if len(teams_to_inc) >= proc*1:
                         # we dont want to do too many at a time
                         continue
                     teams_to_inc.append(team_idxs)
                     completed_elo_trieals[team_idxs] += 1
-            print('unfinished teams:', left_to_inc)
+            print('on iter', completed_elo_trieals['overall'],
+                  'unfinished teams:', left_to_inc)
             if not teams_to_inc:
                 # in this case, we need to increase the overall counter,
                 #   as we have done each possible team this many times
