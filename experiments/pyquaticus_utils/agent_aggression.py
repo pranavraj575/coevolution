@@ -82,36 +82,41 @@ def agent_aggression(agent,
     return sum(all_aggression)/len(all_aggression)
 
 
+def default_potential_opponents(env_constructor):
+    test_env = env_constructor(None)
+    test_env.reset()
+    config_dict = test_env.config_dict
+    obs_normalizer = test_env.agent_obs_normalizer
+    def_easy, def_mid, def_hard = [policy_wrapper(BaseDefender,
+                                                  agent_obs_normalizer=obs_normalizer,
+                                                  identity='def ' + mode
+                                                  )(agent_id=0,
+                                                    team='blue',
+                                                    mode=mode,
+                                                    flag_keepout=config_dict['flag_keepout'],
+                                                    catch_radius=config_dict["catch_radius"],
+                                                    using_pyquaticus=True,
+                                                    )
+                                   for mode in ('easy', 'medium', 'hard')
+                                   ]
+
+    att_easy, att_mid, att_hard = [policy_wrapper(BaseAttacker,
+                                                  agent_obs_normalizer=obs_normalizer,
+                                                  identity='att ' + mode
+                                                  )(agent_id=0,
+                                                    mode=mode,
+                                                    using_pyquaticus=True,
+                                                    )
+                                   for mode in ('easy', 'medium', 'hard')
+                                   ]
+    rand = RandPolicy(test_env.action_space)
+    potential_opponents = [att_easy, att_mid, att_hard, def_easy, def_mid, def_hard, ]
+    return potential_opponents
+
+
 def all_agent_aggression(agents, env_constructor, potential_opponents=None, team_size=2, processes=0):
     if potential_opponents is None:
-        test_env = env_constructor(None)
-        test_env.reset()
-        config_dict = test_env.config_dict
-        obs_normalizer = test_env.agent_obs_normalizer
-        def_easy, def_mid, def_hard = [policy_wrapper(BaseDefender,
-                                                      agent_obs_normalizer=obs_normalizer,
-                                                      identity='def ' + mode
-                                                      )(agent_id=0,
-                                                        team='blue',
-                                                        mode=mode,
-                                                        flag_keepout=config_dict['flag_keepout'],
-                                                        catch_radius=config_dict["catch_radius"],
-                                                        using_pyquaticus=True,
-                                                        )
-                                       for mode in ('easy', 'medium', 'hard')
-                                       ]
-
-        att_easy, att_mid, att_hard = [policy_wrapper(BaseAttacker,
-                                                      agent_obs_normalizer=obs_normalizer,
-                                                      identity='att ' + mode
-                                                      )(agent_id=0,
-                                                        mode=mode,
-                                                        using_pyquaticus=True,
-                                                        )
-                                       for mode in ('easy', 'medium', 'hard')
-                                       ]
-        rand = RandPolicy(test_env.action_space)
-        potential_opponents = [def_easy, def_mid, def_hard, att_easy, att_mid, att_hard, ]
+        potential_opponents = default_potential_opponents(env_constructor=env_constructor)
 
     def get_aggression(agent, train_infos=None):
         env = env_constructor(train_infos)

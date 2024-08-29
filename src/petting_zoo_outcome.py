@@ -17,10 +17,11 @@ class PettingZooOutcomeFn(OutcomeFn):
     outcome function which loads rl agents saved as files in specified directory
     """
 
-    def __init__(self):
+    def __init__(self, quiet=False):
         super().__init__()
         self.local_mem = dict()
         self.counter = 0
+        self.quiet = quiet
 
     def set_zoo_dirs_and_pop_sizes(self, zoo_dirs, population_sizes):
         """
@@ -122,7 +123,8 @@ class PettingZooOutcomeFn(OutcomeFn):
         Returns:
         """
         if self.dir is None:
-            print('WARNING, DIRECTORY NOT SET, AGENTS CANNOT BE SAVED, AND POP_LOCAL_MEM WILL RETURN NOTHING')
+            if not self.quiet:
+                print('WARNING, DIRECTORY NOT SET, AGENTS CANNOT BE SAVED, AND POP_LOCAL_MEM WILL RETURN NOTHING')
             return
         for team_idx, t in enumerate(zip(agent_choices, index_choices, updated_train_infos)):
             for member_idx, (agent, global_idx, updated_train_dict) in enumerate(zip(*t)):

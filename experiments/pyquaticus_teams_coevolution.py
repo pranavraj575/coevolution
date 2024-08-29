@@ -338,9 +338,9 @@ if __name__ == '__main__':
 
             outcom = CTFOutcome()
             agents = []
-            for team in gen_team, [best]*team_size:
+            for team_idxs in gen_team, [best]*team_size:
                 m = []
-                for idx in team:
+                for idx in team_idxs:
                     agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
                     m.append(agent)
                 agents.append(m)
@@ -363,9 +363,9 @@ if __name__ == '__main__':
 
             outcom = CTFOutcome()
             agents = []
-            for team in A, B:
+            for team_idxs in A, B:
                 m = []
-                for idx in team:
+                for idx in team_idxs:
                     if idx >= 0:
                         agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
                         m.append(agent)
@@ -451,6 +451,17 @@ if __name__ == '__main__':
 
             print('time', time.time() - tim)
             print()
+        ###########################################################
+        # analysis
+        ###########################################################
+
+        from experiments.pyquaticus_utils.dist_plot import deorder_total_dist
+        from experiments.pyquaticus_utils.agent_aggression import all_agent_aggression, default_potential_opponents
+
+        import matplotlib.pyplot as plt
+        from pathos.multiprocessing import ProcessPool as Pool
+
+        plt.rcParams.update({'font.size': 14})
 
         print("TRAINING FINISHED, now checking aggression for anal")
         classic_elos = trainer.classic_elos
@@ -459,13 +470,85 @@ if __name__ == '__main__':
             # clear any plots
             shutil.rmtree(plot_dir)
         os.makedirs(plot_dir)
+        elo_trial_file = os.path.join(save_dir, 'elo_trials.pkl')
+        trial_nm = 1
+        elo_trials = {'trials_completed': 0}
+        if os.path.exists(elo_trial_file):
+            f = open(elo_trial_file, 'rb')
+            elo_trials.update(pickle.load(f))
+            f.close()
+
+
+        def get_possible_teams(num):
+            possible_teams = itertools.product(range(num), repeat=team_size)
+            return tuple(set(
+                tuple(sorted(team)) for team in possible_teams
+            ))
+
+
+        def get_outcome_trial(team):
+            potential_opponents = default_potential_opponents(env_constructor=env_constructor)
+            potential_opponent_teams = get_possible_teams(len(potential_opponents))
+            outcome = CTFOutcome(quiet=True)
+            env = env_constructor(None)
+            info_dicts = [{DICT_TRAIN: False}
+                          for _ in range(team_size)]
+            info_dicts = info_dicts, info_dicts
+            ret = dict()
+            for opponent_team_idxs in potential_opponent_teams:
+                opp_team = [potential_opponents[idx] for idx in opponent_team_idxs]
+                come = outcome.get_outcome(team_choices=[[torch.tensor(0) for _ in range(team_size)],
+                                                         [torch.tensor(-1) for _ in range(team_size)]],
+                                           agent_choices=[team, opp_team],
+                                           updated_train_infos=info_dicts,
+                                           env=env,
+                                           )
+                ret[opponent_team_idxs] = {
+                    'team result': come[0][0],
+                    'opponent_ids': tuple(
+                        opp.identity if 'identity' in dir(opp) else 'unknown'
+                        for opp in opp_team
+                    )
+                }
+            return ret
+
+
+        while elo_trials['trials_completed'] < trial_nm:
+            print('running trials on all agent teams (could take forever)',
+                  'at time', time.strftime('%H:%M:%S'))
+            possible_teams = get_possible_teams(sum(pop_sizes))
+            teams_to_inc = []
+            for team_idxs in possible_teams:
+                if team_idxs not in elo_trials:
+                    elo_trials[team_idxs] = []
+                if len(elo_trials[team_idxs]) < trial_nm:
+                    teams_to_inc.append(team_idxs)
+            agents = (
+                [trainer.load_animal(trainer.index_to_pop_index(idx), load_buffer=False)[0]
+                 for idx in team_idxs]
+                for team_idxs in teams_to_inc
+            )
+            if proc > 0:
+                with Pool(processes=proc) as pool:
+                    outcomes = pool.map(get_outcome_trial, agents)
+            else:
+                for name, tream in zip(teams_to_inc, agents):
+                    print('starting team', name)
+                    print(get_outcome_trial(tream))
+                    print('finished team')
+            elo_trials['trials_completed'] += 1
+            print('finsihed at time', time.strftime('%H:%M:%S'))
+            print('saving outcomes')
+            f = open(elo_trial_file, 'wb')
+            pickle.dump(elo_trials, f)
+            f.close()
+
         aggression_file = os.path.join(save_dir, 'aggression.pkl')
         if os.path.exists(aggression_file):
             f = open(aggression_file, 'rb')
             aggression = pickle.load(f)
             f.close()
         else:
-            from experiments.pyquaticus_utils.agent_aggression import all_agent_aggression
 
             start = time.time()
             agents = (trainer.load_animal(trainer.index_to_pop_index(idx), load_buffer=False)[0]
@@ -481,12 +564,6 @@ if __name__ == '__main__':
             f.close()
             print('done with aggression, time:', round(time.time() - start))
 
-        from experiments.pyquaticus_utils.dist_plot import deorder_total_dist
-
-        import matplotlib.pyplot as plt
-
-        plt.rcParams.update({'font.size': 14})
-
         # divisions = None
         divisions = [1.]
         default_num_divisions = 3
@@ -501,16 +578,16 @@ if __name__ == '__main__':
         print('calculating total dist')
 
         start = time.time()
-        total_dist = trainer.team_trainer.get_total_distribution(T=team_size,
-                                                                 N=1,
-                                                                 )
+        original_total_dist = trainer.team_trainer.get_total_distribution(T=team_size,
+                                                                          N=1,
+                                                                          )
         print('done with total dist, time:', round(time.time() - start))
 
-        for ordered in (True,False):
+        for ordered in (True, False):
             if ordered:
-                total_dist=total_dist
+                total_dist = original_total_dist
             else:
-                total_dist = deorder_total_dist(total_dist)
+                total_dist = deorder_total_dist(original_total_dist)
 
 
             # analyze based on bins of 'aggressiveness'
@@ -546,9 +623,9 @@ if __name__ == '__main__':
 
 
             team_type_dist = dict()
-            for team in total_dist:
-                prob = total_dist[team]
-                team_type = team_to_team_type(team)
+            for team_idxs in total_dist:
+                prob = total_dist[team_idxs]
+                team_type = team_to_team_type(team_idxs)
                 if team_type not in team_type_dist:
                     team_type_dist[team_type] = 0
                 team_type_dist[team_type] += prob
@@ -575,7 +652,7 @@ if __name__ == '__main__':
                          )
             plt.xlabel('Team Composition')
             plt.ylabel("Probability")
-            plt.ylim(0,1)
+            plt.ylim(0, 1)
             plt.savefig(os.path.join(plot_dir, ('' if ordered else 'unordered_') + 'berteam_aggression_plot.png'),
                         bbox_inches='tight')
             plt.close()
@@ -610,6 +687,7 @@ if __name__ == '__main__':
             if ordered:
                 avg_cos = avg_cosine_similarity(range(sum(pop_sizes)))
                 print('overall avg cosine similarity:', avg_cos)
+
     trainer.clear()
 
     shutil.rmtree(data_folder)
