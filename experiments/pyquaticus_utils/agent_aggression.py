@@ -109,7 +109,7 @@ def default_potential_opponents(env_constructor):
                                                     )
                                    for mode in ('easy', 'medium', 'hard')
                                    ]
-    rand = RandPolicy(test_env.action_space)
+    rand = RandPolicy(test_env.action_space(0))
     potential_opponents = [att_easy, att_mid, att_hard,
                            def_easy, def_mid, def_hard,
                            rand,
