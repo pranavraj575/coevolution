@@ -706,7 +706,7 @@ if __name__ == '__main__':
                         bbox_inches='tight')
             plt.close()
             # plt.scatter(aggression, classic_elos)
-            plt.ylabel('Evolution Elo')
+            plt.ylabel('Individual Elo')
             plt.xlabel('Aggression Metric')
             plt.title('Evolved Population Elos and Aggression')
             cos_similarity_rec = dict()

@@ -90,7 +90,7 @@ if __name__ == '__main__':
     def env_constructor(train_infos):
         return MyQuaticusEnv(save_video=args.save_video is not None,
                              render_mode=RENDER_MODE,
-                             team_size=1,
+                             team_size=team_size,
                              config_dict=config_dict,
                              frame_freq=args.frame_freq,
                              )
@@ -237,8 +237,8 @@ if __name__ == '__main__':
 
         elo_conversion = 400/np.log(10)
         scaled = guesstimated_elos*elo_conversion + 1000
-        for team, prob, elo in zip(possible_teams, occurence_probs, scaled):
-            print(team, ':', elo.item(), ':', prob.item())
+        for i, (team, prob, elo) in enumerate(zip(possible_teams, occurence_probs, scaled)):
+            print(i + 1, ':', team, ':', round(prob.item(), 2), ':', elo.item())
 
         all_team_dist = []
         for team_dist in plotting['team_dists_non_ordered']:
