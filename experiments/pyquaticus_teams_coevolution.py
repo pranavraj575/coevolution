@@ -586,7 +586,6 @@ if __name__ == '__main__':
             f.close()
             print('done saving')
             del elo_trials
-            print(overall_completed_trials)
 
         if os.path.exists(aggression_file):
             f = open(aggression_file, 'rb')
