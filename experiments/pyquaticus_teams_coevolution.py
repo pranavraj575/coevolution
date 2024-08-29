@@ -478,14 +478,15 @@ if __name__ == '__main__':
             shutil.rmtree(plot_dir)
         os.makedirs(plot_dir)
 
-        trial_nm = 2
+        trial_nm = 10
 
         if os.path.exists(elo_num_trial_file):
             f = open(elo_num_trial_file, 'rb')
             completed_elo_trieals = pickle.load(f)
             f.close()
         else:
-            completed_elo_trieals = {'overall': 0}
+            completed_elo_trieals = dict()
+        overall_completed_trials = 0
 
 
         def get_possible_teams(num):
@@ -522,7 +523,7 @@ if __name__ == '__main__':
             return ret
 
 
-        while completed_elo_trieals['overall'] < trial_nm:
+        while overall_completed_trials < trial_nm:
             print('running trials on all agent teams (could take forever)',
                   'at time', time.strftime('%H:%M:%S'))
             start = time.time()
@@ -533,24 +534,21 @@ if __name__ == '__main__':
                 if team_idxs not in completed_elo_trieals:
                     completed_elo_trieals[team_idxs] = 0
 
-                if completed_elo_trieals[team_idxs] <= completed_elo_trieals['overall']:
+                if completed_elo_trieals[team_idxs] <= overall_completed_trials:
                     left_to_inc += 1
-                    if len(teams_to_inc) >= proc*1:
+                    if len(teams_to_inc) >= max(1, proc*3):
                         # we dont want to do too many at a time
                         continue
                     teams_to_inc.append(team_idxs)
                     completed_elo_trieals[team_idxs] += 1
-            print('on iter', completed_elo_trieals['overall'],
-                  'unfinished teams:', left_to_inc)
+            print('on iter', overall_completed_trials, '; ',
+                  'unfinished teams:', left_to_inc, '; ',
+                  'teams this loop:', len(teams_to_inc)
+                  )
             if not teams_to_inc:
                 # in this case, we need to increase the overall counter,
                 #   as we have done each possible team this many times
-                completed_elo_trieals['overall'] += 1
-                print('saving counters')
-                f = open(elo_num_trial_file, 'wb')
-                pickle.dump(completed_elo_trieals, f)
-                f.close()
-                print('done saving')
+                overall_completed_trials += 1
                 continue
 
             agents = (
@@ -562,7 +560,7 @@ if __name__ == '__main__':
                 with Pool(processes=proc) as pool:
                     outcomes = pool.map(get_outcome_trial, agents)
             else:
-                outcomes = (get_outcome_trial(tream) for tream in teams_to_inc)
+                outcomes = [get_outcome_trial(agent) for agent in agents]
 
             print('finsihed at time', time.strftime('%H:%M:%S'))
             print('total time:', round(time.time() - start))
@@ -588,6 +586,7 @@ if __name__ == '__main__':
             f.close()
             print('done saving')
             del elo_trials
+            print(overall_completed_trials)
 
         if os.path.exists(aggression_file):
             f = open(aggression_file, 'rb')
