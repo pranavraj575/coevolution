@@ -22,6 +22,10 @@ total_dist_file = os.path.join(save_dir,
                                ident,
                                'total_dist.pkl',
                                )
+aggression_file = os.path.join(save_dir,
+                               ident,
+                               'aggression.pkl',
+                               )
 output_file = os.path.join(save_dir,
                            ident,
                            'elos_of_all_teams.pkl')
@@ -49,6 +53,7 @@ elo_dict = dict()
 
 # just do grad descent on whole dataset
 teams = sorted(elo_trials.keys())
+team_size = 2
 team_to_idx = {team: i for i, team in enumerate(teams)}
 if os.path.exists(output_file):
     dic = torch.load(output_file)
@@ -64,11 +69,27 @@ if os.path.exists(output_file):
         f = open(total_dist_file, 'rb')
         total_dist = pickle.load(f)
         f.close()
+        f = open(aggression_file, 'rb')
+        aggression = pickle.load(f)
+        f.close()
+        aggression = [agg > 1 for agg in aggression]
 
         total_dist = deorder_total_dist(total_dist)
-        plt.scatter([elos[team_to_idx[team]].item()*elo_conversion + 1000 for team in teams],
-                    [total_dist[team] for team in teams],
-                    )
+        split_agg_agents = [[[], []] for _ in range(team_size+1)]
+
+        for team in teams:
+            conv_elo = elos[team_to_idx[team]].item()*elo_conversion + 1000
+            occurrence = total_dist[team]
+            # number of aggressive agents
+            index = sum([aggression[idx] for idx in team])
+            split_agg_agents[index][0].append(conv_elo)
+            split_agg_agents[index][1].append(occurrence)
+        for agg_agents,(x,y) in enumerate(split_agg_agents):
+            plt.scatter(x,y,label=str(agg_agents)+' aggressive')
+        #plt.scatter([elos[team_to_idx[team]].item()*elo_conversion + 1000 for team in teams],
+        #            [total_dist[team] for team in teams],
+        #            )
+        plt.legend()
         plt.xlabel('True Elo')
         plt.ylabel('BERTeam occurrence probability')
         plt.savefig(plot_file)
