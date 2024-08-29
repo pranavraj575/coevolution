@@ -29,14 +29,15 @@ if __name__ == '__main__':
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
     arena_size = tuple(float(t) for t in arena_size)
 
-    save_file = 'torunament' + ('_team_size_' + str(args.team_size) +
-                                '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
-                                )
-
-    save_dir = os.path.join(DIR, 'data', 'save', 'basic_team_tournament', save_file + '.pkl')
-    if not os.path.exists(os.path.dirname(save_dir)):
-        os.makedirs(os.path.dirname(save_dir))
-    print('saving to', save_dir)
+    save_dir = os.path.join(DIR, 'data', 'save', 'basic_team_tournament')
+    save_file_name = 'torunament' + ('_team_size_' + str(args.team_size) +
+                                     '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
+                                     )
+    result_file = os.path.join(save_dir, save_file_name + '.pkl')
+    elo_file = os.path.join(save_dir, 'elos_' + save_file_name + '.pkl')
+    if not os.path.exists(os.path.dirname(result_file)):
+        os.makedirs(os.path.dirname(result_file))
+    print('saving to', result_file)
 
 
     def keify(thing):
@@ -58,8 +59,8 @@ if __name__ == '__main__':
     }
     total = 0
 
-    if os.path.exists(save_dir):
-        f = open(save_dir, 'rb')
+    if os.path.exists(result_file):
+        f = open(result_file, 'rb')
         result_dict = pickle.load(f)
         f.close()
         for a in result_dict:
@@ -69,55 +70,62 @@ if __name__ == '__main__':
             break
         if total >= args.samples:
             elo_conversion = 400/np.log(10)
-            elo_update = 32*np.log(10)/400
             print('total value', total, 'is more than num samples', args.samples)
             temp_possible_teams = possible_teams
             # temp_possible_teams = [t for t in possible_teams if 2 in t]
-            for tie_counts in True, False:
-                print()
-                print('tie counts:', tie_counts)
-                f = open(save_dir, 'rb')
-                result_dict = pickle.load(f)
-                f.close()
-                elos = torch.nn.Parameter(torch.zeros(len(possible_teams)))
-                optim = torch.optim.Adam(params=torch.nn.ParameterList([elos]),
-                                         lr=1e-2)
-                batch = 128
-                for tt in range(1000):
+            tie_counts = True
+            print('tie counts:', tie_counts)
+            f = open(result_file, 'rb')
+            result_dict = pickle.load(f)
+            f.close()
+            elos = torch.nn.Parameter(torch.zeros(len(possible_teams)))
+            optim = torch.optim.Adam(params=torch.nn.ParameterList([elos]),
+                                     lr=1e-2)
+            batch = 128
+            for tt in range(1000):
 
-                    optim.zero_grad()
-                    old_elos = elos.clone().detach()
-                    matches = list(itertools.combinations(temp_possible_teams, 2))
-                    matches = [matches[t] for t in torch.randperm(len(matches))]
-                    cnt = 0
-                    for (A, B) in matches:
-                        w, t, l = result_dict[A][B]
+                optim.zero_grad()
+                old_elos = elos.clone().detach()
+                matches = list(itertools.combinations(temp_possible_teams, 2))
+                matches = [matches[t] for t in torch.randperm(len(matches))]
+                cnt = 0
+                for (A, B) in matches:
+                    w, t, l = result_dict[A][B]
 
-                        if not tie_counts and (w > 0 or l > 0):
-                            t = 0
-                        expectation = torch.softmax(elos[(team_to_idx[A], team_to_idx[B]),], dim=-1)
-                        actual = torch.tensor([w + t/2, l + t/2])/(w + t + l)
-                        loss = torch.nn.MSELoss().forward(expectation, actual)
-                        loss.backward()
-                        if cnt >= batch:
-                            cnt = 0
-                            optim.step()
-                            optim.zero_grad()
-                    optim.step()
+                    if not tie_counts and (w > 0 or l > 0):
+                        t = 0
+                    expectation = torch.softmax(elos[(team_to_idx[A], team_to_idx[B]),], dim=-1)
+                    actual = torch.tensor([w + t/2, l + t/2])/(w + t + l)
+                    loss = torch.nn.MSELoss().forward(expectation, actual)
+                    loss.backward()
+                    if cnt >= batch:
+                        cnt = 0
+                        optim.step()
+                        optim.zero_grad()
+                optim.step()
 
-                    diff = torch.mean(torch.abs(elos - old_elos)).item()*elo_conversion
+                diff = torch.mean(torch.abs(elos - old_elos)).item()*elo_conversion
 
-                    print('diff', round(diff, 6), end='            \r')
-                    # if we are updating elos by less than .001 of an elo, terminate
-                    if tt > 10 and diff <= 1E-3:
-                        break
+                print('diff', round(diff, 6), end='            \r')
+                # if we are updating elos by less than .001 of an elo, terminate
+                if tt > 10 and diff <= 1E-3:
+                    break
 
-                converted = elos*elo_conversion + 1000
-                win_prob = torch.softmax(elos, -1)
-                temp_possible_teams.sort(key=lambda team: elos[team_to_idx[team]].item())
-                for team in temp_possible_teams:
-                    idx = team_to_idx[team]
-                    print(team, ':', converted[idx].item(), ':', win_prob[idx].item())
+            converted = elos*elo_conversion + 1000
+            win_prob = torch.softmax(elos, -1)
+            team_to_elo = {
+                team: elos[team_to_idx[team]].item()
+                for team in possible_teams
+            }
+            f = open(elo_file, 'wb')
+            pickle.dump(team_to_elo, f)
+            f.close()
+            temp_possible_teams = sorted(temp_possible_teams,
+                                         key=lambda team: elos[team_to_idx[team]].item())
+
+            for team in temp_possible_teams:
+                idx = team_to_idx[team]
+                print(team, ':', converted[idx].item(), ':', win_prob[idx].item())
             quit()
     team_size = args.team_size
 
@@ -240,7 +248,7 @@ if __name__ == '__main__':
                 result_dict[B][A][0] += 1
         print('total time:', round(time.time() - tim))
         print('saving')
-        f = open(save_dir, 'wb')
+        f = open(result_file, 'wb')
         pickle.dump(result_dict, f)
         f.close()
         print('done saving')

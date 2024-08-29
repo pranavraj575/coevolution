@@ -465,18 +465,27 @@ if __name__ == '__main__':
 
         print("TRAINING FINISHED, now checking aggression for anal")
         classic_elos = trainer.classic_elos
+
+        elo_trial_file = os.path.join(save_dir, 'elo_trials.pkl')
+        elo_num_trial_file = os.path.join(save_dir, 'elo_num_trials.pkl')
+        aggression_file = os.path.join(save_dir, 'aggression.pkl')
+        total_dist_file = os.path.join(save_dir, 'total_dist.pkl')
+
         plot_dir = os.path.join(save_dir, 'plots')
+
         if os.path.exists(plot_dir):
             # clear any plots
             shutil.rmtree(plot_dir)
         os.makedirs(plot_dir)
-        elo_trial_file = os.path.join(save_dir, 'elo_trials.pkl')
-        trial_nm = 1
-        elo_trials = {'trials_completed': 0}
-        if os.path.exists(elo_trial_file):
-            f = open(elo_trial_file, 'rb')
-            elo_trials.update(pickle.load(f))
+
+        trial_nm = 2
+
+        if os.path.exists(elo_num_trial_file):
+            f = open(elo_num_trial_file, 'rb')
+            completed_elo_trieals = pickle.load(f)
             f.close()
+        else:
+            completed_elo_trieals = {'overall': 0}
 
 
         def get_possible_teams(num):
@@ -513,16 +522,36 @@ if __name__ == '__main__':
             return ret
 
 
-        while elo_trials['trials_completed'] < trial_nm:
+        while completed_elo_trieals['overall'] < trial_nm:
             print('running trials on all agent teams (could take forever)',
                   'at time', time.strftime('%H:%M:%S'))
+            start = time.time()
             possible_teams = get_possible_teams(sum(pop_sizes))
             teams_to_inc = []
+            left_to_inc = 0
             for team_idxs in possible_teams:
-                if team_idxs not in elo_trials:
-                    elo_trials[team_idxs] = []
-                if len(elo_trials[team_idxs]) < trial_nm:
+                if team_idxs not in completed_elo_trieals:
+                    completed_elo_trieals[team_idxs] = 0
+
+                if completed_elo_trieals[team_idxs] < trial_nm:
+                    left_to_inc += 1
+                    if len(teams_to_inc) >= proc*3:
+                        # we dont want to do too many at a time
+                        continue
                     teams_to_inc.append(team_idxs)
+                    completed_elo_trieals[team_idxs] += 1
+            print('unfinished teams:', left_to_inc)
+            if not teams_to_inc:
+                # in this case, we need to increase the overall counter,
+                #   as we have done each possible team this many times
+                completed_elo_trieals['overall'] += 1
+                print('saving counters')
+                f = open(elo_num_trial_file, 'wb')
+                pickle.dump(completed_elo_trieals, f)
+                f.close()
+                print('done saving')
+                continue
+
             agents = (
                 [trainer.load_animal(trainer.index_to_pop_index(idx), load_buffer=False)[0]
                  for idx in team_idxs]
@@ -532,18 +561,33 @@ if __name__ == '__main__':
                 with Pool(processes=proc) as pool:
                     outcomes = pool.map(get_outcome_trial, agents)
             else:
-                for name, tream in zip(teams_to_inc, agents):
-                    print('starting team', name)
-                    print(get_outcome_trial(tream))
-                    print('finished team')
-            elo_trials['trials_completed'] += 1
+                outcomes = (get_outcome_trial(tream) for tream in teams_to_inc)
+
             print('finsihed at time', time.strftime('%H:%M:%S'))
+            print('total time:', round(time.time() - start))
+
+            elo_trials = dict()
+            if os.path.exists(elo_trial_file):
+                f = open(elo_trial_file, 'rb')
+                elo_trials.update(pickle.load(f))
+                f.close()
+
+            for out_dict, team_idxs in zip(outcomes, teams_to_inc):
+                if team_idxs not in elo_trials:
+                    elo_trials[team_idxs] = []
+                elo_trials[team_idxs].append(out_dict)
+
             print('saving outcomes')
             f = open(elo_trial_file, 'wb')
             pickle.dump(elo_trials, f)
             f.close()
 
-        aggression_file = os.path.join(save_dir, 'aggression.pkl')
+            f = open(elo_num_trial_file, 'wb')
+            pickle.dump(completed_elo_trieals, f)
+            f.close()
+            print('done saving')
+            del elo_trials
+
         if os.path.exists(aggression_file):
             f = open(aggression_file, 'rb')
             aggression = pickle.load(f)
@@ -574,14 +618,20 @@ if __name__ == '__main__':
             divisions = [np.quantile(test, q).item() for q in
                          (i/default_num_divisions for i in range(1, default_num_divisions))
                          ]
-
-        print('calculating total dist')
-
-        start = time.time()
-        original_total_dist = trainer.team_trainer.get_total_distribution(T=team_size,
-                                                                          N=1,
-                                                                          )
-        print('done with total dist, time:', round(time.time() - start))
+        if os.path.exists(total_dist_file):
+            f = open(total_dist_file, 'rb')
+            original_total_dist = pickle.load(f)
+            f.close()
+        else:
+            print('calculating total dist')
+            start = time.time()
+            original_total_dist = trainer.team_trainer.get_total_distribution(T=team_size,
+                                                                              N=1,
+                                                                              )
+            print('done with total dist, time:', round(time.time() - start))
+            f = open(total_dist_file, 'wb')
+            pickle.dump(original_total_dist, f)
+            f.close()
 
         for ordered in (True, False):
             if ordered:
@@ -657,7 +707,7 @@ if __name__ == '__main__':
                         bbox_inches='tight')
             plt.close()
             # plt.scatter(aggression, classic_elos)
-            plt.ylabel('Elo')
+            plt.ylabel('Evolution Elo')
             plt.xlabel('Aggression Metric')
             plt.title('Evolved Population Elos and Aggression')
             cos_similarity_rec = dict()
