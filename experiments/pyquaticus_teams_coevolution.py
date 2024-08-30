@@ -506,9 +506,6 @@ if __name__ == '__main__':
             info_dicts = info_dicts, info_dicts
             ret = dict()
             for opponent_team_idxs in potential_opponent_teams:
-                # only do random stuff
-                if 6 not in opponent_team_idxs:
-                    continue
                 opp_team = [potential_opponents[idx] for idx in opponent_team_idxs]
                 come = outcome.get_outcome(team_choices=[[torch.tensor(0) for _ in range(team_size)],
                                                          [torch.tensor(-1) for _ in range(team_size)]],

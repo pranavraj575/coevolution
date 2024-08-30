@@ -194,7 +194,8 @@ for epoch in range(1000):
     for team in elo_trials:
         this_loss = torch.zeros(1)
         count = 0
-        for trial in elo_trials[team]:#[:2]:
+        for trial in elo_trials[team]:
+        #for trial in elo_trials[team][:2]+elo_trials[team][-2:]:
             for opp in trial:
                 opp_elo = elo_ref[opp]
                 expectation = 1/(1 + torch.exp(opp_elo - elos[team_to_idx[team]]))
