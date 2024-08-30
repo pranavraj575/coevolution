@@ -1199,7 +1199,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         for t in updated_train_infos:
             for train_dict in t:
                 if self.local_collection_mode:
-                    if train_dict[DICT_IS_WORKER] and train_dict[DICT_TRAIN]:
+                    # TODO: sometimes info dict keys get lost?
+                    if train_dict.get(DICT_IS_WORKER, True) and train_dict.get(DICT_TRAIN, True):
                         train_dict[DICT_COLLECT_ONLY] = True
 
         pre_ep_dict.update({'agents': [

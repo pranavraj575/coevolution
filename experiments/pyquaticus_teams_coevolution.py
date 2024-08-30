@@ -478,7 +478,7 @@ if __name__ == '__main__':
             shutil.rmtree(plot_dir)
         os.makedirs(plot_dir)
 
-        trial_nm = 10
+        trial_nm = 1
 
         if os.path.exists(elo_num_trial_file):
             f = open(elo_num_trial_file, 'rb')
@@ -706,9 +706,9 @@ if __name__ == '__main__':
                         bbox_inches='tight')
             plt.close()
             # plt.scatter(aggression, classic_elos)
-            plt.ylabel('Individual Elo')
+            plt.ylabel('Fitness (Captian Elo)')
             plt.xlabel('Aggression Metric')
-            plt.title('Evolved Population Elos and Aggression')
+            plt.title('Evolved Population Fitness and Aggression')
             cos_similarity_rec = dict()
             for binnm in all_bins:
                 agent_idxs = [idx for idx in range(sum(pop_sizes)) if idx_to_bin(idx) == binnm]
