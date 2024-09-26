@@ -1335,13 +1335,20 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                      'cloned_agents': [],
                      'cloned_elos': [],
                      }
+        # randomly permute to avoid favoring replacemnets from a particular population
+        for pop_idx in torch.randperm(len(self.population_sizes)):
+            popsize = self.population_sizes[pop_idx]
+            # cumulative popsize of all pipulations less than popidx
+            # useful to translate to global idx
+            cum_popsize = self.cumsums[pop_idx]
 
-        if type(number_to_replace) == int:
-            number_to_replace = [number_to_replace for _ in self.population_sizes]
-        cum_popsize = 0
-        for pop_idx, popsize in enumerate(self.population_sizes):
-            if number_to_replace[pop_idx] <= 0:
+            if type(number_to_replace) == int:
+                # if we are done replacing, continue
+                if number_to_replace <= 0:
+                    continue
+            elif number_to_replace[pop_idx] <= 0:
                 continue
+
             # pick the agents to potentially clone
             candidate_clone_idxs = list(self._get_valid_idxs(validity_fn=
                                                              lambda info:
@@ -1415,7 +1422,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                     breed_dic['target_elos'].append(target_elo)
                     # note: it is probably necessary to save clone_elo and target_elo lists beforehand as self.captain_elos
                     # are being reassigned with self.replace_agent
-            cum_popsize += popsize
+
+            if type(number_to_replace) == int:
+                number_to_replace -= breed_dic['number_replaced'][pop_idx]
         breed_dic['based_elos'] = base_elo
         if base_elo is not None:
             self.rebase_elos(base_elo=base_elo)

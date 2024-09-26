@@ -118,6 +118,18 @@ def default_potential_opponents(env_constructor):
 
 
 def all_agent_aggression(agents, env_constructor, potential_opponents=None, team_size=2, processes=0):
+    """
+
+    Args:
+        agents: generator of agents, each agent must be able to be a team member of outcome
+        env_constructor:
+        potential_opponents:
+        team_size:
+        processes:
+
+    Returns:
+        list of scalars that is eqch agents aggressiveness in order
+    """
     if potential_opponents is None:
         potential_opponents = default_potential_opponents(env_constructor=env_constructor)
 
@@ -139,6 +151,10 @@ def all_agent_aggression(agents, env_constructor, potential_opponents=None, team
 
 
 print("WARNING: USING AGENT AGGRESSION, MUST CHANGE LINE 763 IN PYQUATICUS SO OBSTACLES DONT CHANGE SCORE")
+# if player.team == Team.RED_TEAM:
+#     self.game_score['blue_tags'] += 0
+# else:
+#   self.game_score['red_tags'] += 0
 
 if __name__ == '__main__':
     import time

@@ -39,7 +39,8 @@ if __name__ == '__main__':
                                   LSTEmbedding,
                                   IdentityEncoding,
                                   ClassicPositionalEncoding,
-                                  PositionalAppender)
+                                  PositionalAppender,
+                                  )
     from BERTeam.buffer import BinnedReplayBufferDiskStorage
     from BERTeam.trainer import MLMTeamTrainer
 
@@ -122,18 +123,16 @@ if __name__ == '__main__':
                        DICT_IS_WORKER: True,
                        }
 
-    ppokwargs = dict()
-
     policy_kwargs = {
         'net_arch': dict(pi=net_arch,
                          vf=net_arch),
     }
+    ppokwargs = dict()
+
+
     create_ppo = lambda i, env: (WorkerPPO(policy=PPOMlp,
                                            env=env,
-                                           policy_kwargs={
-                                               'net_arch': dict(pi=[64, 64],
-                                                                vf=[64, 64]),
-                                           },
+                                           policy_kwargs=policy_kwargs,
                                            **ppokwargs
                                            ), train_info_dict.copy()
                                  )
@@ -142,6 +141,7 @@ if __name__ == '__main__':
     }
     create_dqn = lambda i, env: (WorkerDQN(policy=DQNMlp,
                                            env=env,
+                                           policy_kwargs=policy_kwargs,
                                            **dqnkwargs
                                            ), train_info_dict.copy()
                                  )
