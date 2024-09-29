@@ -403,7 +403,12 @@ class PZCC_MAPElites(ComparisionExperiment):
                                              ).indices
             candidate_target_idxs = [idx for idx in candidate_target_idxs if idx not in elite]
             # can replace at most this number
-            number_to_replace[pop_idx] = min(len(candidate_target_idxs), number_to_replace[pop_idx])
+
+            if type(number_to_replace) == int:
+                temp_replace = min(len(candidate_target_idxs), number_to_replace)
+            else:
+                temp_replace = min(len(candidate_target_idxs), number_to_replace[pop_idx])
+
             if not candidate_target_idxs:
                 continue
 
@@ -418,7 +423,7 @@ class PZCC_MAPElites(ComparisionExperiment):
             # distribution of agents based on how bad they are COMPARATIVELY
             candidate_target_dist = self.get_inverted_distribution(elos=comp_target_elos)
             # pick a random subset of target agents to replace based on this distribution
-            target_idx_idxs = torch.multinomial(candidate_target_dist, number_to_replace[pop_idx], replacement=False)
+            target_idx_idxs = torch.multinomial(candidate_target_dist, temp_replace, replacement=False)
             # these are the global indexes of the targets
             target_global_idxs = [candidate_target_idxs[target_idx_idx] for target_idx_idx in target_idx_idxs]
             target_elos = [self.elos[target_global_idx].item() for target_global_idx in target_global_idxs]

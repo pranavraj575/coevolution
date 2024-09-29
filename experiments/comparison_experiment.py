@@ -16,7 +16,7 @@ if __name__ == '__main__':
     add_coevolution_args(PARSER, clone_default=1)
     add_pyquaticus_args(PARSER)
     add_berteam_args(PARSER)
-    add_experiment_args(PARSER, 'pyquaticus_coev_exp')
+    add_experiment_args(PARSER, 'pyq_comp_exp')
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
 
@@ -94,20 +94,27 @@ if __name__ == '__main__':
     clone_replacements = args.clone_replacements
 
     buffer_cap = args.replay_buffer_capacity
-    net_arch = tuple(ast.literal_eval('(' + args.net_arch + ')'))
-    net_arch2 = tuple(ast.literal_eval('(' + args.net_arch2 + ')'))
+    net_arch = list(ast.literal_eval('(' + args.net_arch + ')'))
+    net_arch2 = list(ast.literal_eval('(' + args.net_arch2 + ')'))
 
     lstm_dropout = args.lstm_dropout
     if lstm_dropout is None:
         lstm_dropout = args.dropout
+    thing = (('_rb_cap_' + str(args.replay_buffer_capacity)) +
+             ('_archs_' +
+              ('_'.join([str(s) for s in net_arch])) + '__' +
+              ('_'.join([str(s) for s in net_arch2]))
+              )
+             )
     ident = (args.ident +
+             thing +
              coevolution_string(args) +
              pyquaticus_string(args) +
              ('' if args.MCAA_mainland else berteam_string(args)) +
              ('_MAPE' if args.MAP_Elites else '') +
              ('_MCAA' if args.MCAA_mainland else '') +
-             ('_games_' + str(args.games_per_epoch)) +
-             '_popsize_' + str(args.island_size)
+             ('_gms_' + str(args.games_per_epoch)) +
+             '_pop_' + str(args.island_size)
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
@@ -137,52 +144,59 @@ if __name__ == '__main__':
                        DICT_IS_WORKER: True,
                        }
 
-    policy_kwargs = {
+    ppo_policy_kwargs = {
         'net_arch': dict(pi=net_arch,
                          vf=net_arch),
     }
 
-    policy_kwargs2 = {
+    ppo_policy_kwargs2 = {
         'net_arch': dict(pi=net_arch2,
                          vf=net_arch2),
+    }
+
+    dqn_policy_kwargs = {
+        'net_arch': net_arch,
+    }
+
+    dqn_policy_kwargs2 = {
+        'net_arch': net_arch2,
     }
 
     ppokwargs = dict()
     create_ppo = lambda i, env: (WorkerPPO(policy=PPOMlp,
                                            env=env,
-                                           policy_kwargs=policy_kwargs,
+                                           policy_kwargs=ppo_policy_kwargs,
                                            **ppokwargs
                                            ), train_info_dict.copy()
                                  )
 
     create_ppo2 = lambda i, env: (WorkerPPO(policy=PPOMlp,
-                                           env=env,
-                                           policy_kwargs=policy_kwargs2,
-                                           **ppokwargs
-                                           ), train_info_dict.copy()
-                                 )
+                                            env=env,
+                                            policy_kwargs=ppo_policy_kwargs2,
+                                            **ppokwargs
+                                            ), train_info_dict.copy()
+                                  )
     dqnkwargs = {
         'buffer_size': buffer_cap,
     }
     create_dqn = lambda i, env: (WorkerDQN(policy=DQNMlp,
                                            env=env,
-                                           policy_kwargs=policy_kwargs,
+                                           policy_kwargs=dqn_policy_kwargs,
                                            **dqnkwargs
                                            ), train_info_dict.copy()
                                  )
     create_dqn2 = lambda i, env: (WorkerDQN(policy=DQNMlp,
-                                           env=env,
-                                           policy_kwargs=policy_kwargs2,
-                                           **dqnkwargs
-                                           ), train_info_dict.copy()
-                                 )
-
+                                            env=env,
+                                            policy_kwargs=dqn_policy_kwargs2,
+                                            **dqnkwargs
+                                            ), train_info_dict.copy()
+                                  )
 
     worker_constructors = [create_ppo,
-                create_ppo2,
-                create_dqn,
-                create_dqn2,
-                ]
+                           create_ppo2,
+                           create_dqn,
+                           create_dqn2,
+                           ]
 
     pop_sizes = [args.island_size for _ in worker_constructors]
 
