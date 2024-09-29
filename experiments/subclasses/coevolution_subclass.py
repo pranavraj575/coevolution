@@ -14,7 +14,11 @@ from src.utils.dict_keys import (DICT_AGE,
                                  DICT_KEEP_OLD_BUFFER,
                                  DICT_UPDATE_WITH_OLD_BUFFER,
                                  TEMP_DICT_CAPTIAN,
+                                 DICT_EPOCH_LAST_UPDATED,
                                  )
+
+DICT_EPOCH_LAST_BEHAVIOR_UPDATE = 'epoch_last_behavior_update'
+DICT_BEHAVIOR_VECTOR = 'behavior_vector'
 
 
 class ComparisionExperiment(PettingZooCaptianCoevolution):
@@ -144,7 +148,6 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                 **kwargs,
             )
 
-
         # TODO: pass through preepisode dicts using MCAA to generate teams
         #  also maybe do the pre episode generation to make tournament form
         pre_ep_dicts = [self.captianless_pre_episode() for _ in range(self.games_per_epoch)]
@@ -201,6 +204,31 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                 'episode_info': episode_info,
                 'captian_choices': [None for _ in range(len(teams))],
                 }
+
+    def create_team(self,
+                    team_idx,
+                    captian=None,
+                    obs_preembed=None,
+                    obs_mask=None,
+                    noise_model=None,
+                    team_noise_model=None,
+                    ):
+        if self.MCAA:
+            team_size = self.team_sizes[team_idx]
+            team = self.team_trainer.create_teams(T=team_size,
+                                                  N=1,
+                                                  noise_model=noise_model,
+                                                  )
+            team = team.detach().flatten()
+            return team, None
+        else:
+            return super().create_team(team_idx=team_idx,
+                                       captian=captian,
+                                       obs_preembed=obs_preembed,
+                                       obs_mask=obs_mask,
+                                       noise_model=noise_model,
+                                       team_noise_model=team_noise_model,
+                                       )
 
 
 class PZCC_MAPElites(ComparisionExperiment):
@@ -266,16 +294,37 @@ class PZCC_MAPElites(ComparisionExperiment):
         """
         print('obtaining behavior')
         # TODO: send in aggressions or some other metric
-        agents = (self.load_animal(self.index_to_pop_index(i))[0] for i in range(self.N))
+        agent_indices = []
+        aggressions = [0 for _ in range(self.N)]
+        for i in range(self.N):
+            info = self.load_animal(self.index_to_pop_index(i), load_buffer=False)[1]
+            last_update = info.get(DICT_EPOCH_LAST_UPDATED, 0)
+            last_behavior_update = info.get(DICT_EPOCH_LAST_BEHAVIOR_UPDATE, -1)
+            if last_behavior_update < last_update:
+                agent_indices.append(i)
+            else:
+                aggressions[i] = info[DICT_BEHAVIOR_VECTOR]
+
+        agents = (self.load_animal(self.index_to_pop_index(i))[0] for i in agent_indices)
+
         (att_easy, att_mid, att_hard,
          def_easy, def_mid, def_hard,
          rand) = default_potential_opponents(env_constructor=self.env_constructor)
-        aggressions = all_agent_aggression(agents,
-                                           env_constructor=self.env_constructor,
-                                           team_size=self.team_sizes[0],
-                                           processes=self.processes,
-                                           potential_opponents=[att_easy, att_hard, def_easy, def_hard],
-                                           )
+        aggression_updates = all_agent_aggression(agents,
+                                                  env_constructor=self.env_constructor,
+                                                  team_size=self.team_sizes[0],
+                                                  processes=self.processes,
+                                                  potential_opponents=[att_easy, att_hard, def_easy, def_hard],
+                                                  )
+        for i, agg in zip(agent_indices, aggression_updates):
+            aggressions[i] = agg
+
+            info = self.load_animal(self.index_to_pop_index(i), load_buffer=False)[1]
+            info[DICT_EPOCH_LAST_BEHAVIOR_UPDATE] = self.epochs
+            info[DICT_BEHAVIOR_VECTOR] = agg
+            pop_idx, local_idx = self.index_to_pop_index(i)
+            cage = self.zoo[pop_idx]
+            cage.overwrite_info(key=str(local_idx), info=info)
         return torch.tensor(aggressions).reshape(self.N, 1)
 
     def get_fitness_estimate(self, elos, locations, behavior_radius=None):

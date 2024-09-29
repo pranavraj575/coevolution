@@ -26,6 +26,8 @@ from src.utils.dict_keys import (DICT_AGE,
                                  DICT_SAVE_BUFFER,
                                  DICT_SAVE_CLASS,
 
+                                 DICT_EPOCH_LAST_UPDATED,
+
                                  TEMP_DICT_CAPTIAN,
                                  TEMP_DICT_CAPTIAN_UNIQUE,
                                  TEMP_DICT_TEAM_MEMBER_ID,
@@ -1244,6 +1246,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                               save_class=updated_train_dict.get(DICT_SAVE_CLASS, True),
                                               worker_info=updated_train_dict,
                                               )
+                updated_train_dict[DICT_EPOCH_LAST_UPDATED] = self.epochs
                 cage.overwrite_info(key=str(local_idx), info=updated_train_dict)
                 if not self.local_collection_mode:
                     if updated_train_dict[TEMP_DICT_CAPTIAN]:

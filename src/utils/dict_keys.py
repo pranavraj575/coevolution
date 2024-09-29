@@ -7,6 +7,9 @@ from unstable_baselines3.utils.dict_keys import *
 # keeps track of age of each agent
 DICT_AGE = 'age'
 
+# epoch that the agent was last updated
+DICT_EPOCH_LAST_UPDATED = 'epoch_last_updated'
+
 # keeps track of time since last mutation for each agent
 DICT_MUTATION_AGE = 'mutation_age'
 
@@ -77,6 +80,8 @@ __all__ = ["DICT_TRAIN",
            "DICT_CLONE_REPLACABLE",
            "DICT_MUTATION_REPLACABLE",
            "DICT_COLLECT_ONLY",
+
+           "DICT_EPOCH_LAST_UPDATED",
 
            "DICT_SAVE_BUFFER",
            "DICT_SAVE_CLASS",
