@@ -135,6 +135,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
               **kwargs,
               ):
         if not self.MCAA:
+            captians_choices = [np.random.choice(range(self.N), 2, replace=False) for _ in range(self.games_per_epoch)]
             pre_ep_dicts = [self.pre_episode_generation(captian_choices=(i.item(), j.item()),
                                                         unique=tuple(False for _ in range(self.num_teams)),
                                                         rechoose=rechoose,
@@ -143,7 +144,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                                                         update_epoch_infos=update_epoch_infos,
                                                         **kwargs,
                                                         )
-                            for i, j in np.random.choice(range(self.N), 2, replace=False)]
+                            for i, j in captians_choices]
             return super().epoch(
                 rechoose=rechoose,
                 save_epoch_info=save_epoch_info,
