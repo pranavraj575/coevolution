@@ -103,6 +103,28 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                                                              **kwargs,
                                                              )
 
+    # TODO: maybe change these for MCAA
+    def get_inverted_distribution(self, elos):
+        if self.MCAA:
+            # in this case, simply invert
+            # thing tht always wins (win prob 1) should never be chosen
+            return (1 - elos)/torch.sum(1 - elos)
+        else:
+            return super().get_inverted_distribution(elos=elos)
+
+    def get_elo_distribution(self, elos):
+        if self.MCAA:
+            return elos/torch.sum(elos)
+        else:
+            return super().get_elo_distribution(elos=elos)
+
+    def rebase_elos(self, base_elo=0.):
+        if self.MCAA:
+            # in this case, do nothing
+            return
+        else:
+            super().rebase_elos(base_elo=base_elo)
+
     def update_results(self, items_to_save):
         # TODO: update individual elos or fitnesses here
         #  i think it makes sense to use captian elos when using BERTeam, and doing win rate stuff otherwise
@@ -440,7 +462,7 @@ class PZCC_MAPElites(ComparisionExperiment):
 
             # now pick which agents to clone based on elo (NON COMPARATIVE)
             candidate_clone_elos = self.elos[candidate_clone_idxs]
-            clone_dist = torch.softmax(candidate_clone_elos, dim=-1)
+            clone_dist = self.get_elo_distribution(candidate_clone_elos)
             # sample from this distribution with replacement
             clone_idx_idxs = list(torch.multinomial(clone_dist, len(target_global_idxs), replacement=True))
             # element clone_idx_idx in clone_idx_idxs denotes that candidate_clone_idxs[clone_idx_idx] should be cloned

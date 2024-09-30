@@ -122,7 +122,7 @@ class MCAAMainland(TeamTrainer):
 if __name__ == '__main__':
     save_dir = 'temp/test'
     thing = MCAAMainland(pop_sizes=(2, 3, 3, 4), softmax_update=1)
-    goal_team = torch.tensor([2,3,4,5,6,7])
+    goal_team = torch.tensor([2, 3, 4, 5, 6, 7])
     goal_dist = thing.global_indices_to_islands(goal_team)
     print(goal_dist)
     print(torch.softmax(thing.distribution, dim=-1))

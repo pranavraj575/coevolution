@@ -917,6 +917,9 @@ class CaptianCoevolution(CoevolutionBase):
             scaled_elos = self._get_rebased_elos(elos=scaled_elos, base_elo=base_elo)
         return scaled_elos
 
+    def get_elo_distribution(self, elos):
+        return torch.softmax(elos, dim=-1)
+
     def get_inverted_distribution(self, elos):
         """
         gets distribution according to inverted elos (i.e. more likely to pick bad agents)
@@ -1398,7 +1401,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
             # now pick which agents to clone based on elo
             candidate_clone_elos = self.elos[candidate_clone_idxs]
-            clone_dist = torch.softmax(candidate_clone_elos, dim=-1)
+            clone_dist = self.get_elo_distribution(candidate_clone_elos)
             # sample from this distribution with replacement
             clone_idx_idxs = list(torch.multinomial(clone_dist, len(target_global_idxs), replacement=True))
             # element clone_idx_idx in clone_idx_idxs denotes that candidate_clone_idxs[clone_idx_idx] should be cloned
@@ -1644,7 +1647,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                     # if (train_info.get(DICT_IS_WORKER, True) and train_info.get(DICT_TRAIN, True)):
                     if (train_info.get(DICT_IS_WORKER, True) and
                             (train_info.get(DICT_TRAIN, True)) and not train_info.get(DICT_COLLECT_ONLY, False)):
-                    # activates for workers if they are trainable and if they are not just collection workers
+                        # activates for workers if they are trainable and if they are not just collection workers
 
                         if isinstance(agent, OffPolicyAlgorithm):
                             # off policy algs always train at the end of a rollout

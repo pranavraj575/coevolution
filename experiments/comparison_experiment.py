@@ -448,24 +448,27 @@ if __name__ == '__main__':
                     if identity not in id_to_idxs:
                         id_to_idxs[identity] = []
                     id_to_idxs[identity].append(i)
-                print('all elos')
-                classic_elos = trainer.classic_elos.numpy()
-                for identity in id_to_idxs:
-                    print('\t', identity, 'agents:', classic_elos[id_to_idxs[identity]])
+                if args.MCAA_mainland:
+                    print('all pred win rates')
+                    metric=trainer.elos.numpy()
+                else:
+                    print('all ')
+                    metric=trainer.classic_elos.numpy()
 
-                print('avg elos')
                 for identity in id_to_idxs:
-                    print('\t', identity, 'agents:', np.mean(classic_elos[id_to_idxs[identity]]))
+                    print('\t', identity, 'agents:', metric[id_to_idxs[identity]])
 
-                print('max elos')
+                print('avg ')
                 for identity in id_to_idxs:
-                    print('\t', identity, 'agents:', np.max(classic_elos[id_to_idxs[identity]]))
+                    print('\t', identity, 'agents:', np.mean(metric[id_to_idxs[identity]]))
+
+                print('max ')
+                for identity in id_to_idxs:
+                    print('\t', identity, 'agents:', np.max(metric[id_to_idxs[identity]]))
                 if plotting['init_dists']:
-                    print('initial dist')
-                    print(np.round(plotting['init_dists'][-1], 3))
-                    print('with elos')
-                    for prob, elo in zip(np.round(plotting['init_dists'][-1], 3), classic_elos):
-                        print('(', prob, ',', round(elo, 2), ')', sep='', end=';\t')
+                    print('initial values with metrics')
+                    for prob, elo in zip(np.round(plotting['init_dists'][-1], 3), metric):
+                        print('(', prob, ', ', round(elo, 2), ')', sep='', end=';\t')
                     print()
 
             if not (trainer.info['epochs'])%args.ckpt_freq:
