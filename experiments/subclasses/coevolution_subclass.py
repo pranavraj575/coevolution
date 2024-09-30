@@ -135,6 +135,15 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
               **kwargs,
               ):
         if not self.MCAA:
+            pre_ep_dicts = [self.pre_episode_generation(captian_choices=(i.item(), j.item()),
+                                                        unique=tuple(False for _ in range(self.num_teams)),
+                                                        rechoose=rechoose,
+                                                        save_epoch_info=save_epoch_info,
+                                                        pre_ep_dicts=pre_ep_dicts,
+                                                        update_epoch_infos=update_epoch_infos,
+                                                        **kwargs,
+                                                        )
+                            for i, j in np.random.choice(range(self.N), 2, replace=False)]
             return super().epoch(
                 rechoose=rechoose,
                 save_epoch_info=save_epoch_info,
@@ -334,7 +343,7 @@ class PZCC_MAPElites(ComparisionExperiment):
         loc_matrix = torch.linalg.norm(locations.view(-1, 1, loc_dim) -
                                        locations.view(1, -1, loc_dim),
                                        dim=-1,
-                                       ) #+ torch.diag(torch.inf*torch.ones(locations.shape[0]))
+                                       )  # + torch.diag(torch.inf*torch.ones(locations.shape[0]))
         valid_locs = loc_matrix <= behavior_radius
         valid_locs = valid_locs/torch.sum(valid_locs, dim=0, keepdim=True)
         estimates = torch.matmul(elos.view(1, -1), valid_locs)
