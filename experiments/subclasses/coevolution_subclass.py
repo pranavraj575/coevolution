@@ -358,7 +358,7 @@ class PZCC_MAPElites(ComparisionExperiment):
             pop_idx, local_idx = self.index_to_pop_index(global_idx)
             cage = self.zoo[pop_idx]
             cage.overwrite_info(key=str(local_idx), info=info)
-        return torch.tensor(aggressions).reshape(self.N, 1)
+        return torch.tensor(aggressions).reshape(-1, 1)
 
     def get_fitness_estimate(self, elos, locations, behavior_radius=None):
         if behavior_radius is None:
@@ -454,7 +454,7 @@ class PZCC_MAPElites(ComparisionExperiment):
                 continue
 
             original_target_elos = self.elos[candidate_target_idxs]
-            target_behaviors = all_behavior_vectors[candidate_target_idxs]
+            target_behaviors = behavior_vectors[[global_idx - cum_popsize for global_idx in candidate_target_idxs]]
             elo_estimate = self.get_fitness_estimate(elos=original_target_elos,
                                                      locations=target_behaviors,
                                                      behavior_radius=behavior_radius,
