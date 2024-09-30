@@ -1,4 +1,4 @@
-import torch
+import torch, time
 
 from BERTeam.outcome import PlayerInfo
 
@@ -34,6 +34,7 @@ class CTFOutcome(PettingZooOutcomeFn):
                 break
             except Exception as e:
                 print("EXCEPTION CAUGHT:", e)
+                time.sleep(2)
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
 
         if isinstance(env, MyQuaticusEnv):

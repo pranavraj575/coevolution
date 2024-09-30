@@ -238,12 +238,14 @@ if __name__ == '__main__':
 
     if args.MAP_Elites:
         TrainerClass = PZCC_MAPElites
+        trainer_kwargs = {'default_behavior_radius': 1.}
     else:
         TrainerClass = ComparisionExperiment
+        trainer_kwargs = dict()
     trainer = TrainerClass(population_sizes=pop_sizes,
                            games_per_epoch=args.games_per_epoch,
                            MCAA_mode=args.MCAA_mainland,
-                           MCAA_fitness_update=1.,
+                           MCAA_fitness_update=.01,
                            team_trainer=team_trainer,
                            outcome_fn_gen=CTFOutcome,
                            env_constructor=env_constructor,
@@ -261,6 +263,7 @@ if __name__ == '__main__':
                            mutation_prob=args.mutation_prob,
                            clone_replacements=clone_replacements,
                            protect_elite=args.elite_protection,
+                           **trainer_kwargs,
                            )
     plotting = {'init_dists': [],
                 'epochs': [],
@@ -450,10 +453,10 @@ if __name__ == '__main__':
                     id_to_idxs[identity].append(i)
                 if args.MCAA_mainland:
                     print('all pred win rates')
-                    metric=trainer.elos.numpy()
+                    metric = trainer.elos.numpy()
                 else:
                     print('all ')
-                    metric=trainer.classic_elos.numpy()
+                    metric = trainer.classic_elos.numpy()
 
                 for identity in id_to_idxs:
                     print('\t', identity, 'agents:', metric[id_to_idxs[identity]])
