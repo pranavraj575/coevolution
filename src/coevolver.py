@@ -1640,11 +1640,12 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                         for t in zip(team_choices, updated_train_infos)]
             for t in zip(agents, updated_train_infos):
                 for agent, train_info in zip(*t):
-                    #if (train_info.get(DICT_IS_WORKER, True) and
-                    #        (train_info.get(DICT_TRAIN, True)) and not train_info.get(DICT_COLLECT_ONLY, False)):
-                    # activates for workers if they are trainable and if they are not just collection workers
                     # never mind just do this
-                    if (train_info.get(DICT_IS_WORKER, True) and train_info.get(DICT_TRAIN, True)):
+                    # if (train_info.get(DICT_IS_WORKER, True) and train_info.get(DICT_TRAIN, True)):
+                    if (train_info.get(DICT_IS_WORKER, True) and
+                            (train_info.get(DICT_TRAIN, True)) and not train_info.get(DICT_COLLECT_ONLY, False)):
+                    # activates for workers if they are trainable and if they are not just collection workers
+
                         if isinstance(agent, OffPolicyAlgorithm):
                             # off policy algs always train at the end of a rollout
                             capacity = 0
