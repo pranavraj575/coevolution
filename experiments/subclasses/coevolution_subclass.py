@@ -318,25 +318,27 @@ class PZCC_MAPElites(ComparisionExperiment):
         )
         self.default_behavior_radius = default_behavior_radius
 
-    def behavior_projection(self):
+    def behavior_projection(self, indices=None):
         """
         projects all agents into behavior space
         Returns: (popsize, k), behavior vector for each member
         """
-        print('obtaining behavior')
+        if indices is None:
+            indices = range(self.N)
+        print('obtaining behavior for indices', indices)
         # TODO: send in aggressions or some other metric
         agent_indices = []
-        aggressions = [0 for _ in range(self.N)]
-        for i in range(self.N):
-            info = self.load_animal(self.index_to_pop_index(i), load_buffer=False)[1]
+        aggressions = [0 for _ in indices]
+        for list_idx, global_idx in enumerate(indices):
+            info = self.load_animal(self.index_to_pop_index(global_idx), load_buffer=False)[1]
             last_update = info.get(DICT_EPOCH_LAST_UPDATED, 0)
             last_behavior_update = info.get(DICT_EPOCH_LAST_BEHAVIOR_UPDATE, -1)
             if last_behavior_update < last_update:
-                agent_indices.append(i)
+                agent_indices.append((list_idx, global_idx))
             else:
-                aggressions[i] = info[DICT_BEHAVIOR_VECTOR]
+                aggressions[list_idx] = info[DICT_BEHAVIOR_VECTOR]
 
-        agents = (self.load_animal(self.index_to_pop_index(i))[0] for i in agent_indices)
+        agents = (self.load_animal(self.index_to_pop_index(global_idx))[0] for (_, global_idx) in agent_indices)
 
         (att_easy, att_mid, att_hard,
          def_easy, def_mid, def_hard,
@@ -347,13 +349,13 @@ class PZCC_MAPElites(ComparisionExperiment):
                                                   processes=self.processes,
                                                   potential_opponents=[att_easy, att_hard, def_easy, def_hard],
                                                   )
-        for i, agg in zip(agent_indices, aggression_updates):
-            aggressions[i] = agg
+        for (list_idx, global_idx), agg in zip(agent_indices, aggression_updates):
+            aggressions[list_idx] = agg
 
-            info = self.load_animal(self.index_to_pop_index(i), load_buffer=False)[1]
+            info = self.load_animal(self.index_to_pop_index(global_idx), load_buffer=False)[1]
             info[DICT_EPOCH_LAST_BEHAVIOR_UPDATE] = self.epochs
             info[DICT_BEHAVIOR_VECTOR] = agg
-            pop_idx, local_idx = self.index_to_pop_index(i)
+            pop_idx, local_idx = self.index_to_pop_index(global_idx)
             cage = self.zoo[pop_idx]
             cage.overwrite_info(key=str(local_idx), info=info)
         return torch.tensor(aggressions).reshape(self.N, 1)
@@ -379,9 +381,6 @@ class PZCC_MAPElites(ComparisionExperiment):
                            ):
         # TODO: do the MAP-Elites thing and replace bad ones (comparative) with clones of good ones (comparative)
         #  may also add unique to the clonables
-
-        all_behavior_vectors = None  # only calculate if we need to
-        behavior_dim = None
 
         breed_dic = {'number_replaced': [0 for _ in self.population_sizes],
                      'target_agents': [],
@@ -417,12 +416,9 @@ class PZCC_MAPElites(ComparisionExperiment):
                 continue
 
             # check behaviors here, if we could potentially have targets to clone to
+            behavior_vectors = self.behavior_projection(indices=range(cum_popsize, cum_popsize + popsize))
+            behavior_dim = behavior_vectors.shape[1]
 
-            if all_behavior_vectors is None:
-                all_behavior_vectors = self.behavior_projection()
-                behavior_dim = all_behavior_vectors.shape[1]
-
-            behavior_vectors = all_behavior_vectors[cum_popsize: cum_popsize + popsize]
             behavior_matrix = torch.linalg.norm(behavior_vectors.view(-1, 1, behavior_dim) -
                                                 behavior_vectors.view(1, -1, behavior_dim),
                                                 dim=-1,
