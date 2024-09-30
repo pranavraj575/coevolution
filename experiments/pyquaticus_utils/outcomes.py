@@ -34,6 +34,7 @@ class CTFOutcome(PettingZooOutcomeFn):
                 break
             except Exception as e:
                 print("EXCEPTION CAUGHT:", e)
+                env.reset()
                 time.sleep(2)
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
 
