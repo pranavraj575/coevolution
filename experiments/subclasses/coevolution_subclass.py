@@ -380,8 +380,8 @@ class PZCC_MAPElites(ComparisionExperiment):
         # TODO: do the MAP-Elites thing and replace bad ones (comparative) with clones of good ones (comparative)
         #  may also add unique to the clonables
 
-        all_behavior_vectors = self.behavior_projection()
-        behavior_dim = all_behavior_vectors.shape[1]
+        all_behavior_vectors = None  # only calculate if we need to
+        behavior_dim = None
 
         breed_dic = {'number_replaced': [0 for _ in self.population_sizes],
                      'target_agents': [],
@@ -398,16 +398,6 @@ class PZCC_MAPElites(ComparisionExperiment):
             elif number_to_replace[pop_idx] <= 0:
                 continue
 
-            behavior_vectors = all_behavior_vectors[cum_popsize: cum_popsize + popsize]
-            behavior_matrix = torch.linalg.norm(behavior_vectors.view(-1, 1, behavior_dim) -
-                                                behavior_vectors.view(1, -1, behavior_dim),
-                                                dim=-1,
-                                                ) + torch.diag(torch.inf*torch.ones(popsize))
-            behavior_radius = self.default_behavior_radius
-            # ignore unique values
-            non_unique_indices = [cum_popsize + i for i in range(popsize)
-                                  if torch.min(behavior_matrix[i]) < behavior_radius]
-
             # pick the agents to potentially clone
             candidate_clone_idxs = list(self._get_valid_idxs(validity_fn=
                                                              lambda info:
@@ -418,6 +408,30 @@ class PZCC_MAPElites(ComparisionExperiment):
             if not candidate_clone_idxs:
                 # no clonable agents
                 continue
+
+            if len(list(
+                    self._get_valid_idxs(validity_fn=lambda info: info.get(DICT_CLONE_REPLACABLE, True) and
+                                                                  (info.get(DICT_AGE, 0) > self.protect_new),
+                                         indices=range(cum_popsize, cum_popsize + popsize),
+                                         ))) <= 0:
+                continue
+
+            # check behaviors here, if we could potentially have targets to clone to
+
+            if all_behavior_vectors is None:
+                all_behavior_vectors = self.behavior_projection()
+                behavior_dim = all_behavior_vectors.shape[1]
+
+            behavior_vectors = all_behavior_vectors[cum_popsize: cum_popsize + popsize]
+            behavior_matrix = torch.linalg.norm(behavior_vectors.view(-1, 1, behavior_dim) -
+                                                behavior_vectors.view(1, -1, behavior_dim),
+                                                dim=-1,
+                                                ) + torch.diag(torch.inf*torch.ones(popsize))
+            behavior_radius = self.default_behavior_radius
+            # ignore unique values
+            non_unique_indices = [cum_popsize + i for i in range(popsize)
+                                  if torch.min(behavior_matrix[i]) < behavior_radius]
+
             # pick the agents to potentially replace with a clone
             if force_replacements:
                 candidate_target_idxs = list(

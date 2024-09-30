@@ -25,7 +25,7 @@ if __name__ == '__main__':
     PARSER.add_argument('--MCAA-mainland', action='store_true', required=False,
                         help="MCAA mainland for team generation")
 
-    PARSER.add_argument('--island-size', type=int, required=False, default=10,
+    PARSER.add_argument('--island-size', type=int, required=False, default=15,
                         help="population in each island")
     PARSER.add_argument('--games-per-epoch', type=int, required=False, default=16,
                         help="games to play per epoch"
