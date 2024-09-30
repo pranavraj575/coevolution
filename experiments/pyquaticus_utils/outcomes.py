@@ -26,9 +26,14 @@ class CTFOutcome(PettingZooOutcomeFn):
                                       workers={i: agent_choices[i] for i in range(len(agent_choices))},
                                       worker_infos={i: updated_train_infos[i] for i in range(len(agent_choices))},
                                       )
-        alg.learn(total_timesteps=10000,
-                  number_of_eps=1,
-                  )
+        while True:
+            try:
+                alg.learn(total_timesteps=10000,
+                          number_of_eps=1,
+                          )
+                break
+            except Exception as e:
+                print("EXCEPTION CAUGHT:", e)
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
 
         if isinstance(env, MyQuaticusEnv):
@@ -114,11 +119,11 @@ class CTFOutcome(PettingZooOutcomeFn):
         red_def = 1 + tagging_scl*red_tags
         if False:
             print('OFF blue grabs: ', blue_grabs,
-              '; OFF blue captures: ', blue_captures,
-              '; DEF blue tags: ', blue_tags,
-              '; OFF red tags: ', red_tags,
-              '; NAN red grabs: ', red_grabs,
-              '; NAN red captures: ', red_captures,
-              sep=''
-              )
+                  '; OFF blue captures: ', blue_captures,
+                  '; DEF blue tags: ', blue_tags,
+                  '; OFF red tags: ', red_tags,
+                  '; NAN red grabs: ', red_grabs,
+                  '; NAN red captures: ', red_captures,
+                  sep=''
+                  )
         return blue_off/blue_def, red_off/red_def
