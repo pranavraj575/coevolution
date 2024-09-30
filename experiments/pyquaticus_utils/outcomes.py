@@ -26,16 +26,9 @@ class CTFOutcome(PettingZooOutcomeFn):
                                       workers={i: agent_choices[i] for i in range(len(agent_choices))},
                                       worker_infos={i: updated_train_infos[i] for i in range(len(agent_choices))},
                                       )
-        while True:
-            try:
-                alg.learn(total_timesteps=10000,
-                          number_of_eps=1,
-                          )
-                break
-            except Exception as e:
-                print("EXCEPTION CAUGHT:", e)
-                env.reset()
-                time.sleep(2)
+        alg.learn(total_timesteps=10000,
+                  number_of_eps=1,
+                  )
         score = (env.unwrapped.game_score['blue_captures'], env.unwrapped.game_score['red_captures'])
 
         if isinstance(env, MyQuaticusEnv):

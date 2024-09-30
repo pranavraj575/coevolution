@@ -265,233 +265,246 @@ if __name__ == '__main__':
                            protect_elite=args.elite_protection,
                            **trainer_kwargs,
                            )
-    plotting = {'init_dists': [],
-                'epochs': [],
-                }
-
-    if not args.reset and os.path.exists(save_dir):
-        print('loading from', save_dir)
-        trainer.load(save_dir=save_dir)
-        f = open(os.path.join(save_dir, 'plotting.pkl'), 'rb')
-        plotting = pickle.load(f)
-        f.close()
-    print('seting save directory as', save_dir)
-
-
-    def update_plotting_variables():
-        if args.MCAA_mainland:
-            init_dist = trainer.team_trainer.distribution.detach().numpy()
-        else:
-            test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
-            indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
-                                                                         indices=None,
-                                                                         obs_preembed=None,
-                                                                         obs_mask=None,
-                                                                         noise_model=None,
-                                                                         valid_members=None,
-                                                                         )
-
-            init_dist = torch.mean(dist, dim=0).detach().numpy()
-        plotting['init_dists'].append(init_dist)
-        plotting['epochs'].append(trainer.epochs)
-
-
-    if args.display:
-        test_animals = ([(RandPolicy(test_env.action_space(0)), non_train_dict.copy())] +
-                        [(DefendPolicy(agent_id=0,
-                                       team='red',
-                                       mode=mode,
-                                       flag_keepout=config_dict['flag_keepout'],
-                                       catch_radius=config_dict["catch_radius"],
-                                       using_pyquaticus=True,
-                                       ), non_train_dict.copy()
-                          )
-                         for mode in ('easy', 'medium', 'hard')
-                         ] +
-                        [(AttackPolicy(agent_id=0,
-                                       mode=mode,
-                                       using_pyquaticus=True,
-                                       ), non_train_dict.copy()
-                          )
-                         for mode in ('easy', 'medium', 'hard')
-                         ]
-                        )
-    else:
-        test_animals = []
-
-
-    def typer(global_idx):
-        if global_idx >= 0:
-            animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
-        else:
-            animal, _ = test_animals[global_idx]
-
-        if isinstance(animal, WorkerPPO):
-            return 'ppo'
-        elif isinstance(animal, WorkerDQN):
-            return 'dqn'
-        elif 'WrappedPolicy' in str(type(animal)):
-            return animal.identity + ' ' + animal.mode
-        else:
-            return 'rand'
-
-
-    if args.display:
-        idxs = args.idxs_to_display
-        elos = trainer.classic_elos.numpy().copy()
-        worst = np.argmin(elos)
-        best = np.argmax(elos)
-
-        elos[best] = -np.inf
-        second_best = np.argmax(elos)
-
-        classic_elos = trainer.classic_elos.numpy()
-        idents_and_elos = []
-        for i in range(sum(pop_sizes)):
-            idents_and_elos.append((typer(i), classic_elos[i]))
-        print('all elos by index')
-        for i, animal in enumerate(test_animals):
-            ip = i - len(test_animals)
-            print(ip, ' (', typer(ip), '): ', None, sep='')
-        for i, (identity, elo) in enumerate(idents_and_elos):
-            print(i, ' (', identity, '): ', elo, sep='')
-        env = env_constructor(None)
-        gen_team = [t.item()
-                    for t in trainer.create_team(team_idx=0,
-                                                 captian=best,
-                                                 obs_preembed=None,
-                                                 obs_mask=None,
-                                                 )[0].flatten()]
-        # TODO: past here we have not edited
-        if idxs is None:
-            print('generated team (around the strongest) has elos', trainer.classic_elos[gen_team])
-
-            print('best agent has elo', trainer.classic_elos[best],
-                  'and is type', typer(best))
-            print('worst agents has elo', trainer.classic_elos[worst],
-                  'and is type', typer(worst))
-
-            print('playing generated (blue, ' + str(tuple((idx, typer(idx)) for idx in gen_team))
-                  + ') against double best (red, ' + str(tuple((best, typer(best)) for idx in range(team_size))) + ')')
-
-            outcom = CTFOutcome()
-            agents = []
-            for team_idxs in gen_team, [best]*team_size:
-                m = []
-                for idx in team_idxs:
-                    agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
-                    m.append(agent)
-                agents.append(m)
-
-            outcom.get_outcome(
-                team_choices=[[torch.tensor(idx) for idx in gen_team], [torch.tensor(best)]*team_size],
-                agent_choices=agents,
-                env=env,
-                updated_train_infos=[[non_train_dict]*team_size]*2,
-            )
-
-        else:
-            teams = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
-            if len(teams) == 1:
-                teams = [gen_team] + teams
-            A, B = teams
-
-            print('playing', A, '(blue, ' + str([typer(idx) for idx in A])
-                  + ') against', B, '(red, ' + str([typer(idx) for idx in B]) + ')')
-
-            outcom = CTFOutcome()
-            agents = []
-            for team_idxs in A, B:
-                m = []
-                for idx in team_idxs:
-                    if idx >= 0:
-                        agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
-                        m.append(agent)
-                    else:
-                        m.append(test_animals[idx][0])
-                agents.append(m)
-
-            outcom.get_outcome(
-                team_choices=[[torch.tensor(a) for a in A], [torch.tensor(b) for b in B]],
-                agent_choices=agents,
-                env=env,
-                updated_train_infos=[[non_train_dict]*team_size]*2,
-            )
-        if args.save_video is not None:
-            print('saving video')
-            env.write_video(video_file=args.save_video)
-    else:
-        while trainer.epochs < args.epochs:
-            tim = time.time()
-            print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
-            if trainer.epochs == 0:
-                update_plotting_variables()
-            epoch_info = trainer.epoch(
-                noise_model=team_trainer.create_nose_model_towards_uniform(
-                    t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
-                )
-            )
-            if not trainer.epochs%args.train_freq:
-                print('training step started')
-                trainer.team_trainer.train(
-                    batch_size=args.batch_size,
-                    minibatch=args.minibatch_size,
-                    mask_probs=None,
-                    replacement_probs=(.8, .1, .1),
-                    mask_obs_prob=.1,
-                )
-                print('training step finished')
-            if not trainer.epochs%args.train_freq:
-                update_plotting_variables()
-
-            if True:
-                id_to_idxs = dict()
-                for i in range(sum(pop_sizes)):
-                    identity = typer(i)
-                    if identity not in id_to_idxs:
-                        id_to_idxs[identity] = []
-                    id_to_idxs[identity].append(i)
-                if args.MCAA_mainland:
-                    print('all pred win rates')
-                    metric = trainer.elos.numpy()
-                else:
-                    print('all ')
-                    metric = trainer.classic_elos.numpy()
-
-                for identity in id_to_idxs:
-                    print('\t', identity, 'agents:', metric[id_to_idxs[identity]])
-
-                print('avg ')
-                for identity in id_to_idxs:
-                    print('\t', identity, 'agents:', np.mean(metric[id_to_idxs[identity]]))
-
-                print('max ')
-                for identity in id_to_idxs:
-                    print('\t', identity, 'agents:', np.max(metric[id_to_idxs[identity]]))
-                if plotting['init_dists']:
-                    print('initial values with metrics')
-                    for prob, elo in zip(np.round(plotting['init_dists'][-1], 3), metric):
-                        print('(', prob, ', ', round(elo, 2), ')', sep='', end=';\t')
-                    print()
-
-            if not (trainer.info['epochs'])%args.ckpt_freq:
-                if not args.dont_backup and os.path.exists(save_dir):
-                    print('backing up')
-                    if os.path.exists(backup_dir):
-                        shutil.rmtree(backup_dir)
-                    shutil.copytree(save_dir, backup_dir)
-                    print('done backing up')
-                print('saving model')
-                trainer.save(save_dir)
-                print('done saving model')
-                print('saving ploting')
-                f = open(os.path.join(save_dir, 'plotting.pkl'), 'wb')
-                pickle.dump(plotting, f)
+    exception_raised = False
+    while True:
+        try:
+            plotting = {'init_dists': [],
+                        'epochs': [],
+                        }
+            # if we dont want to reset, try a load if there was an exception
+            if (exception_raised or (not args.reset)) and os.path.exists(save_dir):
+                print('loading from', save_dir)
+                trainer.load(save_dir=save_dir)
+                f = open(os.path.join(save_dir, 'plotting.pkl'), 'rb')
+                plotting = pickle.load(f)
                 f.close()
-                print('done saving plotting')
+                if exception_raised:
+                    print("EXCEPTION CAUGHT, RELOADED FROM CHECKPOINT")
+            print('seting save directory as', save_dir)
 
-            print('time', time.time() - tim)
-            print()
-    trainer.clear()
 
-    shutil.rmtree(data_folder)
+            def update_plotting_variables():
+                if args.MCAA_mainland:
+                    init_dist = trainer.team_trainer.distribution.detach().numpy()
+                else:
+                    test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
+                    indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                                 indices=None,
+                                                                                 obs_preembed=None,
+                                                                                 obs_mask=None,
+                                                                                 noise_model=None,
+                                                                                 valid_members=None,
+                                                                                 )
+
+                    init_dist = torch.mean(dist, dim=0).detach().numpy()
+                plotting['init_dists'].append(init_dist)
+                plotting['epochs'].append(trainer.epochs)
+
+
+            if args.display:
+                test_animals = ([(RandPolicy(test_env.action_space(0)), non_train_dict.copy())] +
+                                [(DefendPolicy(agent_id=0,
+                                               team='red',
+                                               mode=mode,
+                                               flag_keepout=config_dict['flag_keepout'],
+                                               catch_radius=config_dict["catch_radius"],
+                                               using_pyquaticus=True,
+                                               ), non_train_dict.copy()
+                                  )
+                                 for mode in ('easy', 'medium', 'hard')
+                                 ] +
+                                [(AttackPolicy(agent_id=0,
+                                               mode=mode,
+                                               using_pyquaticus=True,
+                                               ), non_train_dict.copy()
+                                  )
+                                 for mode in ('easy', 'medium', 'hard')
+                                 ]
+                                )
+            else:
+                test_animals = []
+
+
+            def typer(global_idx):
+                if global_idx >= 0:
+                    animal, _ = trainer.load_animal(trainer.index_to_pop_index(global_idx))
+                else:
+                    animal, _ = test_animals[global_idx]
+
+                if isinstance(animal, WorkerPPO):
+                    return 'ppo'
+                elif isinstance(animal, WorkerDQN):
+                    return 'dqn'
+                elif 'WrappedPolicy' in str(type(animal)):
+                    return animal.identity + ' ' + animal.mode
+                else:
+                    return 'rand'
+
+
+            if args.display:
+                idxs = args.idxs_to_display
+                elos = trainer.classic_elos.numpy().copy()
+                worst = np.argmin(elos)
+                best = np.argmax(elos)
+
+                elos[best] = -np.inf
+                second_best = np.argmax(elos)
+
+                classic_elos = trainer.classic_elos.numpy()
+                idents_and_elos = []
+                for i in range(sum(pop_sizes)):
+                    idents_and_elos.append((typer(i), classic_elos[i]))
+                print('all elos by index')
+                for i, animal in enumerate(test_animals):
+                    ip = i - len(test_animals)
+                    print(ip, ' (', typer(ip), '): ', None, sep='')
+                for i, (identity, elo) in enumerate(idents_and_elos):
+                    print(i, ' (', identity, '): ', elo, sep='')
+                env = env_constructor(None)
+                gen_team = [t.item()
+                            for t in trainer.create_team(team_idx=0,
+                                                         captian=best,
+                                                         obs_preembed=None,
+                                                         obs_mask=None,
+                                                         )[0].flatten()]
+                # TODO: past here we have not edited
+                if idxs is None:
+                    print('generated team (around the strongest) has elos', trainer.classic_elos[gen_team])
+
+                    print('best agent has elo', trainer.classic_elos[best],
+                          'and is type', typer(best))
+                    print('worst agents has elo', trainer.classic_elos[worst],
+                          'and is type', typer(worst))
+
+                    print('playing generated (blue, ' + str(tuple((idx, typer(idx)) for idx in gen_team))
+                          + ') against double best (red, ' + str(
+                        tuple((best, typer(best)) for idx in range(team_size))) + ')')
+
+                    outcom = CTFOutcome()
+                    agents = []
+                    for team_idxs in gen_team, [best]*team_size:
+                        m = []
+                        for idx in team_idxs:
+                            agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                            m.append(agent)
+                        agents.append(m)
+
+                    outcom.get_outcome(
+                        team_choices=[[torch.tensor(idx) for idx in gen_team], [torch.tensor(best)]*team_size],
+                        agent_choices=agents,
+                        env=env,
+                        updated_train_infos=[[non_train_dict]*team_size]*2,
+                    )
+
+                else:
+                    teams = [ast.literal_eval('(' + team + ')') for team in idxs.split(';')]
+                    if len(teams) == 1:
+                        teams = [gen_team] + teams
+                    A, B = teams
+
+                    print('playing', A, '(blue, ' + str([typer(idx) for idx in A])
+                          + ') against', B, '(red, ' + str([typer(idx) for idx in B]) + ')')
+
+                    outcom = CTFOutcome()
+                    agents = []
+                    for team_idxs in A, B:
+                        m = []
+                        for idx in team_idxs:
+                            if idx >= 0:
+                                agent = trainer.load_animal(trainer.index_to_pop_index(idx))[0]
+                                m.append(agent)
+                            else:
+                                m.append(test_animals[idx][0])
+                        agents.append(m)
+
+                    outcom.get_outcome(
+                        team_choices=[[torch.tensor(a) for a in A], [torch.tensor(b) for b in B]],
+                        agent_choices=agents,
+                        env=env,
+                        updated_train_infos=[[non_train_dict]*team_size]*2,
+                    )
+                if args.save_video is not None:
+                    print('saving video')
+                    env.write_video(video_file=args.save_video)
+            else:
+                while trainer.epochs < args.epochs:
+                    tim = time.time()
+                    print('starting epoch', trainer.info['epochs'], 'at time', time.strftime('%H:%M:%S'))
+                    if trainer.epochs == 0:
+                        update_plotting_variables()
+                    epoch_info = trainer.epoch(
+                        noise_model=team_trainer.create_nose_model_towards_uniform(
+                            t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
+                        )
+                    )
+                    if not trainer.epochs%args.train_freq:
+                        print('training step started')
+                        trainer.team_trainer.train(
+                            batch_size=args.batch_size,
+                            minibatch=args.minibatch_size,
+                            mask_probs=None,
+                            replacement_probs=(.8, .1, .1),
+                            mask_obs_prob=.1,
+                        )
+                        print('training step finished')
+                    if not trainer.epochs%args.train_freq:
+                        update_plotting_variables()
+
+                    if True:
+                        id_to_idxs = dict()
+                        for i in range(sum(pop_sizes)):
+                            identity = typer(i)
+                            if identity not in id_to_idxs:
+                                id_to_idxs[identity] = []
+                            id_to_idxs[identity].append(i)
+                        if args.MCAA_mainland:
+                            print('all pred win rates')
+                            metric = trainer.elos.numpy()
+                        else:
+                            print('all ')
+                            metric = trainer.classic_elos.numpy()
+
+                        for identity in id_to_idxs:
+                            print('\t', identity, 'agents:', metric[id_to_idxs[identity]])
+
+                        print('avg ')
+                        for identity in id_to_idxs:
+                            print('\t', identity, 'agents:', np.mean(metric[id_to_idxs[identity]]))
+
+                        print('max ')
+                        for identity in id_to_idxs:
+                            print('\t', identity, 'agents:', np.max(metric[id_to_idxs[identity]]))
+                        if plotting['init_dists']:
+                            print('initial values with metrics')
+                            for prob, elo in zip(np.round(plotting['init_dists'][-1], 3), metric):
+                                print('(', prob, ', ', round(elo, 2), ')', sep='', end=';\t')
+                            print()
+
+                    if not (trainer.info['epochs'])%args.ckpt_freq:
+                        if not args.dont_backup and os.path.exists(save_dir):
+                            print('backing up')
+                            if os.path.exists(backup_dir):
+                                shutil.rmtree(backup_dir)
+                            shutil.copytree(save_dir, backup_dir)
+                            print('done backing up')
+                        print('saving model')
+                        trainer.save(save_dir)
+                        print('done saving model')
+                        print('saving ploting')
+                        f = open(os.path.join(save_dir, 'plotting.pkl'), 'wb')
+                        pickle.dump(plotting, f)
+                        f.close()
+                        print('done saving plotting')
+
+                    print('time', time.time() - tim)
+                    print()
+            trainer.clear()
+
+            shutil.rmtree(data_folder)
+            break
+        except Exception as e:
+            exception_raised = True
+            if str(e) == 'NAN found':
+                print('Exception caught')
+            else:
+                raise Exception(e)

@@ -39,7 +39,7 @@ class MyQuaticusEnv(PyQuaticusEnv):
 
             self.frame_cnt += 1
         if any([np.any(np.isnan(obs[t])) for t in obs]):
-            raise Exception('here', obs)
+            raise Exception('NAN found')
         return obs, rewards, terminated, truncated, info
 
     def write_video(self, video_file, fps=30):
