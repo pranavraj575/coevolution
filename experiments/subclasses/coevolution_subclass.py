@@ -335,7 +335,7 @@ class PZCC_MAPElites(ComparisionExperiment):
         loc_matrix = torch.linalg.norm(locations.view(-1, 1, loc_dim) -
                                        locations.view(1, -1, loc_dim),
                                        dim=-1,
-                                       ) + torch.diag(torch.inf*torch.ones(locations.shape[0]))
+                                       ) #+ torch.diag(torch.inf*torch.ones(locations.shape[0]))
         valid_locs = loc_matrix <= behavior_radius
         valid_locs = valid_locs/torch.sum(valid_locs, dim=0, keepdim=True)
         estimates = torch.matmul(elos.view(1, -1), valid_locs)
