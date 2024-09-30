@@ -171,7 +171,6 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
         generates random teams to play against each other
         Returns:
         """
-        print('generating preep')
         episode_info = dict()
 
         teams = []

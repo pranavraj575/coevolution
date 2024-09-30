@@ -49,8 +49,10 @@ class MCAAMainland(TeamTrainer):
         self.distribution = dic['dist']
 
     def train(self, *args, **kwargs):
-        # TODO: update island distribution with team
+        print('trainin')
+        print(torch.softmax(self.distribution, dim=-1))
         if torch.sum(self.buffer) == 0:
+            print('skippin')
             return
         target = self.buffer/torch.sum(self.buffer)
 
@@ -67,7 +69,7 @@ class MCAAMainland(TeamTrainer):
         update = torch.matmul(error.view(1, -1), softmax_jacob)
 
         self.distribution += self.softmax_update*update.flatten()
-
+        print(torch.softmax(self.distribution, dim=-1))
         # reset buffer
         self.buffer = torch.zeros(self.num_islands)
 

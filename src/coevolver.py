@@ -1202,8 +1202,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
             for train_dict in t:
                 if self.local_collection_mode:
                     # TODO: sometimes info dict keys get lost?
-                    if train_dict.get(DICT_IS_WORKER, True) and train_dict.get(DICT_TRAIN, True):
-                        train_dict[DICT_COLLECT_ONLY] = True
+                    train_dict[DICT_COLLECT_ONLY] = True
 
         pre_ep_dict.update({'agents': [
             [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
@@ -1278,6 +1277,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
     def reset_agent(self, pop_local_idx, elo=None):
         pop_idx, local_idx = pop_local_idx
         agent, info = self.worker_constructors(pop_idx)(local_idx)
+        if self.local_collection_mode:
+            info[DICT_COLLECT_ONLY] = True
         cage = self.zoo[pop_idx]
         cage.overwrite_animal(animal=agent,
                               key=str(local_idx),
@@ -1639,7 +1640,9 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                         for t in zip(team_choices, updated_train_infos)]
             for t in zip(agents, updated_train_infos):
                 for agent, train_info in zip(*t):
-                    if train_info.get(DICT_IS_WORKER, True) and train_info.get(DICT_TRAIN, True):
+                    if (train_info.get(DICT_IS_WORKER, True) and
+                            (train_info.get(DICT_TRAIN, True)) and not train_info.get(DICT_COLLECT_ONLY, False)):
+                        # activates for workers if they are trainable and if they are not just collection workers
                         if isinstance(agent, OffPolicyAlgorithm):
                             # off policy algs always train at the end of a rollout
                             capacity = 0
