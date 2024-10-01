@@ -1,4 +1,4 @@
-import torch, os, pickle
+import torch, os, pickle, itertools
 import numpy as np
 
 from BERTeam.trainer import TeamTrainer
@@ -17,6 +17,43 @@ class MCAAMainland(TeamTrainer):
         # this will be a softmax, and will be updated though gradient backprop
         self.buffer = torch.zeros(self.num_islands)
         self.softmax_update = softmax_update
+
+    def get_total_distribution(self,
+                               T,
+                               N=1,
+                               init_team=None,
+                               tracked=None,
+                               **kwargs,
+                               ):
+        single_dist = self.single_member_distribution()
+        dist = dict()
+        for team in itertools.product(range(self.num_agents), repeat=T*N):
+            prob = torch.prod(single_dist[team,])
+            dist[team] = prob
+        return dist
+
+    def single_member_distribution(self):
+
+        # (num_agents) multinomial distribution for each index to update
+        dist = torch.zeros(self.num_agents)
+        for island_idx, prob in enumerate(torch.softmax(self.distribution, dim=-1).view(-1,1)):
+            dist[self.cum_islands[island_idx]:self.cum_islands[island_idx + 1]] = prob/self.pop_sizes[island_idx]
+        return dist
+
+    def get_member_distribution(self,
+                                init_team,
+                                indices=None,
+                                **kwargs
+                                ):
+        if indices is None:
+            indices = torch.where(torch.eq(init_team, self.MASK))
+        if len(indices[0]) == 0:
+            return None, None
+
+        # (|indices|, num_agents) multinomial distribution for each index to update
+        dist = self.single_member_distribution().unsqueeze(0).broadcast_to((len(indices[0]), self.num_agents))
+
+        return indices, dist
 
     def global_indices_to_islands(self, team):
         """

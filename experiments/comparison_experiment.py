@@ -498,6 +498,10 @@ if __name__ == '__main__':
 
                     print('time', time.time() - tim)
                     print()
+                dist = trainer.team_trainer.get_total_distribution(T=team_size)
+                f = open(os.path.join(save_dir, 'final_team_distribution.pkl'), 'wb')
+                pickle.dump(dist, f)
+                f.close()
             trainer.clear()
 
             shutil.rmtree(data_folder)
