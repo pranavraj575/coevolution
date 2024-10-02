@@ -189,7 +189,6 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
             pre_ep_dict.update({'agents': [
                 [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
                 for t in zip(team_choices, updated_train_infos)]})
-        return pre_ep_dicts
 
         return super().epoch(
             rechoose=rechoose,
