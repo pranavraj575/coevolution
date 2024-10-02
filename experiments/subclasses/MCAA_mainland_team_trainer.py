@@ -29,7 +29,7 @@ class MCAAMainland(TeamTrainer):
         dist = dict()
         for team in itertools.product(range(self.num_agents), repeat=T*N):
             prob = torch.prod(single_dist[team,])
-            dist[team] = prob
+            dist[team] = prob.item()
         return dist
 
     def single_member_distribution(self):
