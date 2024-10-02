@@ -189,7 +189,7 @@ if __name__ == '__main__':
         proc = args.processes
 
     for MCAA, MAP_elites in (
-            #(False, False),
+            (False, False),
             (True, False),
             (False, True),
             (True, True),

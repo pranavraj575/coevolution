@@ -184,6 +184,13 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
         #  also maybe do the pre episode generation to make tournament form
         pre_ep_dicts = [self.captianless_pre_episode() for _ in range(self.games_per_epoch)]
 
+        for pre_ep_dict in pre_ep_dicts:
+            team_choices, updated_train_infos = pre_ep_dict['teams'], pre_ep_dict['train_infos']
+            pre_ep_dict.update({'agents': [
+                [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
+                for t in zip(team_choices, updated_train_infos)]})
+        return pre_ep_dicts
+
         return super().epoch(
             rechoose=rechoose,
             save_epoch_info=save_epoch_info,
