@@ -112,6 +112,8 @@ if __name__ == '__main__':
                      '_pop_' + str(args.island_size)
                      )
     overall_save_dir = os.path.join(DIR, 'data', 'save', overall_ident)
+    if not os.path.exists(overall_save_dir):
+        os.makedirs(overall_save_dir)
     data_file = os.path.join(overall_save_dir, 'data.pkl')
 
 
@@ -331,8 +333,8 @@ if __name__ == '__main__':
     else:
         stuff = dict()
     for alg1, alg2 in itertools.combinations(algorithms, 2):
-        _, agents1 = sample_teams(*alg1, n=50)
-        _, agents2 = sample_teams(*alg2, n=50)
+        _, agents1 = sample_teams(*alg1, n=500)
+        _, agents2 = sample_teams(*alg2, n=500)
 
         # key to save into results
         key = tuple(zip(('MCAA', "MAP Elites"), alg1)), tuple(zip(('MCAA', "MAP Elites"), alg2))
