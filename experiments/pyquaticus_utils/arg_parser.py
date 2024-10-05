@@ -170,8 +170,8 @@ def berteam_string(args):
             '_half_life_' + str(float(args.half_life)).replace('.', '_'))
 
 
-def add_experiment_args(PARSER: argparse.ArgumentParser, ident):
-    PARSER.add_argument('--epochs', type=int, required=False, default=5000,
+def add_experiment_args(PARSER: argparse.ArgumentParser, ident, epochs_default=5000):
+    PARSER.add_argument('--epochs', type=int, required=False, default=epochs_default,
                         help="epochs to train for")
     PARSER.add_argument('--processes', type=int, required=False, default=0,
                         help="number of processes to use")

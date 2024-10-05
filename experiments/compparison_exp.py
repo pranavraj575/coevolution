@@ -7,16 +7,12 @@ if __name__ == '__main__':
 
     PARSER = argparse.ArgumentParser()
     add_team_args(PARSER)
-    PARSER.add_argument('--replay-buffer-capacity', type=int, required=False, default=10000,
-                        help="replay buffer capacity")
-    PARSER.add_argument('--net-arch', action='store', required=False, default='64,64',
-                        help="hidden layers of network, should be readable as a list or tuple")
-    PARSER.add_argument('--net-arch2', action='store', required=False, default='96,96',
+    PARSER.add_argument('--net-arch', action='store', required=False, default='32,64,96,128',
                         help="hidden layers of network, should be readable as a list or tuple")
     add_coevolution_args(PARSER, clone_default=1)
     add_pyquaticus_args(PARSER)
     add_berteam_args(PARSER)
-    add_experiment_args(PARSER, 'pyq_comp_exp', epochs_default=4000)
+    add_experiment_args(PARSER, 'pppyq_comp_exp', epochs_default=4000)
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
 
@@ -93,19 +89,15 @@ if __name__ == '__main__':
 
     clone_replacements = args.clone_replacements
 
-    buffer_cap = args.replay_buffer_capacity
-    net_arch = list(ast.literal_eval('(' + args.net_arch + ')'))
-    net_arch2 = list(ast.literal_eval('(' + args.net_arch2 + ')'))
+    hidden_layers = list(ast.literal_eval('(' + args.net_arch + ')'))
 
     lstm_dropout = args.lstm_dropout
     if lstm_dropout is None:
         lstm_dropout = args.dropout
-    thing = (('_rb_cap_' + str(args.replay_buffer_capacity)) +
-             ('_archs_' +
-              ('_'.join([str(s) for s in net_arch])) + '__' +
-              ('_'.join([str(s) for s in net_arch2]))
-              )
+    thing = ('_hlyrs_' +
+             ('_'.join([str(s) for s in hidden_layers]))
              )
+
     ident = (args.ident +
              thing +
              coevolution_string(args) +
@@ -144,58 +136,22 @@ if __name__ == '__main__':
                        DICT_IS_WORKER: True,
                        }
 
-    ppo_policy_kwargs = {
-        'net_arch': dict(pi=net_arch,
-                         vf=net_arch),
+    all_ppo_policy_kwargs = [{
+        'net_arch': dict(pi=[hlayer, hlayer],
+                         vf=[hlayer, hlayer]),
     }
-
-    ppo_policy_kwargs2 = {
-        'net_arch': dict(pi=net_arch2,
-                         vf=net_arch2),
-    }
-
-    dqn_policy_kwargs = {
-        'net_arch': net_arch,
-    }
-
-    dqn_policy_kwargs2 = {
-        'net_arch': net_arch2,
-    }
+        for hlayer in hidden_layers
+    ]
 
     ppokwargs = dict()
-    create_ppo = lambda i, env: (WorkerPPO(policy=PPOMlp,
-                                           env=env,
-                                           policy_kwargs=ppo_policy_kwargs,
-                                           **ppokwargs
-                                           ), train_info_dict.copy()
-                                 )
 
-    create_ppo2 = lambda i, env: (WorkerPPO(policy=PPOMlp,
-                                            env=env,
-                                            policy_kwargs=ppo_policy_kwargs2,
-                                            **ppokwargs
-                                            ), train_info_dict.copy()
-                                  )
-    dqnkwargs = {
-        'buffer_size': buffer_cap,
-    }
-    create_dqn = lambda i, env: (WorkerDQN(policy=DQNMlp,
-                                           env=env,
-                                           policy_kwargs=dqn_policy_kwargs,
-                                           **dqnkwargs
-                                           ), train_info_dict.copy()
-                                 )
-    create_dqn2 = lambda i, env: (WorkerDQN(policy=DQNMlp,
-                                            env=env,
-                                            policy_kwargs=dqn_policy_kwargs2,
-                                            **dqnkwargs
-                                            ), train_info_dict.copy()
-                                  )
-
-    worker_constructors = [create_ppo,
-                           create_ppo2,
-                           create_dqn,
-                           create_dqn2,
+    worker_constructors = [lambda i, env: (WorkerPPO(policy=PPOMlp,
+                                                     env=env,
+                                                     policy_kwargs=ppo_policy_kwargs,
+                                                     **ppokwargs
+                                                     ), train_info_dict.copy()
+                                           )
+                           for ppo_policy_kwargs in all_ppo_policy_kwargs
                            ]
 
     pop_sizes = [args.island_size for _ in worker_constructors]
