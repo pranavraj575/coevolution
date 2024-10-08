@@ -281,7 +281,6 @@ if __name__ == '__main__':
                                **trainer_kwargs,
                                )
         if os.path.exists(save_dir):
-            print('loading from', save_dir)
             trainer.load(save_dir=save_dir)
         else:
             print("NO FILE FOUND", save_dir)
@@ -345,13 +344,13 @@ if __name__ == '__main__':
         todo = args.sample_games - old_len
         if todo <= 0:
             continue
-
         t1 = sample_teams(*alg1, n=todo)
         if t1 is None:
             continue
         t2 = sample_teams(*alg2, n=todo)
         if t2 is None:
             continue
+        print('playing', todo, 'games for key', key)
         _, agents1 = t1
         _, agents2 = t2
         for agent_choices in zip(agents1, agents2):
