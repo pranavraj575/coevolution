@@ -329,7 +329,7 @@ if __name__ == '__main__':
             return team_1_score, team_2_score
 
 
-    if os.path.exists(data_file):
+    if (not args.reset) and os.path.exists(data_file):
         f = open(data_file, 'rb')
         stuff = pickle.load(f)
         f.close()
