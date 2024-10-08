@@ -25,6 +25,8 @@ if __name__ == '__main__':
     PARSER.add_argument('--games-per-epoch', type=int, required=False, default=16,
                         help="games to play per epoch"
                         )
+    PARSER.add_argument('--sample-games', type=int, required=False, default=50,
+                        help="sample games to test different algorithms with")
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, random, shutil, pickle
@@ -282,7 +284,8 @@ if __name__ == '__main__':
             print('loading from', save_dir)
             trainer.load(save_dir=save_dir)
         else:
-            raise Exception("NO FILE FOUND", save_dir)
+            print("NO FILE FOUND", save_dir)
+            return None
         dist = trainer.team_trainer.get_total_distribution(T=2)
         keys = list(dist.keys())
         teams = []
@@ -330,28 +333,40 @@ if __name__ == '__main__':
         f = open(data_file, 'rb')
         stuff = pickle.load(f)
         f.close()
-        for key in stuff:
-            print()
-            print(key)
-            s=np.zeros(2)
-            for item in stuff[key]:
-                s+=item
-            s/=len(stuff[key])
-            print(s)
-        quit()
     else:
         stuff = dict()
     for alg1, alg2 in itertools.combinations(algorithms, 2):
-        _, agents1 = sample_teams(*alg1, n=500)
-        _, agents2 = sample_teams(*alg2, n=500)
 
         # key to save into results
         key = tuple(zip(('MCAA', "MAP Elites"), alg1)), tuple(zip(('MCAA', "MAP Elites"), alg2))
         if key not in stuff:
             stuff[key] = []
+        old_len = len(stuff[key])
+        todo = args.sample_games - old_len
+        if todo <= 0:
+            continue
+
+        t1 = sample_teams(*alg1, n=todo)
+        if t1 is None:
+            continue
+        t2 = sample_teams(*alg2, n=todo)
+        if t2 is None:
+            continue
+        _, agents1 = t1
+        _, agents2 = t2
         for agent_choices in zip(agents1, agents2):
             stuff[key].append(get_results(agent_choices))
 
     f = open(data_file, 'wb')
     pickle.dump(stuff, f)
     f.close()
+
+    for key in stuff:
+        if stuff[key]:
+            print()
+            print(key)
+            s = np.zeros(2)
+            for item in stuff[key]:
+                s += item
+            s /= len(stuff[key])
+            print(s)
