@@ -341,8 +341,9 @@ if __name__ == '__main__':
         # key to save into results
         key = tuple(zip(('MCAA', "MAP Elites"), alg1)), tuple(zip(('MCAA', "MAP Elites"), alg2))
         if key not in stuff:
-            stuff[key] = []
-        old_len = len(stuff[key])
+            # alg1 wins, alg2 wins, tie
+            stuff[key] = np.zeros(3)
+        old_len = int(np.sum(stuff[key]))
         todo = args.sample_games - old_len
         if todo <= 0:
             continue
@@ -364,7 +365,14 @@ if __name__ == '__main__':
             all_results = [get_results(agent_choices)
                            for agent_choices in setups]
         for res in all_results:
-            stuff[key].append(res)
+            if res == (.5, .5):
+                stuff[key][2] += 1
+            elif res == (1., 0.):
+                stuff[key][0] += 1
+            elif res == (0., 1.):
+                stuff[key][1] += 1
+            else:
+                raise Exception(res)
         print('time:', time.time() - start)
         print('saving...\r', end='\n')
         f = open(data_file, 'wb')
@@ -397,8 +405,9 @@ if __name__ == '__main__':
             opp_team = [potential_opponents[idx] for idx in opponent_team_idxs]
             key = tuple(zip(('MCAA', "MAP Elites"), alg)), ('against fixed pol team:', opponent_team_idxs)
             if key not in stuff:
-                stuff[key] = []
-            old_len = len(stuff[key])
+                # alg1 wins, alg2 wins, tie
+                stuff[key] = np.zeros(3)
+            old_len = int(np.sum(stuff[key]))
             todo = args.sample_games - old_len
             if todo <= 0:
                 continue
@@ -417,7 +426,14 @@ if __name__ == '__main__':
                 all_results = [get_results(agent_choices)
                                for agent_choices in setups]
             for res in all_results:
-                stuff[key].append(res)
+                if res == (.5, .5):
+                    stuff[key][2] += 1
+                elif res == (1., 0.):
+                    stuff[key][0] += 1
+                elif res == (0., 1.):
+                    stuff[key][1] += 1
+                else:
+                    raise Exception(res)
             print('time:', time.time() - start)
             print('saving...\r', end='\n')
             f = open(data_file, 'wb')
@@ -426,14 +442,10 @@ if __name__ == '__main__':
             print('done saving')
 
     for key in stuff:
-        if stuff[key]:
+        if np.sum(stuff[key]):
             print()
             print(key)
-            s = np.zeros(2)
-            for item in stuff[key]:
-                s += item
-            s /= len(stuff[key])
-            print(s)
+            print(list(zip(('w', 'l', 't'), stuff[key])))
     basic_team_elo_file = os.path.join(DIR, 'data', 'save', 'basic_team_tournament', 'elos_' + save_file_name + '.pkl')
     f = open(basic_team_elo_file, 'rb')
     basic_team_to_elos = pickle.load(f)
@@ -449,16 +461,14 @@ if __name__ == '__main__':
         return team_key[0][1], team_key[1][1]
 
 
-    keys = list(stuff.keys())
     while True:
         old_elos = elos.data.clone()
-        for i in torch.randperm(len(keys)):
-            key = keys[i]
+        optim.zero_grad()
+        for key in stuff:
             team1_key, team2_key = key
             team1 = team_key_to_alg(team1_key)
-            if not stuff[key]:
+            if not np.sum(stuff[key]):
                 continue
-            optim.zero_grad()
             elo1 = elos[alg_to_idx[team1]]
             if type(team2_key[0]) == str:
                 elo2 = torch.tensor(basic_team_to_elos[team2_key[1]])
@@ -469,12 +479,14 @@ if __name__ == '__main__':
                 elo2 = elos[alg_to_idx[team2]]
             expectation = torch.softmax(torch.stack((elo1, elo2)), dim=-1)
             actual = torch.zeros(2)
-            for item in stuff[key]:
-                actual += torch.tensor(item)
-            actual = actual/len(stuff[key])
+            actual[0] += stuff[key][0]
+            actual[0] += stuff[key][2]/2
+            actual[1] += stuff[key][1]
+            actual[1] += stuff[key][2]/2
+            actual = actual/np.sum(stuff[key])
             loss = torch.nn.MSELoss().forward(expectation, actual)
             loss.backward()
-            optim.step()
+        optim.step()
         elo_diff = elos.data - old_elos
         if torch.linalg.norm(elo_diff) < .01:
             break
