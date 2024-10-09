@@ -499,8 +499,8 @@ if __name__ == '__main__':
             loss.backward()
         optim.step()
         elo_diff = elos.data - old_elos
-        print(np.round(elos.data.detach().numpy()*elo_conversion + 1000),end='\r')
+        print(np.round(elos.data.detach().numpy()*elo_conversion + 1000),
+              end='               \r')
         if torch.linalg.norm(elo_diff) <= 0:
             print()
             break
-
