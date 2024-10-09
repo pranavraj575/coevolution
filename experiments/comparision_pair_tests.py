@@ -331,6 +331,7 @@ if __name__ == '__main__':
             return team_1_score, team_2_score
 
 
+    game_batch = 100
     if (not args.reset) and os.path.exists(data_file):
         f = open(data_file, 'rb')
         stuff = pickle.load(f)
@@ -347,46 +348,37 @@ if __name__ == '__main__':
         todo = args.sample_games - old_len
         if todo <= 0:
             continue
-        t1 = sample_teams(*alg1, n=todo)
-        if t1 is None:
-            continue
-        t2 = sample_teams(*alg2, n=todo)
-        if t2 is None:
+        if (sample_teams(*alg1, n=1) is None) or (sample_teams(*alg2, n=1) is None):
             continue
         print('playing', todo, 'games for key', key)
         start = time.time()
-        _, agents1 = t1
-        _, agents2 = t2
-        setups = zip(agents1, agents2)
-        if proc > 0:
-            with Pool(processes=proc) as pool:
-                all_results = pool.map(get_results, setups)
-        else:
-            all_results = [get_results(agent_choices)
-                           for agent_choices in setups]
-        for res in all_results:
-            if res == (.5, .5):
-                stuff[key][2] += 1
-            elif res == (1., 0.):
-                stuff[key][0] += 1
-            elif res == (0., 1.):
-                stuff[key][1] += 1
+        for i in range(0, todo, game_batch):
+            num_games = min(game_batch, todo - i)
+            _, agents1 = sample_teams(*alg1, n=num_games)
+            _, agents2 = sample_teams(*alg2, n=num_games)
+
+            setups = zip(agents1, agents2)
+            if proc > 0:
+                with Pool(processes=proc) as pool:
+                    all_results = pool.map(get_results, setups)
             else:
-                raise Exception(res)
+                all_results = [get_results(agent_choices)
+                               for agent_choices in setups]
+            for res in all_results:
+                if res == (.5, .5):
+                    stuff[key][2] += 1
+                elif res == (1., 0.):
+                    stuff[key][0] += 1
+                elif res == (0., 1.):
+                    stuff[key][1] += 1
+                else:
+                    raise Exception(res)
         print('time:', time.time() - start)
         print('saving...\r', end='\n')
         f = open(data_file, 'wb')
         pickle.dump(stuff, f)
         f.close()
         print('done saving')
-
-    ####
-    # base elos on fixed policy teams
-    ####
-
-    save_file_name = 'torunament' + ('_team_size_' + str(args.team_size) +
-                                     '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
-                                     )
 
 
     def get_possible_teams(num):
@@ -411,29 +403,32 @@ if __name__ == '__main__':
             todo = args.sample_games - old_len
             if todo <= 0:
                 continue
-            t = sample_teams(*alg, n=todo)
-            if t is None:
+
+            if sample_teams(*alg, n=1) is None:
                 continue
-            _, agents = t
+
             print('playing', todo, 'games for key', key)
             start = time.time()
+            for i in range(0, todo, game_batch):
+                num_games = min(game_batch, todo - i)
+                _, agents = sample_teams(*alg, n=num_games)
 
-            setups = ([agent_choices_one_team, opp_team] for agent_choices_one_team in agents)
-            if proc > 0:
-                with Pool(processes=proc) as pool:
-                    all_results = pool.map(get_results, setups)
-            else:
-                all_results = [get_results(agent_choices)
-                               for agent_choices in setups]
-            for res in all_results:
-                if res == (.5, .5):
-                    stuff[key][2] += 1
-                elif res == (1., 0.):
-                    stuff[key][0] += 1
-                elif res == (0., 1.):
-                    stuff[key][1] += 1
+                setups = ([agent_choices_one_team, opp_team] for agent_choices_one_team in agents)
+                if proc > 0:
+                    with Pool(processes=proc) as pool:
+                        all_results = pool.map(get_results, setups)
                 else:
-                    raise Exception(res)
+                    all_results = [get_results(agent_choices)
+                                   for agent_choices in setups]
+                for res in all_results:
+                    if res == (.5, .5):
+                        stuff[key][2] += 1
+                    elif res == (1., 0.):
+                        stuff[key][0] += 1
+                    elif res == (0., 1.):
+                        stuff[key][1] += 1
+                    else:
+                        raise Exception(res)
             print('time:', time.time() - start)
             print('saving...\r', end='\n')
             f = open(data_file, 'wb')
@@ -446,6 +441,14 @@ if __name__ == '__main__':
             print()
             print(key)
             print(list(zip(('w', 'l', 't'), stuff[key])))
+
+    ####
+    # base elos on fixed policy teams
+    ####
+
+    save_file_name = 'torunament' + ('_team_size_' + str(args.team_size) +
+                                     '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
+                                     )
     basic_team_elo_file = os.path.join(DIR, 'data', 'save', 'basic_team_tournament', 'elos_' + save_file_name + '.pkl')
     f = open(basic_team_elo_file, 'rb')
     basic_team_to_elos = pickle.load(f)

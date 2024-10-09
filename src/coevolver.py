@@ -119,6 +119,7 @@ class CoevolutionBase:
                  member_to_population=None,
                  processes=0,
                  storage_dir=None,
+                 verbose=False,
                  ):
         """
         Args:
@@ -137,6 +138,7 @@ class CoevolutionBase:
                 by default, assumes each member can be drawn from each population
             storage_dir: place to store files and such
         """
+        self.verbose=verbose
         self.outcome_fn_gen = outcome_fn_gen
         self.population_sizes = population_sizes
         self.team_sizes = team_sizes
@@ -1062,7 +1064,8 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
         if team_idx_to_agent_id is not None:
             self.team_idx_to_agent_id = team_idx_to_agent_id
         else:
-            print('warning team_idx_to_agent_id not set, creating it in order')
+            if self.verbose:
+                print('warning team_idx_to_agent_id not set, creating it in order')
             env_agents = iter(test_env.agents)
             dict_team_idx_to_agent_id = dict()
             for team_idx, team_size in enumerate(self.team_sizes):
