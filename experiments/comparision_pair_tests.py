@@ -29,6 +29,10 @@ if __name__ == '__main__':
                         help="sample games to test different algorithms with")
     PARSER.add_argument('--ignore-fixed', action='store_true', required=False,
                         help="ignore fixed policy games")
+    PARSER.add_argument('--compare-one', action='store_true', required=False,
+                        help="when --ignore-fixed, still use comparison of one team with baseline")
+    PARSER.add_argument('--display-results', action='store_true', required=False,
+                        help="print out record")
 
     args = PARSER.parse_args()
 
@@ -435,12 +439,12 @@ if __name__ == '__main__':
             pickle.dump(stuff, f)
             f.close()
             print('done saving')
-
-    for key in stuff:
-        if np.sum(stuff[key]):
-            print()
-            print(key)
-            print(list(zip(('w', 'l', 't'), stuff[key])))
+    if args.display_results:
+        for key in stuff:
+            if np.sum(stuff[key]):
+                print()
+                print(key)
+                print(list(zip(('w', 'l', 't'), stuff[key])))
 
     ####
     # base elos on fixed policy teams
@@ -464,6 +468,9 @@ if __name__ == '__main__':
         return team_key[0][1], team_key[1][1]
 
 
+    print('mcaa, mape')
+    print(algorithms)
+    elo_conversion = 400/np.log(10)
     while True:
         old_elos = elos.data.clone()
         optim.zero_grad()
@@ -476,7 +483,8 @@ if __name__ == '__main__':
             if type(team2_key[0]) == str:
                 elo2 = torch.tensor(basic_team_to_elos[team2_key[1]])
                 if args.ignore_fixed:
-                    continue
+                    if not (args.compare_one and (team1 == (False, False))):
+                        continue
             else:
                 team2 = team_key_to_alg(team2_key)
                 elo2 = elos[alg_to_idx[team2]]
@@ -491,11 +499,8 @@ if __name__ == '__main__':
             loss.backward()
         optim.step()
         elo_diff = elos.data - old_elos
-        if torch.linalg.norm(elo_diff) < .01:
+        print(np.round(elos.data.detach().numpy()*elo_conversion + 1000),end='\r')
+        if torch.linalg.norm(elo_diff) <= 0:
+            print()
             break
 
-    elo_conversion = 400/np.log(10)
-    print('mcaa, mape')
-    print(algorithms)
-    print(elos.data.detach().numpy()*elo_conversion + 1000)
-    print(basic_team_to_elos[(2, 5)]*elo_conversion + 1000)
