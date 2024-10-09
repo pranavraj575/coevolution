@@ -27,6 +27,9 @@ if __name__ == '__main__':
                         )
     PARSER.add_argument('--sample-games', type=int, required=False, default=50,
                         help="sample games to test different algorithms with")
+    PARSER.add_argument('--ignore-fixed', action='store_true', required=False,
+                        help="ignore fixed policy games")
+
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, random, shutil, pickle
@@ -388,6 +391,8 @@ if __name__ == '__main__':
     potential_opponents = default_potential_opponents(env_constructor=env_constructor)
     potential_opponent_teams = get_possible_teams(len(potential_opponents))
     for alg in algorithms:
+        if args.ignore_fixed:
+            continue
         for opponent_team_idxs in potential_opponent_teams:
             opp_team = [potential_opponents[idx] for idx in opponent_team_idxs]
             key = tuple(zip(('MCAA', "MAP Elites"), alg)), ('against fixed pol team:', opponent_team_idxs)
@@ -457,6 +462,8 @@ if __name__ == '__main__':
             elo1 = elos[alg_to_idx[team1]]
             if type(team2_key[0]) == str:
                 elo2 = torch.tensor(basic_team_to_elos[team2_key[1]])
+                if args.ignore_fixed:
+                    continue
             else:
                 team2 = team_key_to_alg(team2_key)
                 elo2 = elos[alg_to_idx[team2]]
