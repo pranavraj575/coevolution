@@ -57,6 +57,7 @@ if __name__ == '__main__':
     from BERTeam.trainer import MLMTeamTrainer
     from experiments.subclasses.MCAA_mainland_team_trainer import MCAAMainland
     from experiments.subclasses.coevolution_subclass import ComparisionExperiment, PZCC_MAPElites
+    from experiments.pyquaticus_utils.agent_aggression import default_potential_opponents
 
     from src.utils.dict_keys import *
 
@@ -219,6 +220,9 @@ if __name__ == '__main__':
                  )
         data_folder = os.path.join(DIR, 'data', 'temp', ident)
         save_dir = os.path.join(DIR, 'data', 'save', ident)
+        if not os.path.exists(save_dir):
+            print("NO FILE FOUND", save_dir)
+            return None
 
         if MCAA:
             team_trainer = MCAAMainland(pop_sizes=pop_sizes,
@@ -280,11 +284,7 @@ if __name__ == '__main__':
                                protect_elite=args.elite_protection,
                                **trainer_kwargs,
                                )
-        if os.path.exists(save_dir):
-            trainer.load(save_dir=save_dir)
-        else:
-            print("NO FILE FOUND", save_dir)
-            return None
+        trainer.load(save_dir=save_dir)
         dist = trainer.team_trainer.get_total_distribution(T=2)
         keys = list(dist.keys())
         teams = []
@@ -335,7 +335,6 @@ if __name__ == '__main__':
     else:
         stuff = dict()
     for alg1, alg2 in itertools.combinations(algorithms, 2):
-
         # key to save into results
         key = tuple(zip(('MCAA', "MAP Elites"), alg1)), tuple(zip(('MCAA', "MAP Elites"), alg2))
         if key not in stuff:
@@ -351,14 +350,75 @@ if __name__ == '__main__':
         if t2 is None:
             continue
         print('playing', todo, 'games for key', key)
+        start = time.time()
         _, agents1 = t1
         _, agents2 = t2
-        for agent_choices in zip(agents1, agents2):
-            stuff[key].append(get_results(agent_choices))
+        setups = zip(agents1, agents2)
+        if proc > 0:
+            with Pool(processes=proc) as pool:
+                all_results = pool.map(get_results, setups)
+        else:
+            all_results = [get_results(agent_choices)
+                           for agent_choices in setups]
+        for res in all_results:
+            stuff[key].append(res)
+        print('time:', time.time() - start)
+        print('saving...\r', end='\n')
+        f = open(data_file, 'wb')
+        pickle.dump(stuff, f)
+        f.close()
+        print('done saving')
 
-    f = open(data_file, 'wb')
-    pickle.dump(stuff, f)
-    f.close()
+    ####
+    # base elos on fixed policy teams
+    ####
+
+    save_file_name = 'torunament' + ('_team_size_' + str(args.team_size) +
+                                     '_arena_' + str('__'.join([str(t).replace('.', '_') for t in arena_size]))
+                                     )
+
+
+    def get_possible_teams(num):
+        possible_teams = itertools.product(range(num), repeat=team_size)
+        return tuple(set(
+            tuple(sorted(team)) for team in possible_teams
+        ))
+
+
+    potential_opponents = default_potential_opponents(env_constructor=env_constructor)
+    potential_opponent_teams = get_possible_teams(len(potential_opponents))
+    for alg in algorithms:
+        for opponent_team_idxs in potential_opponent_teams:
+            opp_team = [potential_opponents[idx] for idx in opponent_team_idxs]
+            key = tuple(zip(('MCAA', "MAP Elites"), alg)), ('against fixed pol team:', opponent_team_idxs)
+            if key not in stuff:
+                stuff[key] = []
+            old_len = len(stuff[key])
+            todo = args.sample_games - old_len
+            if todo <= 0:
+                continue
+            t = sample_teams(*alg, n=todo)
+            if t is None:
+                continue
+            _, agents = t
+            print('playing', todo, 'games for key', key)
+            start = time.time()
+
+            setups = ([agent_choices_one_team, opp_team] for agent_choices_one_team in agents)
+            if proc > 0:
+                with Pool(processes=proc) as pool:
+                    all_results = pool.map(get_results, setups)
+            else:
+                all_results = [get_results(agent_choices)
+                               for agent_choices in setups]
+            for res in all_results:
+                stuff[key].append(res)
+            print('time:', time.time() - start)
+            print('saving...\r', end='\n')
+            f = open(data_file, 'wb')
+            pickle.dump(stuff, f)
+            f.close()
+            print('done saving')
 
     for key in stuff:
         if stuff[key]:
@@ -369,3 +429,51 @@ if __name__ == '__main__':
                 s += item
             s /= len(stuff[key])
             print(s)
+    basic_team_elo_file = os.path.join(DIR, 'data', 'save', 'basic_team_tournament', 'elos_' + save_file_name + '.pkl')
+    f = open(basic_team_elo_file, 'rb')
+    basic_team_to_elos = pickle.load(f)
+    f.close()
+
+    elos = torch.nn.Parameter(torch.zeros(len(algorithms)))
+    alg_to_idx = {alg: i for i, alg in enumerate(algorithms)}
+    optim = torch.optim.Adam(params=torch.nn.ParameterList([elos]),
+                             lr=1e-2)
+
+
+    def team_key_to_alg(team_key):
+        return team_key[0][1], team_key[1][1]
+
+
+    keys = list(stuff.keys())
+    while True:
+        old_elos = elos.data.clone()
+        for i in torch.randperm(len(keys)):
+            key = keys[i]
+            team1_key, team2_key = key
+            team1 = team_key_to_alg(team1_key)
+            if not stuff[key]:
+                continue
+            optim.zero_grad()
+            elo1 = elos[alg_to_idx[team1]]
+            if type(team2_key[0]) == str:
+                elo2 = torch.tensor(basic_team_to_elos[team2_key[1]])
+            else:
+                team2 = team_key_to_alg(team2_key)
+                elo2 = elos[alg_to_idx[team2]]
+            expectation = torch.softmax(torch.stack((elo1, elo2)), dim=-1)
+            actual = torch.zeros(2)
+            for item in stuff[key]:
+                actual += torch.tensor(item)
+            actual = actual/len(stuff[key])
+            loss = torch.nn.MSELoss().forward(expectation, actual)
+            loss.backward()
+            optim.step()
+        elo_diff = elos.data - old_elos
+        if torch.linalg.norm(elo_diff) < .01:
+            break
+
+    elo_conversion = 400/np.log(10)
+    print('mcaa, mape')
+    print(algorithms)
+    print(elos.data.detach().numpy()*elo_conversion + 1000)
+    print(basic_team_to_elos[(2, 5)]*elo_conversion + 1000)
