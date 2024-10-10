@@ -1,3 +1,4 @@
+# this one uses comparison experiment and generates captians according to distribution with noise
 import argparse
 
 if __name__ == '__main__':
@@ -8,9 +9,11 @@ if __name__ == '__main__':
     add_team_args(PARSER)
     PARSER.add_argument('--rand-count', type=int, required=False, default=0,
                         help="number of random agents to add into population to try confusing team selector")
+    PARSER.add_argument('--games-per-epoch', type=int, required=False, default=16,
+                        help="guess")
     add_pyquaticus_args(PARSER, arena_size=True)
     add_berteam_args(PARSER)
-    add_experiment_args(PARSER, 'pyquaticus_basic_team_MLM')
+    add_experiment_args(PARSER, 'basic_team_MLM2', epochs_default=2000)
 
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
@@ -38,7 +41,7 @@ if __name__ == '__main__':
     from BERTeam.buffer import BinnedReplayBufferDiskStorage
     from BERTeam.trainer import MLMTeamTrainer
 
-    from src.coevolver import PettingZooCaptianCoevolution
+    from experiments.subclasses.coevolution_subclass import ComparisionExperiment
     from src.utils.dict_keys import *
 
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
@@ -157,18 +160,20 @@ if __name__ == '__main__':
             bounds=[1/2, 1],
         )
     )
-    trainer = PettingZooCaptianCoevolution(population_sizes=non_learning_sizes,
-                                           team_trainer=team_trainer,
-                                           outcome_fn_gen=CTFOutcome,
-                                           env_constructor=env_constructor,
-                                           worker_constructors=non_lerning_construct,
-                                           storage_dir=data_folder,
-                                           processes=proc,
-                                           team_sizes=(team_size, team_size),
-                                           depth_to_retry_result=retrial_fn,
-                                           # member_to_population=lambda team_idx, member_idx: {team_idx},
-                                           team_member_elo_update=1*np.log(10)/400,
-                                           )
+    trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
+                                    team_trainer=team_trainer,
+                                    outcome_fn_gen=CTFOutcome,
+                                    env_constructor=env_constructor,
+                                    worker_constructors=non_lerning_construct,
+                                    storage_dir=data_folder,
+                                    processes=proc,
+                                    team_sizes=(team_size, team_size),
+                                    MCAA_mode=False,
+                                    games_per_epoch=args.games_per_epoch,
+                                    uniform_random_cap_select=False,
+                                    # member_to_population=lambda team_idx, member_idx: {team_idx},
+                                    team_member_elo_update=1*np.log(10)/400,
+                                    )
     plotting = {'init_dists': [],
                 'team_dists': [],
                 'team_dists_non_ordered': [],

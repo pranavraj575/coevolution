@@ -47,6 +47,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                  temp_zoo_dir=None,
                  max_steps_per_ep=float('inf'),
                  local_collection_mode=True,
+                 uniform_random_cap_select=True,
                  ):
         super().__init__(
             env_constructor=env_constructor,
@@ -75,6 +76,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
         self.MCAA = MCAA_mode
         self.MCAA_fitness_update = MCAA_fitness_update
         self.games_per_epoch = games_per_epoch
+        self.uniform_random_cap_select = uniform_random_cap_select
         if self.MCAA:
             # we will use elos as the fitness, representing win probability against random team
             # we will start them off as all .5
@@ -157,7 +159,27 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
               **kwargs,
               ):
         if not self.MCAA:
-            captians_choices = [np.random.choice(range(self.N), 2, replace=False) for _ in range(self.games_per_epoch)]
+            if self.uniform_random_cap_select:
+                captians_choices = [np.random.choice(range(self.N), 2, replace=False)
+                                    for _ in range(self.games_per_epoch)]
+            else:
+                # create test teams with noise
+                all_test_teams = [
+                    [self.team_trainer.create_teams(T=team_size,
+                                                    N=1,
+                                                    noise_model=noise_model,
+                                                    obs_preembed=None,
+                                                    obs_mask=None,
+                                                    ).detach().flatten()
+                     for team_size in self.team_sizes
+                     ]
+                    for _ in range(self.games_per_epoch)
+                ]
+                # select team captians randomly for each team
+                captians_choices = [
+                    tuple(team[torch.randint(0, len(team), ())] for team in teams)
+                    for teams in all_test_teams]
+
             pre_ep_dicts = [self.pre_episode_generation(captian_choices=(i.item(), j.item()),
                                                         unique=tuple(False for _ in range(self.num_teams)),
                                                         rechoose=rechoose,
