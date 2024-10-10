@@ -17,6 +17,8 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
+    PARSER.add_argument('--dont-backup', action='store_true', required=False,
+                        help="do not backup a copy of previous save")
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, shutil
@@ -173,6 +175,7 @@ if __name__ == '__main__':
                                     uniform_random_cap_select=False,
                                     # member_to_population=lambda team_idx, member_idx: {team_idx},
                                     team_member_elo_update=1*np.log(10)/400,
+
                                     )
     plotting = {'init_dists': [],
                 'team_dists': [],
@@ -389,6 +392,8 @@ if __name__ == '__main__':
                 noise_model=team_trainer.create_nose_model_towards_uniform(
                     t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
                 )
+                ,
+                save_epoch_info=False,# TODO: probably can do this more elegantly
             )
             if not trainer.epochs%args.train_freq:
                 print('training step started')

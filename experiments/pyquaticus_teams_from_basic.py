@@ -14,6 +14,8 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
+    PARSER.add_argument('--dont-backup', action='store_true', required=False,
+                        help="do not backup a copy of previous save")
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, shutil
