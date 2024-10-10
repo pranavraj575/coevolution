@@ -1,16 +1,19 @@
-import torch, shutil, os, sys
-import numpy as np
-import dill as dill
 import pickle
+
+import dill as dill
+import numpy as np
+import shutil
+import sys, os
+import torch
+from BERTeam.outcome import PlayerInfo
+from BERTeam.trainer import TeamTrainer
 # from multiprocessing import Pool
 from pathos.multiprocessing import ProcessPool as Pool
-
-from BERTeam.trainer import TeamTrainer
-from BERTeam.outcome import PlayerInfo
+from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
+from unstable_baselines3.common.common import DumEnv
 
 from src.petting_zoo_outcome import PettingZooOutcomeFn
-
-from src.zoo_cage import ZooCage
 from src.utils.dict_keys import (DICT_AGE,
                                  DICT_MUTATION_AGE,
                                  DICT_CLONABLE,
@@ -39,11 +42,7 @@ from src.utils.dict_keys import (DICT_AGE,
                                  COEVOLUTION_DICT_DEPTH_OF_RETRY,
                                  )
 from src.utils.savele_baselines import load_worker
-
-from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-
-from unstable_baselines3.common.common import DumEnv
+from src.zoo_cage import ZooCage
 
 sys.setrecursionlimit(2000)
 
@@ -71,6 +70,8 @@ def train_episode(pre_episode_dict):
     """
     (ident,
      teams,
+     log_formation_probs,
+     log_og_formation_probs,
      agents,
      train_infos,
      env,
@@ -79,6 +80,8 @@ def train_episode(pre_episode_dict):
      captian_choices,
      ) = (pre_episode_dict[key] for key in ('ident',
                                             'teams',
+                                            'log formation probs',
+                                            'log og formation probs',
                                             'agents',
                                             'train_infos',
                                             'env',
@@ -101,6 +104,8 @@ def train_episode(pre_episode_dict):
         'outcome_local_mem': outcome_fn.pop_local_mem(),
         'captian_choices': captian_choices,
         'teams': teams,
+        'log formation probs': log_formation_probs,
+        'log og formation probs': log_og_formation_probs,
         'team_outcomes': team_outcomes,
         'episode_info': episode_info,
     }
@@ -138,7 +143,7 @@ class CoevolutionBase:
                 by default, assumes each member can be drawn from each population
             storage_dir: place to store files and such
         """
-        self.verbose=verbose
+        self.verbose = verbose
         self.outcome_fn_gen = outcome_fn_gen
         self.population_sizes = population_sizes
         self.team_sizes = team_sizes
@@ -150,6 +155,12 @@ class CoevolutionBase:
 
         # total population size
         self.N = int(self.cumsums[-1])
+
+        # upper bound of total number of possible teams for each team is (num_agents)**(team size)
+        # take logs to make calculation easier
+        self.log_total_number_possible_teams = [team_size*torch.log(torch.tensor(self.N, dtype=torch.float))
+                                                for team_size in self.team_sizes
+                                                ]
 
         if self.N%self.num_teams != 0:
             print("WARNING: number of agents is not divisible by num teams")
@@ -362,6 +373,7 @@ class CoevolutionBase:
         }
         epoch_info['episodes'] = []
         if pre_ep_dicts is None:
+            # TODO: switch out with new preepisode gen, and just run it some number of times
             pre_ep_dicts = [self.pre_episode_generation(captian_choices=cap_choice,
                                                         unique=unq,
                                                         rechoose=rechoose,
@@ -443,6 +455,25 @@ class CoevolutionBase:
             mutation info
         """
         pass
+
+    def new_pre_episode_generation(self,
+                                   teams=None,
+                                   captian_indices=None,
+                                   noise_model=None,
+                                   log_formation_probs=None,
+                                   log_og_formation_probs=None,
+                                   **kwargs,
+                                   ):
+        """
+        genrates teams and other info for training
+        Args:
+            teams: list of torch arrays. If not specified, generates them
+            captian_indices: list of indices of the captians in teams. must be specified if teams is
+            log_formation_probs: list of team log formation probs. must be specified if teams is
+
+        Returns: info to be passed to update_results
+        """
+        raise NotImplementedError
 
     def pre_episode_generation(self, captian_choices, unique, teams=None, **kwargs):
         """
@@ -638,14 +669,16 @@ class CaptianCoevolution(CoevolutionBase):
                                                           combine=True,
                                                           )
                 obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
-                new_team, _ = self.create_team(team_idx=team_idx,
-                                               captian=None,
-                                               noise_model=noise_model,
-                                               obs_preembed=obs_preembed,
-                                               obs_mask=obs_mask,
-                                               )
+                new_team, _, log_formation_prob, log_og_formation_prob = self.create_team(
+                    team_idx=team_idx,
+                    captian=None,
+                    noise_model=noise_model,
+                    obs_preembed=obs_preembed,
+                    obs_mask=obs_mask,
+                )
                 teams = [new_team if idx == team_idx else team
                          for idx, team in enumerate(teams)]
+                # TODO: switch out with new prep gen, should be same params
                 pre_ep_dict = self.pre_episode_generation(captian_choices=[team[torch.randint(0, len(team), (1,))]
                                                                            for team in teams],
                                                           unique=[False for _ in self.team_sizes],
@@ -727,21 +760,154 @@ class CaptianCoevolution(CoevolutionBase):
                                                         obs_mask=obs_mask,
                                                         )
             captian_pos = torch.where(torch.eq(team.view(-1), captian))[0].item()
+            _, dist, og_dist = self.team_trainer.get_member_distribution(
+                init_team=self.team_trainer.create_masked_teams(T=team_size,
+                                                                N=1,
+                                                                ),
+                noise_model=noise_model,
+                indices=([0], [captian_pos]),  # we only care about the position we put captian in
+            )
+            # both dist and og_dist is of size (1,num agents)
+            log_formation_probability = torch.log(dist[0, captian])
+            log_og_formation_probability = torch.log(og_dist[0, captian])
         else:
             team = self.team_trainer.create_masked_teams(T=team_size,
                                                          N=1,
                                                          )
+            log_formation_probability = torch.tensor(0.)
+            log_og_formation_probability = torch.tensor(0.)
         valid_members = self.team_to_valid_members[team_idx]
-        team = self.team_trainer.fill_in_teams(initial_teams=team,
-                                               noise_model=noise_model,
-                                               valid_members=valid_members.view((1, team_size, self.N)),
-                                               obs_preembed=obs_preembed,
-                                               obs_mask=obs_mask,
-                                               )
+        team, lfp, lofp = self.team_trainer.fill_in_teams(initial_teams=team,
+                                                          noise_model=noise_model,
+                                                          valid_members=valid_members.view((1, team_size, self.N)),
+                                                          obs_preembed=obs_preembed,
+                                                          obs_mask=obs_mask,
+                                                          )
+        log_formation_probability = lfp + log_formation_probability
+        log_og_formation_probability = lofp + log_og_formation_probability
         team = team.detach().flatten()
-        return team, captian_pos
+        return team, captian_pos, log_formation_probability, log_og_formation_probability
 
-    def pre_episode_generation(self, captian_choices, unique, teams=None, noise_model=None, **kwargs):
+    def pick_captians_and_init_formation_probs(self,
+                                               noise_model=None,
+                                               ):
+        teams = [None for _ in self.team_sizes]
+        captian_indices = [None for _ in self.team_sizes]
+        log_formation_probs = [None for _ in self.team_sizes]
+        log_og_formation_probs = [None for _ in self.team_sizes]
+        chosen = []
+        for team_idx in torch.randperm(len(self.team_sizes)):
+            team_size = self.team_sizes[team_idx]
+            valid_members = self.team_to_valid_members[team_idx].clone()
+            for cap in chosen:
+                # set previous captians to invalid, so we do not have any repeats
+                # TODO: this means each position must have at least |teams| possible members
+                valid_members[:, cap] = 0
+            member = torch.randint(0, team_size, ())
+            team, lfp, lofp = self.team_trainer.mutate_add_member(
+                initial_teams=self.team_trainer.create_masked_teams(T=team_size),
+                indices=[[0], [member]],
+                noise_model=noise_model,
+                valid_members=valid_members,
+            )
+            captian_idx = torch.where(torch.not_equal(team.flatten(), self.team_trainer.MASK))[0].item()
+            teams[team_idx] = team
+            captian_indices[team_idx] = captian_idx
+            log_formation_probs[team_idx] = lfp
+            log_og_formation_probs[team_idx] = lofp
+        return teams, captian_indices, log_formation_probs, log_og_formation_probs
+
+    def new_pre_episode_generation(self,
+                                   teams=None,
+                                   captian_indices=None,
+                                   noise_model=None,
+                                   log_formation_probs=None,
+                                   log_og_formation_probs=None,
+                                   obs_preembed=None,
+                                   obs_mask=None,
+                                   **kwargs,
+                                   ):
+        """
+        takes a choice of team captians and trains them in RL environment
+        Args:
+            teams: list of torch arrays. If not specified, generates them with self.team_choice
+        """
+
+        # team selection (pretty much does nothing if teams are size 1
+
+        captian_positions = []
+        if teams is None:
+            (teams,
+             captian_indices,
+             log_formation_probs,
+             log_og_formation_probs) = self.pick_captians_and_init_formation_probs(
+                noise_model=noise_model,
+            )
+            captian_choices = [None for _ in teams]
+            for team_idx, team_size in enumerate(self.team_sizes):
+                valid_members = self.team_to_valid_members[team_idx]
+                team, lfp, olfp = self.team_trainer.fill_in_teams(
+                    initial_teams=teams[team_idx],
+                    noise_model=noise_model,
+                    valid_members=valid_members.view((1, team_size, self.N)),
+                    obs_preembed=obs_preembed,
+                    obs_mask=obs_mask,
+                )
+                teams[team_idx] = team
+                log_formation_probs[team_idx] += lfp
+                log_og_formation_probs[team_idx] += olfp
+                captian_choices[team_idx] = team.flatten()[captian_indices[team_idx]].item()
+        else:
+            assert log_formation_probs is not None
+            assert log_og_formation_probs is not None
+            assert captian_indices is not None
+            captian_choices = []
+            for team, captian_idx in zip(teams, captian_indices):
+                captian_choices.append(team.flatten()[captian_indices[captian_idx]].item())
+
+        captian_choices = tuple(captian_choices)
+
+        episode_info = {'captian_choices': captian_choices,
+                        }
+        episode_info['teams'] = tuple(team.numpy() for team in teams)
+        outcome_fn = self.create_outcome_fn()
+        train_infos = []
+        for team_idx, (captian_pos, team) in enumerate(zip(captian_positions, teams)):
+            tinfo = []
+            for i, member in enumerate(team):
+                global_idx = member.item()
+                captian_pop_idx, local_idx = self.index_to_pop_index(global_idx=global_idx)
+
+                info = self.get_info(pop_local_idx=(captian_pop_idx, local_idx))
+                if i == captian_pos:
+                    info[TEMP_DICT_CAPTIAN] = True
+                else:
+                    info[TEMP_DICT_CAPTIAN] = False
+                tinfo.append(info)
+            train_infos.append(tinfo)
+
+        env = self.env_constructor(train_infos)
+
+        return {'ident': 0,
+                'teams': teams,
+                'log formation probs': log_formation_probs,
+                'log og formation probs': log_og_formation_probs,
+                'agents': None,
+                'train_infos': train_infos,
+                'env': env,
+                'outcome_fn': outcome_fn,
+                'episode_info': episode_info,
+                'captian_choices': captian_choices,
+                }
+
+    def pre_episode_generation(self,
+                               captian_choices,
+                               unique,
+                               teams=None,
+                               noise_model=None,
+                               log_formation_probs=None,
+                               log_og_formation_probs=None,
+                               **kwargs):
         """
         takes a choice of team captians and trains them in RL environment
         Args:
@@ -750,7 +916,7 @@ class CaptianCoevolution(CoevolutionBase):
             teams: list of torch arrays. If not specified, generates them with self.team_choice
         """
         episode_info = {'captian_choices': captian_choices,
-                        'unique_captians': unique
+                        'unique_captians': unique,
                         }
 
         # team selection (pretty much does nothing if teams are size 1
@@ -758,15 +924,21 @@ class CaptianCoevolution(CoevolutionBase):
         captian_positions = []
         if teams is None:
             teams = []
+            log_formation_probs = []
+            log_og_formation_probs = []
             for team_idx, (captian, team_size) in enumerate(zip(captian_choices, self.team_sizes)):
-                team, captian_pos = self.create_team(team_idx=team_idx,
-                                                     captian=captian,
-                                                     noise_model=noise_model,
-                                                     )
+                team, captian_pos, lfp, lofp = self.create_team(
+                    team_idx=team_idx,
+                    captian=captian,
+                    noise_model=noise_model,
+                )
                 captian_positions.append(captian_pos)
                 teams.append(team)
+                log_formation_probs.append(lfp)
+                log_og_formation_probs.append(lofp)
         else:
             for team, captian in zip(teams, captian_choices):
+                assert log_formation_probs is not None
                 possible = torch.where(torch.eq(team.view(-1), captian))[0].flatten()
                 captian_positions.append(possible[torch.randint(0, len(possible), (1,))])
 
@@ -792,6 +964,8 @@ class CaptianCoevolution(CoevolutionBase):
 
         return {'ident': 0,
                 'teams': teams,
+                'log formation probs': log_formation_probs,
+                'log og formation probs': log_og_formation_probs,
                 'agents': None,
                 'train_infos': train_infos,
                 'env': env,
@@ -820,26 +994,38 @@ class CaptianCoevolution(CoevolutionBase):
                 self.elos[member] += self.member_elo_update*(team_outcome - expected_outcome)
 
     def update_team_buffer(self, items_to_save, add_no_input=True):
-        for (team,
-             (team_outcome, player_infos),
-             ) in zip(items_to_save['teams'],
-                      items_to_save['team_outcomes']
-                      ):
+        for i, (team,
+                (team_outcome, player_infos),
+                log_formation_probs,
+                log_og_formation_probs,
+                ) in enumerate(zip(items_to_save['teams'],
+                                   items_to_save['team_outcomes'],
+                                   items_to_save['log formation probs'],
+                                   items_to_save['log og formation probs']
+                                   )):
             # combine all player observations into one (can also just add each individual PlayerInfo)
             combined_obs = PlayerInfo()
             for player_info in player_infos:
                 combined_obs = combined_obs.union_obs(other_player_info=player_info)
             obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
+            # weight is 1/((formation probs)*(total number of possible teams))
+            # we take an upper bound of 100 in case formation probs is incredibly small
+            weight = torch.min(torch.exp(-log_formation_probs - self.log_total_number_possible_teams[i]),
+                               torch.tensor(100.)
+                               )
+
             self.team_trainer.add_to_buffer(scalar=team_outcome,
                                             obs_preembed=obs_preembed,
                                             team=team,
                                             obs_mask=obs_mask,
+                                            weight=weight,
                                             )
             if add_no_input:
                 self.team_trainer.add_to_buffer(scalar=team_outcome,
                                                 obs_preembed=None,
                                                 team=team,
                                                 obs_mask=None,
+                                                weight=weight,
                                                 )
 
     def save_trained_agents(self, outcome_fn_local_mem):
@@ -1196,11 +1382,54 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                                                           )
         return agent
 
-    def pre_episode_generation(self, captian_choices, unique, teams=None, noise_model=None, **kwargs):
+    def new_pre_episode_generation(self,
+                                   teams=None,
+                                   captian_indices=None,
+                                   noise_model=None,
+                                   log_formation_probs=None,
+                                   log_og_formation_probs=None,
+                                   obs_preembed=None,
+                                   obs_mask=None,
+                                   **kwargs,
+                                   ):
+        pre_ep_dict = super().new_pre_episode_generation(
+            teams=teams,
+            captian_indices=captian_indices,
+            noise_model=noise_model,
+            log_formation_probs=log_formation_probs,
+            log_og_formation_probs=log_og_formation_probs,
+            obs_preembed=obs_preembed,
+            obs_mask=obs_mask,
+            **kwargs,
+        )
+        team_choices, updated_train_infos = pre_ep_dict['teams'], pre_ep_dict['train_infos']
+
+        for t in updated_train_infos:
+            for train_dict in t:
+                if self.local_collection_mode:
+                    # TODO: sometimes info dict keys get lost?
+                    train_dict[DICT_COLLECT_ONLY] = True
+
+        pre_ep_dict.update({'agents': [
+            [self.index_to_agent(member.item(), member_training) for member, member_training in zip(*t)]
+            for t in zip(team_choices, updated_train_infos)]})
+        return pre_ep_dict
+
+    def pre_episode_generation(self,
+                               captian_choices,
+                               unique,
+                               teams=None,
+                               noise_model=None,
+                               log_formation_probs=None,
+                               log_og_formation_probs=None,
+                               **kwargs):
         pre_ep_dict = super().pre_episode_generation(captian_choices=captian_choices,
                                                      unique=unique,
                                                      teams=teams,
                                                      noise_model=noise_model,
+                                                     log_formation_probs=log_formation_probs,
+                                                     log_og_formation_probs=log_og_formation_probs,
+                                                     **kwargs,
                                                      )
         team_choices, updated_train_infos = pre_ep_dict['teams'], pre_ep_dict['train_infos']
 
@@ -1673,8 +1902,6 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
 
 
 if __name__ == '__main__':
-    import os, sys
-
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     torch.random.manual_seed(69)

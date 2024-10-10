@@ -170,7 +170,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                                                     noise_model=noise_model,
                                                     obs_preembed=None,
                                                     obs_mask=None,
-                                                    ).detach().flatten()
+                                                    )[0].detach().flatten()
                      for team_size in self.team_sizes
                      ]
                     for _ in range(self.games_per_epoch)
@@ -179,7 +179,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                 captians_choices = [
                     tuple(team[torch.randint(0, len(team), ())] for team in teams)
                     for teams in all_test_teams]
-
+            # todo: switch out with new preep gen
             pre_ep_dicts = [self.pre_episode_generation(captian_choices=(i.item(), j.item()),
                                                         unique=tuple(False for _ in range(self.num_teams)),
                                                         rechoose=rechoose,
@@ -256,6 +256,9 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
 
         return {'ident': 0,
                 'teams': teams,
+                # in this case, we cannot weight teams
+                'log formation probs': [torch.tensor(0.) for _ in teams],
+                'log og formation probs': [torch.tensor(0.) for _ in teams],
                 'agents': None,
                 'train_infos': train_infos,
                 'env': env,
@@ -279,7 +282,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                                                   noise_model=noise_model,
                                                   )
             team = team.detach().flatten()
-            return team, None
+            return team, None, None, None
         else:
             return super().create_team(team_idx=team_idx,
                                        captian=captian,

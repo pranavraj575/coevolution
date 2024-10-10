@@ -9,7 +9,7 @@ if __name__ == '__main__':
     add_team_args(PARSER)
     PARSER.add_argument('--rand-count', type=int, required=False, default=0,
                         help="number of random agents to add into population to try confusing team selector")
-    PARSER.add_argument('--games-per-epoch', type=int, required=False, default=16,
+    PARSER.add_argument('--games-per-epoch', type=int, required=False, default=25,
                         help="guess")
     add_pyquaticus_args(PARSER, arena_size=True)
     add_berteam_args(PARSER)
@@ -84,7 +84,8 @@ if __name__ == '__main__':
     ident = (args.ident +
              pyquaticus_string(args) +
              berteam_string(args) +
-             (('_rand_cnt_' + str(rand_cnt)) if rand_cnt else '')
+             (('_rand_cnt_' + str(rand_cnt)) if rand_cnt else '') +
+             '_gms_' + str(args.games_per_epoch)
              )
     data_folder = os.path.join(DIR, 'data', 'temp', ident)
     save_dir = os.path.join(DIR, 'data', 'save', ident)
@@ -160,7 +161,10 @@ if __name__ == '__main__':
             capacity=args.capacity,
             device=None,
             bounds=[1/2, 1],
-        )
+            track_age=True,
+        ),
+        # todo: args prob, but currently doing the capacity/10
+        weight_decay_half_life=args.capacity/10,
     )
     trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
                                     team_trainer=team_trainer,
@@ -175,7 +179,6 @@ if __name__ == '__main__':
                                     uniform_random_cap_select=False,
                                     # member_to_population=lambda team_idx, member_idx: {team_idx},
                                     team_member_elo_update=1*np.log(10)/400,
-
                                     )
     plotting = {'init_dists': [],
                 'team_dists': [],
@@ -194,13 +197,13 @@ if __name__ == '__main__':
 
     def update_plotting_variables():
         test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
-        indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
-                                                                     indices=None,
-                                                                     obs_preembed=None,
-                                                                     obs_mask=None,
-                                                                     noise_model=None,
-                                                                     valid_members=None,
-                                                                     )
+        indices, dist, og_dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                              indices=None,
+                                                                              obs_preembed=None,
+                                                                              obs_mask=None,
+                                                                              noise_model=None,
+                                                                              valid_members=None,
+                                                                              )
 
         init_dist = torch.mean(dist, dim=0).detach().numpy()
         plotting['init_dists'].append(init_dist)
@@ -393,7 +396,7 @@ if __name__ == '__main__':
                     t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
                 )
                 ,
-                save_epoch_info=False,# TODO: probably can do this more elegantly
+                save_epoch_info=False,  # TODO: probably can do this more elegantly
             )
             if not trainer.epochs%args.train_freq:
                 print('training step started')
