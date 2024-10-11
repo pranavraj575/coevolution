@@ -1,4 +1,5 @@
 from matplotlib import pyplot as plt
+import numpy as np
 
 
 def deorder_total_dist(total_dist):
@@ -9,6 +10,14 @@ def deorder_total_dist(total_dist):
             total_dist_non_ordered[key] = 0
         total_dist_non_ordered[key] += total_dist[item]
     return total_dist_non_ordered
+
+
+def smooth_backwards(data, r=1):
+    for i in range(1, r + 1):
+        data[:-i] += data[i:]
+        data[-i:] += data[-i:]
+    data = data/(r + 1)
+    return data
 
 
 def plot_dist_evolution(plot_dist,
@@ -22,6 +31,7 @@ def plot_dist_evolution(plot_dist,
                         info=None,
                         info_position=(.0, 1.05),
                         fontsize=None,
+                        smoothing=0,
                         **kwargs
                         ):
     """
@@ -43,18 +53,29 @@ def plot_dist_evolution(plot_dist,
     if mapping is not None:
         plot_dist = [mapping(dist) for dist in plot_dist]
 
-    plot_dist = plot_dist[:min(len(plot_dist), len(x))]
-    x = x[:min(len(plot_dist), len(x))]
-
     num_pops = len(plot_dist[0])
-    for i in range(num_pops):
+
+    # ith element is the probability of the ith distribution plus all previous
+    cum_dists = [np.array([sum(dist[:i]) for dist in plot_dist])
+                 for i in range(1, num_pops + 1)]
+    if smoothing > 0:
+        cum_dists = [smooth_backwards(d, r=smoothing) for d in cum_dists]
+
+    maxdist = min(len(plot_dist), len(x))
+    cum_dists = [d[:maxdist] for d in cum_dists]
+    x = x[:maxdist]
+    prevdist = np.zeros(maxdist)
+
+    for i, cum_dist in enumerate(cum_dists):
         kw = {key: kwargs[key][i] for key in kwargs
               if (i < len(kwargs[key]) and kwargs[key][i] is not None)}
+
         plt.fill_between(x=x,
-                         y1=[sum(dist[:i]) for dist in plot_dist],
-                         y2=[sum(dist[:i + 1]) for dist in plot_dist],
+                         y1=prevdist,
+                         y2=cum_dist,
                          **kw,
                          )
+        prevdist = cum_dist
     if title is not None:
         plt.title(title)
     if xlabel is not None:

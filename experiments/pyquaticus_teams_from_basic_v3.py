@@ -17,6 +17,8 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
+    PARSER.add_argument('--smoothing', type=int, required=False, default=2,
+                        help="smoothing to include in plot")
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
     args = PARSER.parse_args()
@@ -229,7 +231,9 @@ if __name__ == '__main__':
                   ['random'])
         print('plotting and closing')
         # cut off at args.epochs
-        plotting['epochs'] = [epoch for epoch in plotting['epochs'] if epoch<=args.epochs]
+        plotting['epochs'] = [epoch for epoch in plotting['epochs'] if epoch <= args.epochs]
+        last_index = len(plotting['epochs']) - 1
+        smoothing = args.smoothing
 
         plot_dist_evolution(plot_dist=plotting['init_dists'],
                             x=plotting['epochs'],
@@ -240,13 +244,14 @@ if __name__ == '__main__':
                             alpha=[.25, .5, 1] + [.25, .5, 1] + [1],
                             color=['red']*3 + ['blue']*3 + ['black'],
                             legend_position=(-.31, .5),
+                            smoothing=smoothing,
                             )
-        possible_teams = sorted(plotting['team_dists_non_ordered'][-1].keys(),
-                                key=lambda k: plotting['team_dists_non_ordered'][-1][k],
+        possible_teams = sorted(plotting['team_dists_non_ordered'][last_index].keys(),
+                                key=lambda k: plotting['team_dists_non_ordered'][last_index][k],
                                 reverse=True,
                                 )
         print('final occurence probs')
-        occurence_probs = torch.tensor([plotting['team_dists_non_ordered'][-1][team]
+        occurence_probs = torch.tensor([plotting['team_dists_non_ordered'][last_index][team]
                                         for team in possible_teams])
         guesstimated_elos = torch.log(occurence_probs)
         guesstimated_elos = guesstimated_elos - torch.mean(guesstimated_elos)
@@ -271,6 +276,7 @@ if __name__ == '__main__':
                             info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
                             legend_position=(-.3, .5 + .4/2),  # info takes up about .4
                             label=possible_teams,
+                            smoothing=smoothing,
                             )
 
         extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
@@ -287,6 +293,7 @@ if __name__ == '__main__':
                             label=possible_teams[:10] + ['other'],
                             color=[None]*10 + ['black'],
                             fontsize=17,
+                            smoothing=smoothing,
                             )
 
         if rand_cnt > 0:
@@ -304,6 +311,7 @@ if __name__ == '__main__':
                                 legend_position=(-.3, .69 - .09),
                                 label=[possible_teams[i] for i in non_random_keys] + ['random'],
                                 color=[None]*len(non_random_keys) + ['black'],
+                                smoothing=smoothing,
                                 )
 
         # now find distribution of underlying data
