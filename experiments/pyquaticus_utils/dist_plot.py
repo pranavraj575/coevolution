@@ -13,11 +13,12 @@ def deorder_total_dist(total_dist):
 
 
 def smooth_backwards(data, r=1):
+    out=data.copy()
     for i in range(1, r + 1):
-        data[:-i] += data[i:]
-        data[-i:] += data[-i:]
-    data = data/(r + 1)
-    return data
+        out[:-i] += data[i:]
+        out[-i:] += data[-i:]
+    out = out/(r + 1)
+    return out
 
 
 def plot_dist_evolution(plot_dist,

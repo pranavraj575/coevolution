@@ -17,6 +17,8 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
+    PARSER.add_argument('--dist-sample', type=int, required=False, default=30,
+                        help="number of times to sample distribution for plotting (batch norm does not behave well with model.eval())")
     PARSER.add_argument('--smoothing', type=int, required=False, default=2,
                         help="smoothing to include in plot")
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
@@ -201,17 +203,28 @@ if __name__ == '__main__':
 
     def update_plotting_variables():
         test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
-        indices, dist, og_dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
-                                                                              indices=None,
-                                                                              obs_preembed=None,
-                                                                              obs_mask=None,
-                                                                              noise_model=None,
-                                                                              valid_members=None,
-                                                                              )
+        init_dist = 0.  # this will later become a numpy vector
+        team_dist = dict()
+        print('sampling distributions for plotting')
+        for _ in range(args.dist_sample):
+            indices, dist, og_dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                                  indices=None,
+                                                                                  obs_preembed=None,
+                                                                                  obs_mask=None,
+                                                                                  noise_model=None,
+                                                                                  valid_members=None,
+                                                                                  )
+            # in the first iteration, this sets init_dist to a numpy vector
+            # 0+np.array evaluates to np.array
+            init_dist += torch.mean(dist, dim=0).detach().numpy()/args.dist_sample
 
-        init_dist = torch.mean(dist, dim=0).detach().numpy()
+            sample_team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
+            for team in sample_team_dist:
+                if team not in team_dist:
+                    team_dist[team] = 0
+                team_dist[team] += sample_team_dist[team]/args.dist_sample
+
         plotting['init_dists'].append(init_dist)
-        team_dist = team_trainer.get_total_distribution(T=team_size, N=1)
         team_dist_non_ordered = dict()
         for item in team_dist:
             key = tuple(sorted(item))
@@ -221,6 +234,7 @@ if __name__ == '__main__':
         plotting['team_dists'].append(team_dist)
         plotting['team_dists_non_ordered'].append(team_dist_non_ordered)
         plotting['epochs'].append(trainer.epochs)
+        print('done sampling')
 
 
     if args.plot:
