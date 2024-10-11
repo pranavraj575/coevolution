@@ -43,6 +43,9 @@ def plot_dist_evolution(plot_dist,
     if mapping is not None:
         plot_dist = [mapping(dist) for dist in plot_dist]
 
+    plot_dist = plot_dist[:min(len(plot_dist), len(x))]
+    x = x[:min(len(plot_dist), len(x))]
+
     num_pops = len(plot_dist[0])
     for i in range(num_pops):
         kw = {key: kwargs[key][i] for key in kwargs

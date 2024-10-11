@@ -165,7 +165,7 @@ if __name__ == '__main__':
         ),
         # todo: args prob, but currently doing the capacity/8
         weight_decay_half_life=args.capacity/8,
-        optimizer_kwargs={'lr': 1e-4}, # helps stabilize training, can also mess with the weights for same effect
+        optimizer_kwargs={'lr': 1e-4},  # helps stabilize training, can also mess with the weights for same effect
     )
     trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
                                     team_trainer=team_trainer,
@@ -228,6 +228,9 @@ if __name__ == '__main__':
                   ['def easy', 'def mid', 'def hard'] +
                   ['random'])
         print('plotting and closing')
+        # cut off at args.epochs
+        plotting['epochs'] = [epoch for epoch in plotting['epochs'] if epoch<=args.epochs]
+
         plot_dist_evolution(plot_dist=plotting['init_dists'],
                             x=plotting['epochs'],
                             mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
