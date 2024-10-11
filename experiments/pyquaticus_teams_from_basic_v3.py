@@ -165,7 +165,7 @@ if __name__ == '__main__':
         ),
         # todo: args prob, but currently doing the capacity/8
         weight_decay_half_life=args.capacity/8,
-        optimizer_kwargs={'lr': 1e-4},  # helps stabilize training, can also mess with the weights for same effect
+        optimizer_kwargs={'lr': 3e-4},  # helps stabilize training, can also mess with the weights for same effect
     )
     trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
                                     team_trainer=team_trainer,
