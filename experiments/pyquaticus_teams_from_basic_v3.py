@@ -163,8 +163,9 @@ if __name__ == '__main__':
             bounds=[1/2, 1],
             track_age=True,
         ),
-        # todo: args prob, but currently doing the capacity/10
-        weight_decay_half_life=args.capacity/10,
+        # todo: args prob, but currently doing the capacity/8
+        weight_decay_half_life=args.capacity/8,
+        optimizer_kwargs={'lr': 1e-4}, # helps stabilize training, can also mess with the weights for same effect
     )
     trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
                                     team_trainer=team_trainer,
@@ -179,6 +180,7 @@ if __name__ == '__main__':
                                     uniform_random_cap_select=False,
                                     # member_to_population=lambda team_idx, member_idx: {team_idx},
                                     team_member_elo_update=1*np.log(10)/400,
+                                    probability_weighting=True,
                                     )
     plotting = {'init_dists': [],
                 'team_dists': [],
@@ -300,6 +302,61 @@ if __name__ == '__main__':
                                 label=[possible_teams[i] for i in non_random_keys] + ['random'],
                                 color=[None]*len(non_random_keys) + ['black'],
                                 )
+
+        # now find distribution of underlying data
+        relevant = []
+        for i in range(len(team_trainer.buffer)):
+            (_, _, team, _, weight), age = team_trainer.buffer[i]
+            relevant.append(
+                (tuple(team.cpu().detach().numpy()),
+                 weight,
+                 age,
+                 )
+            )
+        dist = {}
+        wdist = {}
+        decaying_wdist = {}
+        for team, weight, age in relevant:
+            for d in dist, wdist, decaying_wdist:
+                if team not in d:
+                    d[team] = 0
+            dist[team] += 1
+            weight = weight.item()
+            wdist[team] += weight
+            decaying_wdist[team] += weight*torch.pow(torch.tensor(1/2), age/team_trainer.weight_decay_half_life).item()
+        for d in dist, wdist, decaying_wdist:
+            s = 0
+            for team in d:
+                s += d[team]
+            for team in d:
+                d[team] = d[team]/s
+            keys = list(d.keys())
+            keys.sort(key=lambda team: d[team], reverse=True)
+        for _ in range(100):
+            print()
+            print('trinin')
+            trainer.team_trainer.train(
+                batch_size=args.batch_size,
+                minibatch=args.minibatch_size*2,
+                mask_probs=None,
+                replacement_probs=(.9, .0, .1),
+                mask_obs_prob=.1,
+            )
+            berteam_dist = team_trainer.get_total_distribution(T=2)
+
+            keys = list(wdist.keys())
+            keys.sort(key=lambda team: d[team], reverse=True)
+            overall_dist_err = 0
+            for key in keys:
+                print(key,
+                      'berteam', round(berteam_dist[key], 2),
+                      '\td', round(dist[key], 2),
+                      '\twd', round(wdist[key], 2),
+                      '\tdwd', round(decaying_wdist[key], 2),
+                      '\terr', round(berteam_dist[key] - decaying_wdist[key], 2),
+                      )
+                overall_dist_err += abs(berteam_dist[key] - decaying_wdist[key])
+            print('overall abs error', overall_dist_err)
         trainer.clear()
         quit()
 
@@ -404,7 +461,7 @@ if __name__ == '__main__':
                     batch_size=args.batch_size,
                     minibatch=args.minibatch_size,
                     mask_probs=None,
-                    replacement_probs=(.8, .1, .1),
+                    replacement_probs=(.9, .0, .1),
                     mask_obs_prob=.1,
                 )
                 print('training step finished')

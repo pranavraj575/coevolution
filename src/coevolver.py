@@ -533,6 +533,7 @@ class CaptianCoevolution(CoevolutionBase):
                  processes=0,
                  depth_to_retry_result=None,
                  storage_dir=None,
+                 probability_weighting=False,
                  ):
         """
         Args:
@@ -559,6 +560,7 @@ class CaptianCoevolution(CoevolutionBase):
             depth_to_retry_result: (game outcome value -> max number of times to try for a different outcome)
                 if not specified, always 0
             storage_dir: place to store files and such
+            probability_weighting: whether to weight training examples by the inverse of their occurrence probability
         """
         super().__init__(outcome_fn_gen=outcome_fn_gen,
                          population_sizes=population_sizes,
@@ -583,6 +585,8 @@ class CaptianCoevolution(CoevolutionBase):
         if depth_to_retry_result is None:
             depth_to_retry_result = lambda _: 0
         self.depth_to_retry_result = depth_to_retry_result
+        # TODO: put this in infos
+        self.probability_weighting = probability_weighting
 
     def set_storage_dir(self, storage_dir):
         super().set_storage_dir(storage_dir=storage_dir)
@@ -791,7 +795,7 @@ class CaptianCoevolution(CoevolutionBase):
     def pick_captians_and_init_formation_probs(self,
                                                noise_model=None,
                                                ):
-        teams = [None for _ in self.team_sizes]
+        init_teams = [None for _ in self.team_sizes]
         captian_indices = [None for _ in self.team_sizes]
         log_formation_probs = [None for _ in self.team_sizes]
         log_og_formation_probs = [None for _ in self.team_sizes]
@@ -801,7 +805,7 @@ class CaptianCoevolution(CoevolutionBase):
             valid_members = self.team_to_valid_members[team_idx].clone()
             for cap in chosen:
                 # set previous captians to invalid, so we do not have any repeats
-                # TODO: this means each position must have at least |teams| possible members
+                # TODO: this means each position must have at least |init_teams| possible members
                 valid_members[:, cap] = 0
             member = torch.randint(0, team_size, ())
             team, lfp, lofp = self.team_trainer.mutate_add_member(
@@ -811,11 +815,11 @@ class CaptianCoevolution(CoevolutionBase):
                 valid_members=valid_members,
             )
             captian_idx = torch.where(torch.not_equal(team.flatten(), self.team_trainer.MASK))[0].item()
-            teams[team_idx] = team
+            init_teams[team_idx] = team
             captian_indices[team_idx] = captian_idx
             log_formation_probs[team_idx] = lfp
             log_og_formation_probs[team_idx] = lofp
-        return teams, captian_indices, log_formation_probs, log_og_formation_probs
+        return init_teams, captian_indices, log_formation_probs, log_og_formation_probs
 
     def new_pre_episode_generation(self,
                                    teams=None,
@@ -835,7 +839,6 @@ class CaptianCoevolution(CoevolutionBase):
 
         # team selection (pretty much does nothing if teams are size 1
 
-        captian_positions = []
         if teams is None:
             (teams,
              captian_indices,
@@ -853,6 +856,7 @@ class CaptianCoevolution(CoevolutionBase):
                     obs_preembed=obs_preembed,
                     obs_mask=obs_mask,
                 )
+                team = team.detach().flatten()
                 teams[team_idx] = team
                 log_formation_probs[team_idx] += lfp
                 log_og_formation_probs[team_idx] += olfp
@@ -868,11 +872,11 @@ class CaptianCoevolution(CoevolutionBase):
         captian_choices = tuple(captian_choices)
 
         episode_info = {'captian_choices': captian_choices,
+                        'teams': tuple(team.cpu().numpy() for team in teams)
                         }
-        episode_info['teams'] = tuple(team.numpy() for team in teams)
         outcome_fn = self.create_outcome_fn()
         train_infos = []
-        for team_idx, (captian_pos, team) in enumerate(zip(captian_positions, teams)):
+        for team_idx, (captian_pos, team) in enumerate(zip(captian_indices, teams)):
             tinfo = []
             for i, member in enumerate(team):
                 global_idx = member.item()
@@ -885,10 +889,8 @@ class CaptianCoevolution(CoevolutionBase):
                     info[TEMP_DICT_CAPTIAN] = False
                 tinfo.append(info)
             train_infos.append(tinfo)
-
         env = self.env_constructor(train_infos)
-
-        return {'ident': 0,
+        return {'ident': None,
                 'teams': teams,
                 'log formation probs': log_formation_probs,
                 'log og formation probs': log_og_formation_probs,
@@ -1008,12 +1010,14 @@ class CaptianCoevolution(CoevolutionBase):
             for player_info in player_infos:
                 combined_obs = combined_obs.union_obs(other_player_info=player_info)
             obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
-            # weight is 1/((formation probs)*(total number of possible teams))
-            # we take an upper bound of 100 in case formation probs is incredibly small
-            weight = torch.min(torch.exp(-log_formation_probs - self.log_total_number_possible_teams[i]),
-                               torch.tensor(100.)
-                               )
-
+            if self.probability_weighting:
+                # weight is 1/((formation probs)*(total number of possible teams))
+                # we take an upper bound of 100 in case formation probs is incredibly small
+                weight = torch.min(torch.exp(-log_formation_probs - self.log_total_number_possible_teams[i]),
+                                   torch.tensor(100.)
+                                   )
+            else:
+                weight = 1.
             self.team_trainer.add_to_buffer(scalar=team_outcome,
                                             obs_preembed=obs_preembed,
                                             team=team,
@@ -1184,6 +1188,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  max_steps_per_ep=float('inf'),
                  depth_to_retry_result=None,
                  local_collection_mode=True,
+                 probability_weighting=False,
                  ):
         """
         Args:
@@ -1239,6 +1244,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          processes=processes,
                          depth_to_retry_result=depth_to_retry_result,
                          storage_dir=storage_dir,
+                         probability_weighting=probability_weighting,
                          )
 
         self.env_constructor = env_constructor

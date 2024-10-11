@@ -48,6 +48,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                  max_steps_per_ep=float('inf'),
                  local_collection_mode=True,
                  uniform_random_cap_select=True,
+                 probability_weighting=False,
                  ):
         super().__init__(
             env_constructor=env_constructor,
@@ -72,6 +73,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
             max_steps_per_ep=max_steps_per_ep,
             depth_to_retry_result=None,
             local_collection_mode=local_collection_mode,
+            probability_weighting=probability_weighting,
         )
         self.MCAA = MCAA_mode
         self.MCAA_fitness_update = MCAA_fitness_update
@@ -162,7 +164,44 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
             if self.uniform_random_cap_select:
                 captians_choices = [np.random.choice(range(self.N), 2, replace=False)
                                     for _ in range(self.games_per_epoch)]
+
+                pre_ep_dicts = [self.pre_episode_generation(captian_choices=(i.item(), j.item()),
+                                                            unique=tuple(False for _ in range(self.num_teams)),
+                                                            rechoose=rechoose,
+                                                            save_epoch_info=save_epoch_info,
+                                                            pre_ep_dicts=pre_ep_dicts,
+                                                            update_epoch_infos=update_epoch_infos,
+                                                            **kwargs,
+                                                            )
+                                for i, j in captians_choices]
+                return super().epoch(
+                    rechoose=rechoose,
+                    save_epoch_info=save_epoch_info,
+                    pre_ep_dicts=pre_ep_dicts,
+                    update_epoch_infos=update_epoch_infos,
+                    noise_model=noise_model,
+                    depth=depth,
+                    known_obs=known_obs,
+                    save_trained_agents=save_trained_agents,
+                    save_into_team_buffer=save_into_team_buffer,
+                    **kwargs,
+                )
             else:
+                pre_ep_dicts=[self.new_pre_episode_generation()
+                              for _ in range(self.games_per_epoch)]
+                return super().epoch(
+                    rechoose=rechoose,
+                    save_epoch_info=save_epoch_info,
+                    pre_ep_dicts=pre_ep_dicts,
+                    update_epoch_infos=update_epoch_infos,
+                    noise_model=noise_model,
+                    depth=depth,
+                    known_obs=known_obs,
+                    save_trained_agents=save_trained_agents,
+                    save_into_team_buffer=save_into_team_buffer,
+                    **kwargs,
+                )
+                """
                 # create test teams with noise
                 all_test_teams = [
                     [self.team_trainer.create_teams(T=team_size,
@@ -178,29 +217,8 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                 # select team captians randomly for each team
                 captians_choices = [
                     tuple(team[torch.randint(0, len(team), ())] for team in teams)
-                    for teams in all_test_teams]
-            # todo: switch out with new preep gen
-            pre_ep_dicts = [self.pre_episode_generation(captian_choices=(i.item(), j.item()),
-                                                        unique=tuple(False for _ in range(self.num_teams)),
-                                                        rechoose=rechoose,
-                                                        save_epoch_info=save_epoch_info,
-                                                        pre_ep_dicts=pre_ep_dicts,
-                                                        update_epoch_infos=update_epoch_infos,
-                                                        **kwargs,
-                                                        )
-                            for i, j in captians_choices]
-            return super().epoch(
-                rechoose=rechoose,
-                save_epoch_info=save_epoch_info,
-                pre_ep_dicts=pre_ep_dicts,
-                update_epoch_infos=update_epoch_infos,
-                noise_model=noise_model,
-                depth=depth,
-                known_obs=known_obs,
-                save_trained_agents=save_trained_agents,
-                save_into_team_buffer=save_into_team_buffer,
-                **kwargs,
-            )
+                    for teams in all_test_teams]"""
+
 
         # TODO: pass through preepisode dicts using MCAA to generate teams
         #  also maybe do the pre episode generation to make tournament form
@@ -320,6 +338,7 @@ class PZCC_MAPElites(ComparisionExperiment):
                  temp_zoo_dir=None,
                  max_steps_per_ep=float('inf'),
                  local_collection_mode=True,
+                 probability_weighting=False,
                  ):
         super().__init__(
             env_constructor=env_constructor,
@@ -346,6 +365,7 @@ class PZCC_MAPElites(ComparisionExperiment):
             temp_zoo_dir=temp_zoo_dir,
             max_steps_per_ep=max_steps_per_ep,
             local_collection_mode=local_collection_mode,
+            probability_weighting=probability_weighting,
         )
         self.default_behavior_radius = default_behavior_radius
 
