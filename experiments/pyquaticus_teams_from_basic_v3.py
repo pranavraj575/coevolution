@@ -24,6 +24,9 @@ if __name__ == '__main__':
                         help="smoothing to include in plot")
     PARSER.add_argument('--dont-backup', action='store_true', required=False,
                         help="do not backup a copy of previous save")
+    # can stabilize training, equivalent to messing with weight of data
+    PARSER.add_argument('-lr', '--learning-rate', type=float, required=False, default=None,
+                        help="learning rate (adam default is .001)")
     args = PARSER.parse_args()
 
     import torch, os, sys, ast, time, shutil
@@ -54,7 +57,7 @@ if __name__ == '__main__':
     DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 
     team_size = args.team_size
-
+    lr = args.learning_rate
     config_dict = config_dict_std
     update_config_dict(config_dict, args)
     arena_size = ast.literal_eval('(' + args.arena_size + ')')
@@ -85,8 +88,15 @@ if __name__ == '__main__':
     lstm_dropout = args.lstm_dropout
     if lstm_dropout is None:
         lstm_dropout = args.dropout
+    if lr is not None:
+        optim_kwargs = {'lr': lr}
+        lr_str = '_lr_' + str(lr).replace('.', '_')
+    else:
+        optim_kwargs = None
+        lr_str = ''
     rand_cnt = args.rand_count
     ident = (args.ident +
+             lr_str +
              pyquaticus_string(args) +
              berteam_string(args) +
              (('_rand_cnt_' + str(rand_cnt)) if rand_cnt else '') +
@@ -142,6 +152,7 @@ if __name__ == '__main__':
         proc = 0
     else:
         proc = args.processes
+
     team_trainer = MLMTeamTrainer(
         team_builder=TeamBuilder(
             input_embedder=LSTEmbedding(
@@ -170,7 +181,7 @@ if __name__ == '__main__':
         ),
         # todo: args prob, but currently doing the capacity/8
         weight_decay_half_life=args.capacity/8,
-        # optimizer_kwargs={'lr': 3e-4},  # can stabilize training, equivalent to messing with weight of data
+        optimizer_kwargs=optim_kwargs,
     )
     trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
                                     team_trainer=team_trainer,
