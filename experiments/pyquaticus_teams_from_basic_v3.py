@@ -1,5 +1,6 @@
 # this one uses comparison experiment and generates captians according to distribution with noise
 import argparse
+import copy
 
 if __name__ == '__main__':
     import numpy as np
@@ -260,73 +261,96 @@ if __name__ == '__main__':
                             legend_position=(-.31, .5),
                             smoothing=smoothing,
                             )
-        possible_teams = sorted(plotting['team_dists_non_ordered'][last_index].keys(),
-                                key=lambda k: plotting['team_dists_non_ordered'][last_index][k],
-                                reverse=True,
-                                )
-        print('final occurence probs')
-        occurence_probs = torch.tensor([plotting['team_dists_non_ordered'][last_index][team]
-                                        for team in possible_teams])
-        guesstimated_elos = torch.log(occurence_probs)
-        guesstimated_elos = guesstimated_elos - torch.mean(guesstimated_elos)
+        for double_repeats in False, True:
+            if double_repeats:
+                s = 'compensated_'
+                team_dists_non_ordered = copy.deepcopy(plotting['team_dists_non_ordered'])
+                # we must compensate all non-orderd dicts
+                for dist in team_dists_non_ordered:
+                    some = 0
+                    for team in dist:
+                        compensation = torch.tensor(1.)
+                        for member in team:
+                            # compared to a string of all unique elements, this string is undercounted by a factor of
+                            #  prod(n_i!) for n_1 repeats of the first unique member, n_2 of the second, ...
+                            # to account for this, we multiply by this number
+                            cnt = team.count(member)
+                            compensation = compensation*torch.pow(torch.prod(torch.arange(cnt) + 1), 1/cnt)
+                        dist[team] = compensation.item()*dist[team]
+                        some += dist[team]
+                    for team in dist:
+                        dist[team] = dist[team]/some
+            else:
+                s = ''
+                team_dists_non_ordered = plotting['team_dists_non_ordered']
+            print(s + 'final occurence probs')
 
-        elo_conversion = 400/np.log(10)
-        scaled = guesstimated_elos*elo_conversion + 1000
-        for i, (team, prob, elo) in enumerate(zip(possible_teams, occurence_probs, scaled)):
-            print(i + 1, ':', team, ':', round(prob.item(), 2), ':', elo.item())
+            possible_teams = sorted(team_dists_non_ordered[last_index].keys(),
+                                    key=lambda k: team_dists_non_ordered[last_index][k],
+                                    reverse=True,
+                                    )
+            occurence_probs = torch.tensor([team_dists_non_ordered[last_index][team]
+                                            for team in possible_teams])
+            guesstimated_elos = torch.log(occurence_probs)
+            guesstimated_elos = guesstimated_elos - torch.mean(guesstimated_elos)
 
-        all_team_dist = []
-        for team_dist in plotting['team_dists_non_ordered']:
-            all_team_dist.append(np.array([team_dist[team]
-                                           for team in possible_teams]))
+            elo_conversion = 400/np.log(10)
+            scaled = guesstimated_elos*elo_conversion + 1000
+            for i, (team, prob, elo) in enumerate(zip(possible_teams, occurence_probs, scaled)):
+                print(i + 1, ':', team, ':', round(prob.item(), 2), ':', elo.item())
 
-        extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
-                                           for i, lab in enumerate(labels[:6])])
+            all_team_dist = []
+            for team_dist in team_dists_non_ordered:
+                all_team_dist.append(np.array([team_dist[team]
+                                               for team in possible_teams]))
 
-        plot_dist_evolution(plot_dist=all_team_dist,
-                            x=plotting['epochs'],
-                            save_dir=os.path.join(save_dir, 'total_plot.png'),
-                            title="Total Distribution",
-                            info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                            legend_position=(-.3, .5 + .4/2),  # info takes up about .4
-                            label=possible_teams,
-                            smoothing=smoothing,
-                            )
-
-        extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
-                                           for i, lab in enumerate(labels[:6])])
-
-        plot_dist_evolution(plot_dist=all_team_dist,
-                            x=plotting['epochs'],
-                            mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
-                            save_dir=os.path.join(save_dir, 'first_10_total_plot.png'),
-                            title="Total Distribution (top 10)",
-                            legend_position=(-.45, .2),
-                            info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                            info_position=(-.42, .8),
-                            label=possible_teams[:10] + ['other'],
-                            color=[None]*10 + ['black'],
-                            fontsize=17,
-                            smoothing=smoothing,
-                            )
-
-        if rand_cnt > 0:
-            # all keys that have random agents
-            random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
-            non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
+            extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
+                                               for i, lab in enumerate(labels[:6])])
 
             plot_dist_evolution(plot_dist=all_team_dist,
                                 x=plotting['epochs'],
-                                mapping=lambda dist: np.concatenate(
-                                    (dist[non_random_keys], [np.sum(dist[random_keys])])),
-                                save_dir=os.path.join(save_dir, 'edited_total_plot.png'),
-                                title="Total Distribution (random combined)",
-                                info=extra_text,
-                                legend_position=(-.3, .69 - .09),
-                                label=[possible_teams[i] for i in non_random_keys] + ['random'],
-                                color=[None]*len(non_random_keys) + ['black'],
+                                save_dir=os.path.join(save_dir, s + 'total_plot.png'),
+                                title="Total Distribution",
+                                info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
+                                legend_position=(-.3, .5 + .4/2),  # info takes up about .4
+                                label=possible_teams,
                                 smoothing=smoothing,
                                 )
+
+            extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
+                                               for i, lab in enumerate(labels[:6])])
+
+            plot_dist_evolution(plot_dist=all_team_dist,
+                                x=plotting['epochs'],
+                                mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
+                                save_dir=os.path.join(save_dir, s + 'first_10_total_plot.png'),
+                                title="Total Distribution (top 10)",
+                                legend_position=(-.45, .2),
+                                info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
+                                info_position=(-.42, .8),
+                                label=possible_teams[:10] + ['other'],
+                                color=[None]*10 + ['black'],
+                                fontsize=17,
+                                smoothing=smoothing,
+                                )
+
+            if rand_cnt > 0:
+                # all keys that have random agents
+                random_keys = [i for i, team in enumerate(possible_teams) if any([member > 5 for member in team])]
+                non_random_keys = [i for i, team in enumerate(possible_teams) if all([member <= 5 for member in team])]
+
+                plot_dist_evolution(plot_dist=all_team_dist,
+                                    x=plotting['epochs'],
+                                    mapping=lambda dist: np.concatenate(
+                                        (dist[non_random_keys], [np.sum(dist[random_keys])])),
+                                    save_dir=os.path.join(save_dir, s + 'edited_total_plot.png'),
+                                    title="Total Distribution (random combined)",
+                                    info=extra_text,
+                                    legend_position=(-.3, .69 - .09),
+                                    label=[possible_teams[i] for i in non_random_keys] + ['random'],
+                                    color=[None]*len(non_random_keys) + ['black'],
+                                    smoothing=smoothing,
+                                    )
 
         # now find distribution of underlying data
         relevant = []
