@@ -169,7 +169,7 @@ if __name__ == '__main__':
         ),
         # todo: args prob, but currently doing the capacity/8
         weight_decay_half_life=args.capacity/8,
-        optimizer_kwargs={'lr': 3e-4},  # helps stabilize training, can also mess with the weights for same effect
+        # optimizer_kwargs={'lr': 3e-4},  # can stabilize training, equivalent to messing with weight of data
     )
     trainer = ComparisionExperiment(population_sizes=non_learning_sizes,
                                     team_trainer=team_trainer,
@@ -362,9 +362,9 @@ if __name__ == '__main__':
             print('trinin')
             trainer.team_trainer.train(
                 batch_size=args.batch_size,
-                minibatch=args.minibatch_size*2,
+                minibatch=args.minibatch_size,
                 mask_probs=None,
-                replacement_probs=(.9, .0, .1),
+                replacement_probs=(.8, .1, .1),
                 mask_obs_prob=.1,
             )
             berteam_dist = team_trainer.get_total_distribution(T=2)
@@ -486,7 +486,7 @@ if __name__ == '__main__':
                     batch_size=args.batch_size,
                     minibatch=args.minibatch_size,
                     mask_probs=None,
-                    replacement_probs=(.9, .0, .1),
+                    replacement_probs=(.8, .1, .1),
                     mask_obs_prob=.1,
                 )
                 print('training step finished')
