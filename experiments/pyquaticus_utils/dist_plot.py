@@ -1,5 +1,32 @@
 from matplotlib import pyplot as plt
 import numpy as np
+import torch, copy
+
+
+def order_compensate_dist(dist):
+    """
+    compensates for ordering issues arising from repeat members
+    Args:
+        dist: dict(tuple -> probability)
+    Returns:
+        copy of dist, compensated for order then normalized
+    """
+    dist = copy.deepcopy(dist)
+    some = 0
+    for team in dist:
+        compensation = torch.tensor(1.)
+        for member in team:
+            # compared to a string of all unique elements, this string is undercounted by a factor of
+            #  prod(n_i!) for n_1 repeats of the first unique member, n_2 of the second, ...
+            # to account for this, we multiply by this number
+            # we take the root so we dont have to do logic like only consider the first occurrence of each
+            cnt = team.count(member)
+            compensation = compensation*torch.pow(torch.prod(torch.arange(cnt) + 1), 1/cnt)
+        dist[team] = compensation.item()*dist[team]
+        some += dist[team]
+    for team in dist:
+        dist[team] = dist[team]/some
+    return dist
 
 
 def deorder_total_dist(total_dist):
@@ -13,7 +40,7 @@ def deorder_total_dist(total_dist):
 
 
 def smooth_backwards(data, r=1):
-    out=data.copy()
+    out = data.copy()
     for i in range(1, r + 1):
         out[:-i] += data[i:]
         out[-i:] += data[-i:]

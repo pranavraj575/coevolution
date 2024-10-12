@@ -250,7 +250,7 @@ if __name__ == '__main__':
 
 
     if args.plot:
-        from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution
+        from experiments.pyquaticus_utils.dist_plot import plot_dist_evolution, order_compensate_dist
 
         labels = (['att easy', 'att mid', 'att hard'] +
                   ['def easy', 'def mid', 'def hard'] +
@@ -272,25 +272,12 @@ if __name__ == '__main__':
                             legend_position=(-.31, .5),
                             smoothing=smoothing,
                             )
-        for double_repeats in False, True:
-            if double_repeats:
+        for compensate in False, True:
+            if compensate:
                 s = 'compensated_'
                 team_dists_non_ordered = copy.deepcopy(plotting['team_dists_non_ordered'])
                 # we must compensate all non-orderd dicts
-                for dist in team_dists_non_ordered:
-                    some = 0
-                    for team in dist:
-                        compensation = torch.tensor(1.)
-                        for member in team:
-                            # compared to a string of all unique elements, this string is undercounted by a factor of
-                            #  prod(n_i!) for n_1 repeats of the first unique member, n_2 of the second, ...
-                            # to account for this, we multiply by this number
-                            cnt = team.count(member)
-                            compensation = compensation*torch.pow(torch.prod(torch.arange(cnt) + 1), 1/cnt)
-                        dist[team] = compensation.item()*dist[team]
-                        some += dist[team]
-                    for team in dist:
-                        dist[team] = dist[team]/some
+                team_dists_non_ordered = [order_compensate_dist(dist) for dist in team_dists_non_ordered]
             else:
                 s = ''
                 team_dists_non_ordered = plotting['team_dists_non_ordered']

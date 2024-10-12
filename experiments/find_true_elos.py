@@ -1,7 +1,7 @@
 import os, sys, pickle, torch, time
 import numpy as np
 
-from experiments.pyquaticus_utils.dist_plot import deorder_total_dist
+from experiments.pyquaticus_utils.dist_plot import deorder_total_dist, order_compensate_dist
 
 DIR = os.path.dirname(os.path.dirname(os.path.join(os.getcwd(), sys.argv[0])))
 save_dir = os.path.join(DIR, 'data', 'save')
@@ -82,97 +82,102 @@ if os.path.exists(output_file):
         aggression = pickle.load(f)
         f.close()
         aggression = [agg > 1 for agg in aggression]
+        for compensate in False, True:
+            if compensate:
+                s = 'compensated_'
+                total_deordered_dist = deorder_total_dist(order_compensate_dist(total_dist))
+            else:
+                s = ''
+                total_deordered_dist = deorder_total_dist(total_dist)
 
-        total_dist = deorder_total_dist(total_dist)
+            split_agg_agents = [[[], []] for _ in range(team_size + 1)]
+            # labels = [str(agg_agents) + ' aggressive' for agg_agents in range(len(split_agg_agents))]
+            labels = ['Defensive', 'Balanced', 'Aggressive']
+            all_agg_agents = [[], []]
+            for team in teams:
+                conv_elo = elos[team_to_idx[team]].item()*elo_conversion + 1000
+                occurrence = total_deordered_dist[team]
+                # number of aggressive agents
+                index = sum([aggression[idx] for idx in team])
+                split_agg_agents[index][0].append(conv_elo)
+                split_agg_agents[index][1].append(occurrence)
+                all_agg_agents[0].append(conv_elo)
+                all_agg_agents[1].append(occurrence)
 
-        split_agg_agents = [[[], []] for _ in range(team_size + 1)]
-        # labels = [str(agg_agents) + ' aggressive' for agg_agents in range(len(split_agg_agents))]
-        labels = ['Defensive', 'Balanced', 'Aggressive']
-        all_agg_agents = [[], []]
-        for team in teams:
-            conv_elo = elos[team_to_idx[team]].item()*elo_conversion + 1000
-            occurrence = total_dist[team]
-            # number of aggressive agents
-            index = sum([aggression[idx] for idx in team])
-            split_agg_agents[index][0].append(conv_elo)
-            split_agg_agents[index][1].append(occurrence)
-            all_agg_agents[0].append(conv_elo)
-            all_agg_agents[1].append(occurrence)
+            x = np.array(all_agg_agents[0])
+            y = np.array(all_agg_agents[1])
+            model = np.polyfit(x,
+                               y,
+                               1,  # linear
+                               )
+            predict = np.poly1d(model)
 
-        x = np.array(all_agg_agents[0])
-        y = np.array(all_agg_agents[1])
-        model = np.polyfit(x,
-                           y,
-                           1,  # linear
-                           )
-        predict = np.poly1d(model)
+            ssresid = np.sum(np.square(y - predict(x)))
+            sstotal = np.sum(np.square(y - np.mean(y)))
+            r2 = 1 - ssresid/sstotal
+            print('linear fit')
+            print('y = ' + str(model[0]) + ' x + ' + str(model[1]))
+            print('r2 error', r2)
 
-        ssresid = np.sum(np.square(y - predict(x)))
-        sstotal = np.sum(np.square(y - np.mean(y)))
-        r2 = 1 - ssresid/sstotal
-        print('linear fit')
-        print('y = ' + str(model[0]) + ' x + ' + str(model[1]))
-        print('r2 error', r2)
+            for agg_agents, (x_part, y_part) in enumerate(split_agg_agents):
+                aggression_amount = agg_agents/team_size
+                red = int(aggression_amount*255)
+                blue = 255 - red
+                red = ('0' + hex(red)[2:])[-2:]
+                blue = ('0' + hex(blue)[2:])[-2:]
+                color = '#' + red + '00' + blue
+                plt.scatter(x_part, y_part,
+                            label=labels[agg_agents],
+                            color=color,
+                            s=10,
+                            )
 
-        for agg_agents, (x_part, y_part) in enumerate(split_agg_agents):
-            aggression_amount = agg_agents/team_size
-            red = int(aggression_amount*255)
-            blue = 255 - red
-            red = ('0' + hex(red)[2:])[-2:]
-            blue = ('0' + hex(blue)[2:])[-2:]
-            color = '#' + red + '00' + blue
-            plt.scatter(x_part, y_part,
-                        label=labels[agg_agents],
-                        color=color,
+            xlim = plt.xlim()
+            ylim = (0, plt.ylim()[1])
+            # too much info in one plot
+            plt.plot(xlim, predict(np.array(xlim)), label='linear fit', color='green', )
+
+            plt.legend()
+            plt.title('BERTeam Total Distribution vs True Elo')
+            plt.xlabel('True Elo')
+            plt.ylabel('Occurrence Probability')
+            plt.ylim(ylim)
+            plt.xlim(xlim)
+            plt.savefig(os.path.join(plot_dir,
+                                     s + 'split_elo_against_occurrence.png'),
+                        bbox_inches='tight',
+                        )
+            plt.close()
+
+            plt.scatter(x, y,
                         s=10,
                         )
-
-        xlim = plt.xlim()
-        ylim = (0, plt.ylim()[1])
-        # too much info in one plot
-        plt.plot(xlim, predict(np.array(xlim)), label='linear fit', color='green', )
-
-        plt.legend()
-        plt.title('BERTeam Total Distribution vs True Elo')
-        plt.xlabel('True Elo')
-        plt.ylabel('Occurrence Probability')
-        plt.ylim(ylim)
-        plt.xlim(xlim)
-        plt.savefig(os.path.join(plot_dir,
-                                 'split_elo_against_occurrence.png'),
-                    bbox_inches='tight',
-                    )
-        plt.close()
-
-        plt.scatter(x, y,
-                    s=10,
-                    )
-        xlim = plt.xlim()
-        ylim = (0, plt.ylim()[1])
+            xlim = plt.xlim()
+            ylim = (0, plt.ylim()[1])
 
 
-        def form(s):
-            mult, exp = ('{:0.2e}'.format(s)).split('e')
-            return mult + '\\cdot' + '10^{' + exp + '}'
+            def form(s):
+                mult, exp = ('{:0.2e}'.format(s)).split('e')
+                return mult + '\\cdot' + '10^{' + exp + '}'
 
 
-        plt.plot(xlim, predict(np.array(xlim)),
-                 label=('linear fit; $R^2=' + str(round(r2, 2)) + '$'),
-                 # label=('$y=' + form(model[0]) + 'x' + form(model[1]) +
-                 #       '$; $R^2=' + str(round(r2, 2)) + '$'),
-                 color='purple',
-                 )
-        plt.title('BERTeam Total Distribution vs True Elo')
-        plt.xlabel('Elo')
-        plt.ylabel('Occurrence Probability')
-        plt.xlim(xlim)
-        plt.ylim(ylim)
-        plt.legend()
-        plt.savefig(os.path.join(plot_dir,
-                                 'elo_against_occurrence.png'),
-                    bbox_inches='tight',
-                    )
-        plt.close()
+            plt.plot(xlim, predict(np.array(xlim)),
+                     label=('linear fit; $R^2=' + str(round(r2, 2)) + '$'),
+                     # label=('$y=' + form(model[0]) + 'x' + form(model[1]) +
+                     #       '$; $R^2=' + str(round(r2, 2)) + '$'),
+                     color='purple',
+                     )
+            plt.title('BERTeam Total Distribution vs True Elo')
+            plt.xlabel('Elo')
+            plt.ylabel('Occurrence Probability')
+            plt.xlim(xlim)
+            plt.ylim(ylim)
+            plt.legend()
+            plt.savefig(os.path.join(plot_dir,
+                                     s + 'elo_against_occurrence.png'),
+                        bbox_inches='tight',
+                        )
+            plt.close()
         print('done plotting')
     else:
         print('total dist not available, run pyquaticus_teams_coevolution')
@@ -195,7 +200,7 @@ for epoch in range(1000):
         this_loss = torch.zeros(1)
         count = 0
         for trial in elo_trials[team][:2]:
-        #for trial in elo_trials[team][:2]+elo_trials[team][-2:]:
+            # for trial in elo_trials[team][:2]+elo_trials[team][-2:]:
             for opp in trial:
                 opp_elo = elo_ref[opp]
                 expectation = 1/(1 + torch.exp(opp_elo - elos[team_to_idx[team]]))
@@ -235,19 +240,25 @@ for epoch in range(1000):
         if mean_update_mag == 0:
             print('\nfinished, update magnitude is 0')
             break
-print('average elo', torch.mean(elos).item()*elo_conversion + 1000)
-expected_elo = 0
-for team in teams:
-    elo = elos[team_to_idx[team]].item()
-    prob = total_dist[team]
-    expected_elo += elo*prob
-print('expected elo', expected_elo*elo_conversion + 1000)
-print('max elo', torch.max(elos).item()*elo_conversion + 1000)
-argmax_team = max(teams, key=lambda team: total_dist[team])
-print('mle', argmax_team)
-print('MLE elo', elos[team_to_idx[argmax_team]].item()*elo_conversion + 1000)
+for compensate in False, True:
+    print('compensating:', compensate)
+    print('average elo', torch.mean(elos).item()*elo_conversion + 1000)
+    if compensate:
+        temp_dist = order_compensate_dist(total_dist)
+    else:
+        temp_dist = total_dist
+    expected_elo = 0
+    for team in teams:
+        elo = elos[team_to_idx[team]].item()
+        prob = temp_dist[team]
+        expected_elo += elo*prob
+    print('expected elo', expected_elo*elo_conversion + 1000)
+    print('max elo', torch.max(elos).item()*elo_conversion + 1000)
+    argmax_team = max(teams, key=lambda team: temp_dist[team])
+    print('mle', argmax_team)
+    print('MLE elo', elos[team_to_idx[argmax_team]].item()*elo_conversion + 1000)
 
-bound = 950
-idxs_over = torch.where(elos*elo_conversion + 1000 > bound)[0]
-print('count over', bound, len(idxs_over))
-print('prob over', bound, sum([total_dist[teams[idx]] for idx in idxs_over]))
+    bound = 950
+    idxs_over = torch.where(elos*elo_conversion + 1000 > bound)[0]
+    print('count over', bound, len(idxs_over))
+    print('prob over', bound, sum([temp_dist[teams[idx]] for idx in idxs_over]))
