@@ -18,6 +18,8 @@ if __name__ == '__main__':
 
     PARSER.add_argument('--plot', action='store_true', required=False,
                         help="skip training and plot")
+    PARSER.add_argument('--cutoff', type=int, required=False, default=10,
+                        help="number of teams to list in total distribution before cutting off")
     PARSER.add_argument('--dist-sample', type=int, required=False, default=30,
                         help="number of times to sample distribution for plotting (batch norm does not behave well with model.eval())")
     PARSER.add_argument('--smoothing', type=int, required=False, default=2,
@@ -317,17 +319,17 @@ if __name__ == '__main__':
 
             extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
                                                for i, lab in enumerate(labels[:6])])
-
+            cutoff = args.cutoff
             plot_dist_evolution(plot_dist=all_team_dist,
                                 x=plotting['epochs'],
-                                mapping=lambda dist: np.array([t for t in dist[:10]] + [np.sum(dist[10:])]),
+                                mapping=lambda dist: np.array([t for t in dist[:cutoff]] + [np.sum(dist[cutoff:])]),
                                 save_dir=os.path.join(save_dir, s + 'first_10_total_plot.png'),
-                                title="Total Distribution (top 10)",
+                                title="Total Distribution (Top " + str(cutoff) + ")",
                                 legend_position=(-.45, .2),
                                 info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
                                 info_position=(-.42, .8),
-                                label=possible_teams[:10] + ['other'],
-                                color=[None]*10 + ['black'],
+                                label=possible_teams[:cutoff] + ['other'],
+                                color=[None]*cutoff + ['black'],
                                 fontsize=17,
                                 smoothing=smoothing,
                                 )

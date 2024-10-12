@@ -92,18 +92,24 @@ def plot_dist_evolution(plot_dist,
     maxdist = min(len(plot_dist), len(x))
     cum_dists = [d[:maxdist] for d in cum_dists]
     x = x[:maxdist]
-    prevdist = np.zeros(maxdist)
 
-    for i, cum_dist in enumerate(cum_dists):
+    # we go through in inverted order to ensure legend looks nice
+    default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    for i, cum_dist in reversed(list(enumerate(cum_dists))):
+        if i == 0:
+            prevdist = np.zeros(maxdist)
+        else:
+            prevdist = cum_dists[i - 1]
         kw = {key: kwargs[key][i] for key in kwargs
               if (i < len(kwargs[key]) and kwargs[key][i] is not None)}
+        if 'color' not in kw and i < len(default_colors):
+            kw['color'] = default_colors[i]
 
         plt.fill_between(x=x,
                          y1=prevdist,
                          y2=cum_dist,
                          **kw,
                          )
-        prevdist = cum_dist
     if title is not None:
         plt.title(title)
     if xlabel is not None:
