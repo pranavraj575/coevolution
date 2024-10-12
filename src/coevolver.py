@@ -534,6 +534,7 @@ class CaptianCoevolution(CoevolutionBase):
                  depth_to_retry_result=None,
                  storage_dir=None,
                  probability_weighting=False,
+                 prob_weight_upper_bound=13.,
                  ):
         """
         Args:
@@ -587,6 +588,7 @@ class CaptianCoevolution(CoevolutionBase):
         self.depth_to_retry_result = depth_to_retry_result
         # TODO: put this in infos
         self.probability_weighting = probability_weighting
+        self.prob_weight_upper_bound = prob_weight_upper_bound
 
     def set_storage_dir(self, storage_dir):
         super().set_storage_dir(storage_dir=storage_dir)
@@ -1012,9 +1014,9 @@ class CaptianCoevolution(CoevolutionBase):
             obs_preembed, obs_mask = combined_obs.get_data(reshape=True)
             if self.probability_weighting:
                 # weight is 1/((formation probs)*(total number of possible teams))
-                # we take an upper bound of 100 in case formation probs is incredibly small
+                # we bound from above in case formation probs is incredibly small
                 weight = torch.min(torch.exp(-log_formation_probs - self.log_total_number_possible_teams[i]),
-                                   torch.tensor(100.)
+                                   torch.tensor(self.prob_weight_upper_bound)
                                    )
             else:
                 weight = 1.
@@ -1189,6 +1191,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                  depth_to_retry_result=None,
                  local_collection_mode=True,
                  probability_weighting=False,
+                 prob_weight_upper_bound=13.,
                  ):
         """
         Args:
@@ -1245,6 +1248,7 @@ class PettingZooCaptianCoevolution(CaptianCoevolution):
                          depth_to_retry_result=depth_to_retry_result,
                          storage_dir=storage_dir,
                          probability_weighting=probability_weighting,
+                         prob_weight_upper_bound=prob_weight_upper_bound,
                          )
 
         self.env_constructor = env_constructor

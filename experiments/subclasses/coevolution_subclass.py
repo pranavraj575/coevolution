@@ -49,6 +49,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                  local_collection_mode=True,
                  uniform_random_cap_select=True,
                  probability_weighting=False,
+                 prob_weight_upper_bound=13.,
                  ):
         super().__init__(
             env_constructor=env_constructor,
@@ -74,6 +75,7 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
             depth_to_retry_result=None,
             local_collection_mode=local_collection_mode,
             probability_weighting=probability_weighting,
+            prob_weight_upper_bound=prob_weight_upper_bound,
         )
         self.MCAA = MCAA_mode
         self.MCAA_fitness_update = MCAA_fitness_update
@@ -187,8 +189,8 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                     **kwargs,
                 )
             else:
-                pre_ep_dicts=[self.new_pre_episode_generation()
-                              for _ in range(self.games_per_epoch)]
+                pre_ep_dicts = [self.new_pre_episode_generation()
+                                for _ in range(self.games_per_epoch)]
                 return super().epoch(
                     rechoose=rechoose,
                     save_epoch_info=save_epoch_info,
@@ -218,7 +220,6 @@ class ComparisionExperiment(PettingZooCaptianCoevolution):
                 captians_choices = [
                     tuple(team[torch.randint(0, len(team), ())] for team in teams)
                     for teams in all_test_teams]"""
-
 
         # TODO: pass through preepisode dicts using MCAA to generate teams
         #  also maybe do the pre episode generation to make tournament form
@@ -339,6 +340,7 @@ class PZCC_MAPElites(ComparisionExperiment):
                  max_steps_per_ep=float('inf'),
                  local_collection_mode=True,
                  probability_weighting=False,
+                 prob_weight_upper_bound=13.,
                  ):
         super().__init__(
             env_constructor=env_constructor,
@@ -366,6 +368,7 @@ class PZCC_MAPElites(ComparisionExperiment):
             max_steps_per_ep=max_steps_per_ep,
             local_collection_mode=local_collection_mode,
             probability_weighting=probability_weighting,
+            prob_weight_upper_bound=prob_weight_upper_bound,
         )
         self.default_behavior_radius = default_behavior_radius
 
