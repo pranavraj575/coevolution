@@ -320,6 +320,7 @@ if __name__ == '__main__':
             extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
                                                for i, lab in enumerate(labels[:6])])
             cutoff = args.cutoff
+            info_y = .3 + .05*cutoff
             plot_dist_evolution(plot_dist=all_team_dist,
                                 x=plotting['epochs'],
                                 mapping=lambda dist: np.array([t for t in dist[:cutoff]] + [np.sum(dist[cutoff:])]),
@@ -327,7 +328,7 @@ if __name__ == '__main__':
                                 title="Total Distribution (Top " + str(cutoff) + ")",
                                 legend_position=(-.45, .2),
                                 info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                                info_position=(-.42, .8),
+                                info_position=(-.42, info_y),
                                 label=possible_teams[:cutoff] + ['other'],
                                 color=[None]*cutoff + ['black'],
                                 fontsize=17,

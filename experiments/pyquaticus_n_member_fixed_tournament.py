@@ -132,7 +132,7 @@ if __name__ == '__main__':
             pickle.dump(team_to_elo, f)
             f.close()
             temp_possible_teams = sorted(temp_possible_teams,
-                                         key=lambda team: elos[team_to_idx[team]].item())
+                                         key=lambda team: -elos[team_to_idx[team]].item())
 
             for i, team in enumerate(temp_possible_teams):
                 idx = team_to_idx[team]
