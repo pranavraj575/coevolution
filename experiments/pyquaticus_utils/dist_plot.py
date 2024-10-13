@@ -54,6 +54,7 @@ def plot_dist_evolution(plot_dist,
                         save_dir=None,
                         show=False,
                         title=None,
+                        inverted=True,
                         xlabel='Epochs',
                         legend_position=(-.3, .5),
                         info=None,
@@ -68,6 +69,7 @@ def plot_dist_evolution(plot_dist,
         mapping: maps a dist from plot_dist into another dist
             i.e. sum a few of them
         save_dir:
+        inverted: True if we put the first element on the top
         show:
         alphas:
         labels: labels for each pop (or for each mapped pop)
@@ -95,16 +97,22 @@ def plot_dist_evolution(plot_dist,
 
     # we go through in inverted order to ensure legend looks nice
     default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    for i, cum_dist in reversed(list(enumerate(cum_dists))):
+    if inverted:
+        order=((enumerate(cum_dists)))
+    else:
+        order = reversed(list(enumerate(cum_dists)))
+    for i, cum_dist in order:
         if i == 0:
             prevdist = np.zeros(maxdist)
         else:
             prevdist = cum_dists[i - 1]
         kw = {key: kwargs[key][i] for key in kwargs
               if (i < len(kwargs[key]) and kwargs[key][i] is not None)}
+
         if 'color' not in kw and i < len(default_colors):
             kw['color'] = default_colors[i]
-
+        if inverted:
+            prevdist, cum_dist = 1 - prevdist, 1 - cum_dist
         plt.fill_between(x=x,
                          y1=prevdist,
                          y2=cum_dist,
