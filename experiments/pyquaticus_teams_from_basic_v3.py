@@ -263,15 +263,25 @@ if __name__ == '__main__':
         last_index = len(plotting['epochs']) - 1
         smoothing = args.smoothing
 
-        plot_dist_evolution(plot_dist=plotting['init_dists'],
+        init_dists = [
+            np.array([t for t in dist[:6]] + [np.sum(dist[6:])])
+            for dist in plotting['init_dists']
+        ]
+        color = ['red']*3 + ['blue']*3 + ['black']
+        alpha = [.25, .5, 1] + [.25, .5, 1] + [1]
+        label = labels
+
+        perm = sorted(range(7), key=lambda i: init_dists[last_index][i], reverse=True)
+
+        plot_dist_evolution(plot_dist=[dist[perm] for dist in init_dists],
                             x=plotting['epochs'],
-                            mapping=lambda dist: np.array([t for t in dist[:6]] + [np.sum(dist[6:])]),
                             save_dir=os.path.join(save_dir, 'initial_plot.png'),
                             title='Initial Distributions',
-                            label=labels,
-                            alpha=[.25, .5, 1] + [.25, .5, 1] + [1],
-                            color=['red']*3 + ['blue']*3 + ['black'],
-                            legend_position=(-.31, .5),
+                            label=[labels[i] for i in perm],
+                            alpha=[alpha[i] for i in perm],
+                            color=[color[i] for i in perm],
+                            legend_position=(-.5, .5),
+                            fontsize=17,
                             smoothing=smoothing,
                             )
         for compensate in False, True:
@@ -382,7 +392,7 @@ if __name__ == '__main__':
                 d[team] = d[team]/s
             keys = list(d.keys())
             keys.sort(key=lambda team: d[team], reverse=True)
-        for _ in range(100):
+        for _ in range(1):
             print()
             print('trinin')
             trainer.team_trainer.train(

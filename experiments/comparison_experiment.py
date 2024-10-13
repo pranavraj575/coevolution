@@ -270,6 +270,8 @@ if __name__ == '__main__':
         try:
             plotting = {'init_dists': [],
                         'epochs': [],
+                        'epoch time': 0.,
+                        'team training time': 0.,
                         }
             # if we dont want to reset, try a load if there was an exception
             if (exception_raised or (not args.reset)) and os.path.exists(save_dir):
@@ -437,8 +439,10 @@ if __name__ == '__main__':
                             t=torch.exp(-np.log(2.)*trainer.ages/args.half_life)
                         )
                     )
+                    plotting['epoch time'] += time.time() - tim
                     if not trainer.epochs%args.train_freq:
                         print('training step started')
+                        timothy = time.time()
                         trainer.team_trainer.train(
                             batch_size=args.batch_size,
                             minibatch=args.minibatch_size,
@@ -446,6 +450,7 @@ if __name__ == '__main__':
                             replacement_probs=(.8, .1, .1),
                             mask_obs_prob=.1,
                         )
+                        plotting['team training time'] += time.time() - timothy
                         print('training step finished')
                     if not trainer.epochs%args.train_freq:
                         update_plotting_variables()
@@ -497,6 +502,8 @@ if __name__ == '__main__':
                         print('done saving plotting')
 
                     print('time', time.time() - tim)
+                    print('avg epoch time', plotting['epoch time']/trainer.epochs)
+                    print('avg training time', plotting['team training time']/trainer.epochs)
                     print()
                 dist = trainer.team_trainer.get_total_distribution(T=team_size)
                 f = open(os.path.join(save_dir, 'final_team_distribution.pkl'), 'wb')
