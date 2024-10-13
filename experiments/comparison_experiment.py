@@ -290,13 +290,13 @@ if __name__ == '__main__':
                     init_dist = trainer.team_trainer.distribution.detach().numpy()
                 else:
                     test_team = trainer.team_trainer.create_masked_teams(T=team_size, N=1)
-                    indices, dist = trainer.team_trainer.get_member_distribution(init_team=test_team,
-                                                                                 indices=None,
-                                                                                 obs_preembed=None,
-                                                                                 obs_mask=None,
-                                                                                 noise_model=None,
-                                                                                 valid_members=None,
-                                                                                 )
+                    indices, dist, _ = trainer.team_trainer.get_member_distribution(init_team=test_team,
+                                                                                    indices=None,
+                                                                                    obs_preembed=None,
+                                                                                    obs_mask=None,
+                                                                                    noise_model=None,
+                                                                                    valid_members=None,
+                                                                                    )
 
                     init_dist = torch.mean(dist, dim=0).detach().numpy()
                 plotting['init_dists'].append(init_dist)
