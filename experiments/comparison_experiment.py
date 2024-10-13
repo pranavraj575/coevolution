@@ -502,8 +502,10 @@ if __name__ == '__main__':
                         print('done saving plotting')
 
                     print('time', time.time() - tim)
-                    print('avg epoch time', plotting['epoch time']/trainer.epochs)
-                    print('avg training time', plotting['team training time']*args.train_freq/trainer.epochs)
+                    print('avg epoch time (no train update)', plotting['epoch time']/trainer.epochs)
+                    # number of times a training update happened
+                    print('avg train update time', plotting['team training time']/(trainer.epochs//args.train_freq))
+                    print('train time/epoch', plotting['team training time']/trainer.epochs)
                     print()
                 dist = trainer.team_trainer.get_total_distribution(T=team_size)
                 f = open(os.path.join(save_dir, 'final_team_distribution.pkl'), 'wb')
