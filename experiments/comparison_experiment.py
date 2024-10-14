@@ -503,8 +503,9 @@ if __name__ == '__main__':
 
                     print('time', time.time() - tim)
                     print('avg epoch time (no train update)', plotting['epoch time']/trainer.epochs)
-                    # number of times a training update happened
-                    print('avg train update time', plotting['team training time']/(trainer.epochs//args.train_freq))
+                    if trainer.epochs//args.train_freq > 0:
+                        # number of times a training update happened
+                        print('avg train update time', plotting['team training time']/(trainer.epochs//args.train_freq))
                     print('train time/epoch', plotting['team training time']/trainer.epochs)
                     print()
                 dist = trainer.team_trainer.get_total_distribution(T=team_size)
