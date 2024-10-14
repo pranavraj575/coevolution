@@ -54,7 +54,7 @@ def plot_dist_evolution(plot_dist,
                         save_dir=None,
                         show=False,
                         title=None,
-                        inverted=True,
+                        inverted=False,
                         xlabel='Epochs',
                         legend_position=(-.3, .5),
                         info=None,
@@ -98,7 +98,7 @@ def plot_dist_evolution(plot_dist,
     # we go through in inverted order to ensure legend looks nice
     default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     if inverted:
-        order=((enumerate(cum_dists)))
+        order = ((enumerate(cum_dists)))
     else:
         order = reversed(list(enumerate(cum_dists)))
     for i, cum_dist in order:

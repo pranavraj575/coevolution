@@ -316,19 +316,20 @@ if __name__ == '__main__':
 
             extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
                                                for i, lab in enumerate(labels[:6])])
-
+            key_info = extra_text
+            if rand_cnt == 1:
+                key_info += '\n6: random'
+            if rand_cnt > 1:
+                key_info += '\n6+: random'
             plot_dist_evolution(plot_dist=all_team_dist,
                                 x=plotting['epochs'],
                                 save_dir=os.path.join(save_dir, s + 'total_plot.png'),
                                 title="Total Distribution",
-                                info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
+                                info=key_info,
                                 legend_position=(-.3, .5 + .4/2),  # info takes up about .4
                                 label=possible_teams,
                                 smoothing=smoothing,
                                 )
-
-            extra_text = 'KEY:\n' + '\n'.join([str(i) + ': ' + lab
-                                               for i, lab in enumerate(labels[:6])])
             cutoff = args.cutoff
             info_y = .3 + .05*cutoff
             plot_dist_evolution(plot_dist=all_team_dist,
@@ -336,9 +337,9 @@ if __name__ == '__main__':
                                 mapping=lambda dist: np.array([t for t in dist[:cutoff]] + [np.sum(dist[cutoff:])]),
                                 save_dir=os.path.join(save_dir, s + 'first_10_total_plot.png'),
                                 title="Total Distribution (Top " + str(cutoff) + ")",
-                                legend_position=(-.45, .2),
-                                info=extra_text + ('\n6+: random' if rand_cnt > 0 else ''),
-                                info_position=(-.42, info_y),
+                                legend_position=(-.425, .2),
+                                info=key_info,
+                                info_position=(-.385, info_y),
                                 label=possible_teams[:cutoff] + ['other'],
                                 color=[None]*cutoff + ['black'],
                                 fontsize=17,
