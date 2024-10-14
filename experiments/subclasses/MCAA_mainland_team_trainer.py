@@ -36,7 +36,7 @@ class MCAAMainland(TeamTrainer):
 
         # (num_agents) multinomial distribution for each index to update
         dist = torch.zeros(self.num_agents)
-        for island_idx, prob in enumerate(torch.softmax(self.distribution, dim=-1).view(-1,1)):
+        for island_idx, prob in enumerate(torch.softmax(self.distribution, dim=-1).view(-1, 1)):
             dist[self.cum_islands[island_idx]:self.cum_islands[island_idx + 1]] = prob/self.pop_sizes[island_idx]
         return dist
 
@@ -110,7 +110,7 @@ class MCAAMainland(TeamTrainer):
         # reset buffer
         self.buffer = torch.zeros(self.num_islands)
 
-    def add_to_buffer(self, scalar, obs_preembed, team, obs_mask):
+    def add_to_buffer(self, scalar, obs_preembed, team, obs_mask, weight=1.):
         # TODO: update buffer with team rank
         #  if scalar is some number
         if scalar == 1:
