@@ -1,7 +1,6 @@
 # Transformer Guided Coevolution
 
-Tested on Ubuntu 20.04, using Python 3.10 in a Miniconda environment.
-
+Run on Ubuntu 20.04, using Python 3.10 in a Miniconda environment.
 Tested both on a Linux machine, and on Windows WSL (with Ubuntu version 20.04).
 
 ## Installation
