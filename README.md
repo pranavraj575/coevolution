@@ -1,7 +1,13 @@
 # Transformer Guided Coevolution
+[Coevolutionary Deep RL](https://ieeexplore.ieee.org/document/9308290) implementation for use in multiagent adversarial team games. 
+Uses various methods to solve the 'team selection' problem, including [BERTeam](https://github.com/pranavraj575/BERTeam), a transformer-based approach.
+Interfaces with Pettingzoo multi-agent environments, experiments are done on [Pyquaticus](https://github.com/mit-ll-trusted-autonomy/pyquaticus), a simulated Marine Capture-The-Flag game implemented in Pettingzoo.
 
+## Configuration
 Run on Ubuntu 20.04, using Python 3.10 in a Miniconda environment.
 Tested both on a Linux machine, and on Windows WSL (with Ubuntu version 20.04).
+
+
 
 ## Installation
 * Install packages: `sudo apt install cmake swig zlib1g-dev`
