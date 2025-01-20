@@ -1,4 +1,8 @@
-# Title pending
+# Transformer Guided Coevolution
+
+Tested on Ubuntu 20.04, using Python 3.10 in a Miniconda environment.
+
+Tested both on a Linux machine, and on Windows WSL (with Ubuntu version 20.04).
 
 ## Installation
 * Install packages: `sudo apt install cmake swig zlib1g-dev`
